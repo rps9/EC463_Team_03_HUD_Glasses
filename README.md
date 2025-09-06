@@ -14,7 +14,7 @@ We’re building a live translation device that utilizes a microphone and Head-U
 The HUDini will enable fluid two-way conversation, accelerate language learning, and generally facilitate communication across various languages. Planned deliverables: working product with live speech translation and response suggestion.
 
 ## Team links
-- [Team Google Drive]()
+- [Team Google Drive](https://drive.google.com/drive/folders/1bL06aGVt6rRM7B_IEEJm4XVPyzq0NuTs)
 
 ## Course links
 - [ECE Senior Design Piazza Site](https://piazza.com/bu/fall2025/ec463/home)
