@@ -1,7 +1,7 @@
 # Team 3: HUDini
 
 <p align="center">
-<img src="./images/thisismyteam.png" width="50%">
+<img src="./images/Team_3.jpg">
 </p>
 <p align="center">
 This is our team
