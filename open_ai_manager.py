@@ -92,6 +92,23 @@ class chatManager:
         openai_answer = completion.choices[0].message.content
         print(f"[green]\n{openai_answer}\n")
         return openai_answer
+    
+    def chat_with_messages(self, messages):
+        print("[yellow]\nAsking ChatGPT (custom messages)...")
+        completion = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages
+        )
+        return completion.choices[0].message.content
+
+    def translate(self, text, system_prompt):
+        if not text:
+            return ""
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": text}
+        ]
+        return self.chat_with_messages(messages)
 
 class transcriptionManager:
     def __init__(self):
@@ -145,6 +162,19 @@ class transcriptionManager:
             )
             .text
         )
+        print(f"[green]\n[Transcription] {transcript}\n")
+        return transcript
+    
+    def transcribe_file(self, file_bytes: bytes, filename: str = "audio.webm"):
+        file_like = io.BytesIO(file_bytes)
+        # give Whisper a helpful extension to infer format
+        if not any(filename.endswith(ext) for ext in (".webm", ".mp3", ".wav", ".m4a", ".mp4", ".ogg")):
+            filename += ".webm"
+        file_like.name = filename
+        transcript = self.client.audio.transcriptions.create(
+            model="whisper-1",
+            file=file_like
+        ).text
         print(f"[green]\n[Transcription] {transcript}\n")
         return transcript
 
