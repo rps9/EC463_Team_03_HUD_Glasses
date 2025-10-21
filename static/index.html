@@ -11,10 +11,49 @@
   <div class="max-w-3xl mx-auto px-4 py-8">
     <header class="mb-6">
       <h1 class="text-3xl font-semibold tracking-tight">Tiny Translator</h1>
-      <p class="text-slate-600 mt-1">Record speech, transcribe with Whisper, translate to English.</p>
+      <p class="text-slate-600 mt-1">Record speech to translate, or type text to get a pronunciation guide.</p>
     </header>
 
+    <!-- New: Type-to-speak (phonetic coach) -->
     <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
+      <h2 class="text-lg font-medium mb-3">Type to speak</h2>
+      <div class="grid gap-3">
+        <textarea id="ttsInput" rows="2" placeholder="Type what you want to say…"
+                  class="w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400"></textarea>
+        <div class="flex items-center gap-3">
+          <label class="text-sm text-slate-600">Target</label>
+          <select id="targetLang" class="rounded-lg border border-slate-300 px-2 py-1">
+            <option>Spanish</option>
+            <option>French</option>
+            <option>Italian</option>
+            <option>German</option>
+            <option>Portuguese</option>
+            <option>Japanese</option>
+            <option>Mandarin Chinese</option>
+            <option>Korean</option>
+            <option>Arabic</option>
+            <option>Hindi</option>
+          </select>
+          <button id="phoneticBtn"
+            class="ml-auto px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50">
+            Phonetic
+          </button>
+        </div>
+
+        <!-- HUD-like big line for the pronunciation -->
+        <div id="phoneticHUD"
+            class="mt-2 rounded-2xl border border-slate-200 bg-white text-slate-900 px-5 py-6 text-center shadow-sm ring-1 ring-slate-100">
+          <div id="phoneticText" class="text-3xl md:text-4xl font-semibold tracking-tight leading-tight min-h-12"></div>
+          <div id="phoneticMeta" class="text-xs text-slate-500 mt-1"></div>
+        </div>
+
+
+      </div>
+    </section>
+
+    <!-- Existing: Mic record -> WS translate -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
+      <h2 class="text-lg font-medium mb-3">Speak to translate</h2>
       <div class="flex items-center gap-3">
         <button id="recordBtn"
           class="px-5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 active:bg-slate-100 transition">
@@ -29,9 +68,6 @@
         <audio id="player" controls class="w-full"></audio>
       </div>
 
-      <div class="text-xs text-slate-500 mt-3" id="hint">
-        Tip: keep each take short. Accuracy is usually better than shouting into your mic for two minutes straight.
-      </div>
     </section>
 
     <section>
@@ -41,6 +77,43 @@
   </div>
 
   <script>
+    // ---------- Phonetic (type-to-speak) ----------
+    const ttsInput = document.getElementById('ttsInput');
+    const targetLang = document.getElementById('targetLang');
+    const phoneticBtn = document.getElementById('phoneticBtn');
+    const phoneticText = document.getElementById('phoneticText');
+    const phoneticMeta = document.getElementById('phoneticMeta');
+
+    phoneticBtn.addEventListener('click', async () => {
+      const text = (ttsInput.value || '').trim();
+      if (!text) return;
+      phoneticMeta.textContent = 'Generating…';
+      try {
+        const res = await fetch('/api/phonetic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, target: targetLang.value })
+        });
+        if (!res.ok) throw new Error('Server error: ' + res.status);
+        const data = await res.json();
+        phoneticText.textContent = data.phonetic || '';
+        phoneticMeta.textContent = data.target ? `Target: ${data.target}` : '';
+      } catch (e) {
+        phoneticText.textContent = '';
+        phoneticMeta.textContent = 'Error';
+        alert(e.message || 'Error');
+      }
+    });
+
+    // Keyboard sugar: Enter to trigger phonetic when focused in textarea
+    ttsInput.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'enter') {
+        e.preventDefault();
+        phoneticBtn.click();
+      }
+    });
+
+    // ---------- Mic translate (your existing WS flow) ----------
     const recordBtn = document.getElementById('recordBtn');
     const statusEl = document.getElementById('status');
     const player = document.getElementById('player');
@@ -86,7 +159,7 @@
           chunks.push(e.data);
           if (ws && ws.readyState === WebSocket.OPEN) {
             const buf = await e.data.arrayBuffer();
-            ws.send(buf);   // raw binary, not a file upload
+            ws.send(buf);
           }
         }
       };
@@ -115,9 +188,7 @@
         } catch {}
       };
 
-      ws.onclose = () => {
-        // nothing special
-      };
+      ws.onclose = () => {};
 
       recording = true;
       recordBtn.textContent = 'Stop and translate';
