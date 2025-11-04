@@ -1,0 +1,8 @@
+rich>=13.7.0
+deep-translator>=1.11.4
+eng-to-ipa>=0.0.2          # still handy for EN debug
+epitran>=1.26
+phonemizer>=3.2.1          # optional fallback for languages Epitran can’t handle; needs espeak-ng system package
+pypinyin>=0.49.0           # zh → Pinyin with tone numbers
+pykakasi>=2.2.1            # ja → Hepburn
+hangul-romanize>=0.1.0     # ko → Revised Romanization (academic)
