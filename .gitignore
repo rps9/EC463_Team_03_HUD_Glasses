@@ -52,3 +52,5 @@ Mkfile.old
 dkms.conf
 .env
 .Ds_Store
+venv
+__pycache__
