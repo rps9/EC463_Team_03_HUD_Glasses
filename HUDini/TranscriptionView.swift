@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct ContentView: View {
+struct TranscriptionView: View {
     @StateObject private var mgr = TranscriptionManager()
 
     var body: some View {
@@ -45,5 +45,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    TranscriptionView()
 }
