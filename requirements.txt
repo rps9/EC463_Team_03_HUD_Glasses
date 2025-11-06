@@ -11,6 +11,14 @@ rich>=13.7.1
 # File uploads for FastAPI
 python-multipart>=0.0.9
 
+# For testing purposes
+pydantic>=2.7.0
+httpx >= 0.25.0
+pytest>=7.4.0
+pandas>=2.3.0
+unbabel-comet >=1.4.0
+
+
 # Optional: CLI mic recording path (needs system libs: PortAudio, libsndfile)
 numpy>=1.26
 sounddevice>=0.4.7
