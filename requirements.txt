@@ -16,7 +16,8 @@ pydantic>=2.7.0
 httpx >= 0.25.0
 pytest>=7.4.0
 pandas>=2.3.0
-unbabel-comet >=1.4.0
+# COMET metric for translation quality evaluation
+unbabel-comet>=1.4.0
 
 
 # Optional: CLI mic recording path (needs system libs: PortAudio, libsndfile)
