@@ -1,6 +1,7 @@
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import re, time, pandas as pd
+import pytest
 from dotenv import load_dotenv
 
 # Load environment variables (including OPENAI_API_KEY)
@@ -8,6 +9,30 @@ load_dotenv()
 
 # Import translation adapter (lazy import in adapter means this won't initialize OpenAI client)
 from translation_adapter import translate_to_english
+
+# COMET model loading (cached to avoid reloading)
+_comet_model = None
+
+def load_comet_model(model_name="Unbabel/wmt22-comet-da"):
+    """Load COMET model (cached for performance)."""
+    global _comet_model
+    if _comet_model is None:
+        try:
+            from comet import load_from_checkpoint
+            _comet_model = load_from_checkpoint(model_name)
+        except ImportError:
+            raise ImportError("COMET library not installed. Install with: pip install unbabel-comet")
+        except Exception as e:
+            raise RuntimeError(f"Failed to load COMET model: {str(e)}")
+    return _comet_model
+
+@pytest.fixture(scope="session")
+def comet_model():
+    """Pytest fixture to load COMET model (cached across tests)."""
+    try:
+        return load_comet_model()
+    except (ImportError, RuntimeError) as e:
+        pytest.skip(str(e))
 
 # Simple "no native script" guard (disallow CJK blocks)
 CJK = re.compile(r"[\u3400-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]")
@@ -88,6 +113,48 @@ def test_translation_component_dev_set():
     # All translations should have passed basic validation
     assert len(results) == len(df), "Not all test cases were processed"
     assert all(r["passed"] for r in results), "Some translations failed validation"
+
+def test_translation_comet_score(comet_model):
+    """Component test: Evaluate translation quality using COMET metric."""
+    csv_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'dev_set.csv')
+    assert os.path.exists(csv_path), f"dev_set.csv not found at {csv_path}"
+    
+    df = pd.read_csv(csv_path)
+    assert len(df) > 0, "dev_set.csv is empty"
+    
+    # Collect translations
+    hyps, srcs, refs = [], [], []
+    for idx, row in df.iterrows():
+        src = str(row["src"])
+        ref = str(row["ref"])
+        hyp = translate_to_english(src)
+        
+        hyps.append(hyp)
+        srcs.append(src)
+        refs.append(ref)
+    
+    # Compute COMET score
+    data = [{"src": s, "mt": h, "ref": r} for s, h, r in zip(srcs, hyps, refs)]
+    comet_out = comet_model.predict(data, batch_size=8, gpus=0)
+    comet_score = float(comet_out.system_score)
+    
+    # Print COMET score for visibility
+    print(f"\nCOMET Score: {comet_score:.4f} (threshold: > 0.3)")
+    
+    # COMET scores typically range from -1 to 1, with higher being better
+    # A score above 0.5 is generally considered good quality
+    # Adjust threshold based on your requirements
+    assert comet_score > 0.3, f"COMET score {comet_score:.4f} is below minimum threshold of 0.3"
+    
+    # Also check individual scores (optional - can be used for debugging)
+    individual_scores = comet_out.scores
+    assert len(individual_scores) == len(df), "Number of individual scores should match test cases"
+    
+    # Print individual scores for debugging (optional)
+    if len(individual_scores) <= 10:  # Only print if small number of test cases
+        print("\nIndividual COMET scores:")
+        for i, (src, ref, hyp, score) in enumerate(zip(srcs, refs, hyps, individual_scores)):
+            print(f"  {i+1}. {src} -> {hyp} (ref: {ref}) | Score: {score:.4f}")
 
 def test_translation_component_edge_cases():
     """Component test: Test edge cases and error handling."""
