@@ -1,3 +1,20 @@
 venv
 .env
 __pycache__
+
+# macOS cruft
+.DS_Store
+
+# Xcode / SwiftPM build artifacts
+DerivedData/
+.build/
+
+# User-specific Xcode data
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
