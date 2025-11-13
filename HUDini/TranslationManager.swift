@@ -99,8 +99,14 @@ final class TranslationManager: ObservableObject {
 
     private let service: TranslationService
 
-    init(service: TranslationService = LibreTranslateService()) {
-        self.service = service
+    init(service: TranslationService? = nil) {
+        if let service {
+            self.service = service
+        } else if #available(iOS 26.0, *) {
+            self.service = AppleTranslationService()
+        } else {
+            self.service = UnsupportedAppleTranslationService()
+        }
     }
 
     func setTargetLanguage(_ code: String) {

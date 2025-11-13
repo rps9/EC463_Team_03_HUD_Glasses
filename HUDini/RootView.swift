@@ -4,10 +4,16 @@ struct RootView: View {
     var body: some View {
         TabView {
             TranscriptionView()
-                .tabItem { Label("Live", systemImage: "waveform") }
+                .tabItem { Label("Transcribe", systemImage: "waveform") }
 
             TranscriptionTesterView()
-                .tabItem { Label("Testing", systemImage: "checklist") }
+                .tabItem { Label("Transcribe QA", systemImage: "checklist") }
+
+            TranslationView()
+                .tabItem { Label("Translate", systemImage: "globe") }
+
+            TranslationTesterView()
+                .tabItem { Label("Translate QA", systemImage: "checkmark.circle") }
         }
     }
 }
