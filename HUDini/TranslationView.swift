@@ -23,7 +23,7 @@ struct TranslationView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .onChange(of: selectedSourceCode) { newValue in
+                .onChange(of: selectedSourceCode, initial: false) { _, newValue in
                     manager.setSourceLanguage(newValue == TranslationLanguages.autoCode ? nil : newValue)
                 }
             }
@@ -39,7 +39,7 @@ struct TranslationView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .onChange(of: selectedTargetCode) { newValue in
+                .onChange(of: selectedTargetCode, initial: false) { _, newValue in
                     manager.setTargetLanguage(newValue)
                 }
             }
@@ -141,4 +141,3 @@ struct TranslationView: View {
 }
 
 #Preview { TranslationView() }
-
