@@ -1,0 +1,21 @@
+{
+  "name": "bluetooth-display",
+  "version": "1.0.0",
+  "description": "Nordic UART-style BLE display for HUDini demos",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "ble",
+    "hud",
+    "bleno"
+  ],
+  "author": "HUDini Team",
+  "license": "MIT",
+  "dependencies": {
+    "@abandonware/bleno": "^0.6.2",
+    "chalk": "^4.1.2"
+  }
+}
