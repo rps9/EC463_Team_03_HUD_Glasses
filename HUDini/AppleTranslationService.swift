@@ -67,17 +67,10 @@ public struct AppleTranslationService: TranslationService {
         case .alreadyCancelled:
             return .other("Translation cancelled")
         case .notInstalled:
-            return .other("Required translation language pack not installed")
+            return .other("Download this language in the Translate app, then try again")
         default:
             return .other("Apple Translation failed")
         }
     }
 }
 #endif
-
-struct UnsupportedAppleTranslationService: TranslationService {
-    func translate(text: String, source: String?, target: String) async throws -> String {
-        throw TranslationError.other("Apple Translation requires iOS 26 or later")
-    }
-}
-

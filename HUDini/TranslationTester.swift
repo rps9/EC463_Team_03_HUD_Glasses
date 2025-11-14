@@ -49,10 +49,16 @@ final class TranslationTester: ObservableObject {
     init(service: TranslationService? = nil) {
         if let service {
             self.service = service
-        } else if #available(iOS 26.0, *) {
-            self.service = AppleTranslationService()
         } else {
-            self.service = UnsupportedAppleTranslationService()
+#if canImport(Translation)
+            if #available(iOS 26.0, *) {
+                self.service = AppleTranslationService()
+            } else {
+                self.service = LibreTranslateService()
+            }
+#else
+            self.service = LibreTranslateService()
+#endif
         }
         cometEvaluator = CometEvaluator.makeDefault()
     }
@@ -221,4 +227,3 @@ final class TranslationTester: ObservableObject {
             .map(String.init)
     }
 }
-
