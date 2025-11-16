@@ -3,6 +3,7 @@ import SwiftUI
 struct HUDiniView: View {
     @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var translationManager = TranslationManager()
+    @State private var selectedSourceCode: String = TranslationLanguages.autoCode
     @State private var selectedTargetCode: String = "en"
     
     var body: some View {
@@ -10,9 +11,26 @@ struct HUDiniView: View {
             Text("HUDini")
                 .font(.headline)
             
+            // Source language picker
+            VStack(alignment: .leading, spacing: 8) {
+                Text("From")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                
+                Picker("Source language", selection: $selectedSourceCode) {
+                    ForEach(TranslationLanguages.sourceOptions) { option in
+                        Text(option.name).tag(option.code)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: selectedSourceCode, initial: false) { _, newValue in
+                    translationManager.setSourceLanguage(newValue == TranslationLanguages.autoCode ? nil : newValue)
+                }
+            }
+            
             // Target language picker
             VStack(alignment: .leading, spacing: 8) {
-                Text("Translate to")
+                Text("To")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 
@@ -100,6 +118,7 @@ struct HUDiniView: View {
         .task {
             // Request permissions on view appear
             await transcriptionManager.requestPermissions()
+            translationManager.setSourceLanguage(selectedSourceCode == TranslationLanguages.autoCode ? nil : selectedSourceCode)
             translationManager.setTargetLanguage(selectedTargetCode)
         }
     }
