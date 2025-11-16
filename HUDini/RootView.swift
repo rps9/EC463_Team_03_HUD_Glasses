@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     private enum Tab: Hashable {
+        case hudini
         case transcription
         case translation
         case bluetooth
@@ -14,12 +15,16 @@ struct RootView: View {
         var id: Int { hashValue }
     }
 
-    @State private var selectedTab: Tab = .transcription
+    @State private var selectedTab: Tab = .hudini
     @State private var activeSheet: TesterSheet?
 
     var body: some View {
         NavigationStack {
             TabView(selection: $selectedTab) {
+                HUDiniView()
+                    .tag(Tab.hudini)
+                    .tabItem { Label("HUDini", systemImage: "mic.fill") }
+                
                 TranscriptionView()
                     .tag(Tab.transcription)
                     .tabItem { Label("Transcribe", systemImage: "waveform") }
@@ -58,6 +63,8 @@ struct RootView: View {
 
     private func title(for tab: Tab) -> String {
         switch tab {
+        case .hudini:
+            return "HUDini"
         case .transcription:
             return "Live Transcription"
         case .translation:
