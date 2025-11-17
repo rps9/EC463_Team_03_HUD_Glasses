@@ -13,8 +13,6 @@ struct BluetoothDemoView: View {
                 Text("HUDini • Bluetooth Demo")
                     .font(.headline)
 
-                instructionsCard
-
                 statusCard
 
                 discoverySection
@@ -27,22 +25,6 @@ struct BluetoothDemoView: View {
             }
             .padding()
         }
-    }
-
-    private var instructionsCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("How to demo")
-                .font(.subheadline).bold()
-            Text("Mac setup (LightBlue 4.x):\n• Open LightBlue, switch to the Virtual Devices tab, and press “Create Virtual Peripheral.”\n• Pick “Blank,” then add a Primary service with UUID 6E400001-B5A3-F393-E0A9-E50E24DCCA9E.\n• Inside that service add two characteristics: (1) UUID 6E400002… with Write + Write Without Response, (2) UUID 6E400003… with Notify enabled.\n• Save, click “Start Advertising,” and open the Console for that virtual device so the RX log is visible—LightBlue prints every UTF-8 payload it receives.\n\niPhone steps: pair your AirPods so transcription still uses that mic, open this tab, tap “Scan for devices,” and connect to the LightBlue peripheral. Type a sentence and send it—the Mac console will immediately show the characters just like a HUD display would.")
-                .font(.footnote)
-            Text("Tip: the Mac is the peripheral here—no need to connect LightBlue to your iPhone. Instead, let HUDini find the virtual device you just advertised.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var statusCard: some View {

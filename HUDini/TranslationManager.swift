@@ -98,6 +98,7 @@ final class TranslationManager: ObservableObject {
     @Published var targetLanguageCode: String = "en"
 
     private let service: TranslationService
+    private var latestRequestID = UUID()
 
     init(service: TranslationService? = nil) {
         if let service {
@@ -127,22 +128,37 @@ final class TranslationManager: ObservableObject {
     }
 
     func translate(_ text: String) async {
-        guard !isTranslating else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            translatedText = ""
+            statusMessage = ""
+            return
+        }
+
+        let requestID = UUID()
+        latestRequestID = requestID
         isTranslating = true
         statusMessage = "Translating…"
-        defer { isTranslating = false }
+        defer {
+            if latestRequestID == requestID {
+                isTranslating = false
+            }
+        }
 
         do {
             let result = try await service.translate(
-                text: text,
+                text: trimmed,
                 source: sourceLanguageCode,
                 target: targetLanguageCode
             )
+            guard latestRequestID == requestID else { return }
             translatedText = result
             statusMessage = ""
         } catch {
-            translatedText = ""
-            if let e = error as? LocalizedError, let msg = e.errorDescription {
+            guard latestRequestID == requestID else { return }
+            if error is CancellationError {
+                statusMessage = ""
+            } else if let e = error as? LocalizedError, let msg = e.errorDescription {
                 statusMessage = msg
             } else {
                 statusMessage = "Translation failed"

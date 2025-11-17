@@ -5,6 +5,12 @@ __pycache__
 # macOS cruft
 .DS_Store
 
+# Node
+node_modules/
+
+# Local secrets overrides
+HUDini/Secrets.xcconfig
+
 # Xcode / SwiftPM build artifacts
 DerivedData/
 .build/
@@ -18,3 +24,6 @@ xcuserdata/
 *.mode1v3
 *.mode2v3
 *.perspectivev3
+
+# Shared Xcode schemes
+HUDini.xcodeproj/xcshareddata/xcschemes/
