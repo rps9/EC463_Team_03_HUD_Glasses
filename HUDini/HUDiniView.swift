@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct HUDiniView: View {
-    @StateObject private var transcriptionManager = TranscriptionManager()
-    @StateObject private var translationManager = TranslationManager()
+    @ObservedObject var transcriptionManager: TranscriptionManager
+    @ObservedObject var translationManager: TranslationManager
     @State private var selectedSourceCode: String = TranslationLanguages.autoCode
     @State private var selectedTargetCode: String = "en"
     
@@ -143,6 +143,9 @@ struct HUDiniView: View {
 }
 
 #Preview {
-    HUDiniView()
+    HUDiniView(
+        transcriptionManager: TranscriptionManager(),
+        translationManager: TranslationManager()
+    )
 }
 

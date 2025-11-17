@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     private enum Tab: Hashable {
         case hudini
+        case displayMode
         case transcription
         case translation
         case bluetooth
@@ -15,15 +16,27 @@ struct RootView: View {
         var id: Int { hashValue }
     }
 
+    @StateObject private var sharedTranslationManager = TranslationManager()
+    @StateObject private var sharedTranscriptionManager = TranscriptionManager()
     @State private var selectedTab: Tab = .hudini
     @State private var activeSheet: TesterSheet?
 
     var body: some View {
         NavigationStack {
             TabView(selection: $selectedTab) {
-                HUDiniView()
+                HUDiniView(
+                    transcriptionManager: sharedTranscriptionManager,
+                    translationManager: sharedTranslationManager
+                )
                     .tag(Tab.hudini)
                     .tabItem { Label("HUDini", systemImage: "mic.fill") }
+                
+                DisplayModeView(
+                    transcriptionManager: sharedTranscriptionManager,
+                    translationManager: sharedTranslationManager
+                )
+                    .tag(Tab.displayMode)
+                    .tabItem { Label("Display", systemImage: "display") }
                 
                 TranscriptionView()
                     .tag(Tab.transcription)
@@ -37,17 +50,20 @@ struct RootView: View {
                     .tag(Tab.bluetooth)
                     .tabItem { Label("Bluetooth", systemImage: "dot.radiowaves.left.and.right") }
             }
-            .navigationTitle(title(for: selectedTab))
+            .navigationTitle(selectedTab == .displayMode ? "" : title(for: selectedTab))
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Transcription QA") { activeSheet = .transcription }
-                        Button("Translation QA") { activeSheet = .translation }
-                    } label: {
-                        Label("Testing", systemImage: "testtube.2")
+                if selectedTab != .displayMode {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button("Transcription QA") { activeSheet = .transcription }
+                            Button("Translation QA") { activeSheet = .translation }
+                        } label: {
+                            Label("Testing", systemImage: "testtube.2")
+                        }
                     }
                 }
             }
+            .toolbar(selectedTab == .displayMode ? .hidden : .visible, for: .navigationBar)
         }
         .sheet(item: $activeSheet) { sheet in
             NavigationStack {
@@ -65,6 +81,8 @@ struct RootView: View {
         switch tab {
         case .hudini:
             return "HUDini"
+        case .displayMode:
+            return "Display Mode"
         case .transcription:
             return "Live Transcription"
         case .translation:
