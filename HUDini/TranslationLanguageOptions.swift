@@ -14,6 +14,7 @@ enum TranslationLanguages {
         .init(code: "en", name: "English"),
         .init(code: "es", name: "Spanish"),
         .init(code: "fr", name: "French"),
+        .init(code: "ar", name: "Arabic"),
         .init(code: "de", name: "German"),
         .init(code: "hi", name: "Hindi"),
         .init(code: "ja", name: "Japanese"),

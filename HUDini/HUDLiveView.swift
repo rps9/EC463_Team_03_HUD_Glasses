@@ -6,7 +6,8 @@ struct HUDLiveView: View {
     @StateObject private var translator = TranslationManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
     @State private var queuedTask: Task<Void, Never>? = nil
-    @State private var targetLanguage: String = "es"
+    @State private var targetLanguage: String = "en"
+    @State private var listeningLanguageCode: String = HUDLiveView.defaultListeningLanguageCode
     @State private var lastTranslatedInput: String = ""
     @State private var hudBuffer: String = ""
     @State private var previousFullTranslation: String = ""
@@ -30,6 +31,23 @@ struct HUDLiveView: View {
             suggestionCard
 
             HStack(spacing: 16) {
+                Menu {
+                    Picker("Listening language", selection: $listeningLanguageCode) {
+                        ForEach(TranslationLanguages.supported) { option in
+                            Text(option.name).tag(option.code)
+                        }
+                    }
+                    .onChange(of: listeningLanguageCode, initial: false) { _, newValue in
+                        transcription.setListeningLanguage(newValue)
+                        translator.setSourceLanguage(newValue)
+                    }
+                } label: {
+                    Label(listeningLanguageLabel(for: listeningLanguageCode), systemImage: "ear")
+                        .labelStyle(.titleAndIcon)
+                }
+                .menuOrder(.fixed)
+                .tint(.secondary)
+
                 Menu {
                     Picker("Target language", selection: $targetLanguage) {
                         ForEach(TranslationLanguages.targetOptions) { option in
@@ -61,6 +79,8 @@ struct HUDLiveView: View {
         .background(Color.black.opacity(0.02))
         .task { await transcription.requestPermissions() }
         .onAppear {
+            transcription.setListeningLanguage(listeningLanguageCode)
+            translator.setSourceLanguage(listeningLanguageCode)
             translator.setTargetLanguage(targetLanguage)
         }
         .onDisappear {
@@ -76,7 +96,8 @@ struct HUDLiveView: View {
         lastTranslatedInput = ""
         previousFullTranslation = ""
         hudBuffer = ""
-        suggestionManager.suggestion = ""
+        suggestionManager.suggestionPhonetic = ""
+        suggestionManager.suggestionEnglish = ""
         transcription.start()
     }
 
@@ -140,18 +161,51 @@ struct HUDLiveView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Text(suggestionManager.suggestion.isEmpty ? "Suggestions appear while listening." : suggestionManager.suggestion)
-                .font(.title3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(18)
-                .background(Color(.tertiarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(suggestionManager.suggestionPhonetic.isEmpty ? "Suggestions appear while listening." : suggestionManager.suggestionPhonetic)
+                    .font(.title3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !suggestionManager.suggestionEnglish.isEmpty {
+                    Text(suggestionManager.suggestionEnglish)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background(Color(.tertiarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
         }
     }
 
     private func languageLabel(for code: String) -> String {
         TranslationLanguages.targetOptions.first(where: { $0.code == code })?.name ?? code.uppercased()
     }
+
+    private func listeningLanguageLabel(for code: String) -> String {
+        TranslationLanguages.supported.first(where: { $0.code == code })?.name ?? code.uppercased()
+    }
 }
 
 #Preview { HUDLiveView() }
+
+private extension HUDLiveView {
+    static var defaultListeningLanguageCode: String {
+        if #available(iOS 16.0, *) {
+            if let current = Locale.current.language.languageCode?.identifier,
+               TranslationLanguages.supported.contains(where: { $0.code == current }) {
+                return current
+            }
+        }
+
+        let identifier = Locale.current.identifier
+        if let prefix = identifier.split(separator: "_").first,
+           TranslationLanguages.supported.contains(where: { $0.code == String(prefix) }) {
+            return String(prefix)
+        }
+
+        return "en"
+    }
+}

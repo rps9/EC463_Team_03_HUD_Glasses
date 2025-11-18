@@ -13,8 +13,15 @@ final class TranscriptionManager: ObservableObject {
     private let audioEngine = AVAudioEngine()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private let recognizer = SFSpeechRecognizer(locale: Locale.current)
+    private var recognizer: SFSpeechRecognizer?
     private let audioSession = AVAudioSession.sharedInstance()
+    private let audioBufferSize: AVAudioFrameCount = 512
+    private var localeIdentifier: String
+
+    init(localeIdentifier: String = Locale.current.identifier) {
+        self.localeIdentifier = localeIdentifier
+        self.recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier))
+    }
 
     // MARK: - Permissions
 
@@ -81,7 +88,7 @@ final class TranscriptionManager: ObservableObject {
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: audioBufferSize, format: format) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
         }
 
@@ -139,6 +146,25 @@ final class TranscriptionManager: ObservableObject {
     func resetTranscript() {
         transcript = ""
         statusMessage = ""
+    }
+
+    func setListeningLanguage(_ code: String) {
+        guard code != localeIdentifier else { return }
+
+        let normalized = code.isEmpty ? Locale.current.identifier : code
+        guard let newRecognizer = SFSpeechRecognizer(locale: Locale(identifier: normalized)) else {
+            statusMessage = "Speech not supported for \(code.uppercased())"
+            return
+        }
+
+        localeIdentifier = normalized
+        recognizer = newRecognizer
+
+        if isTranscribing {
+            statusMessage = "Language updated — restart listening."
+        } else {
+            statusMessage = "Listening language set to \(TranslationLanguages.displayName(for: normalized))."
+        }
     }
 
     // MARK: - Internals

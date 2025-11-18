@@ -2,60 +2,25 @@ import Foundation
 import NaturalLanguage
 
 final class HUDOpenAISuggestionService {
-    private let urlSession: URLSession
-    private let apiKey: String
-    private let model: String
+    private let client: HUDOpenAIClient
 
     init(apiKey: String, model: String = "gpt-4o-mini", urlSession: URLSession = .shared) {
-        self.apiKey = apiKey
-        self.model = model
-        self.urlSession = urlSession
+        self.client = HUDOpenAIClient(apiKey: apiKey, model: model, urlSession: urlSession)
     }
 
-    func suggestion(for text: String) async throws -> String {
+    struct Suggestion {
+        let phonetic: String
+        let english: String
+    }
+
+    func suggestion(for text: String) async throws -> Suggestion {
         let language = detectLanguageCode(for: text)
-        let prompt = buildPrompt(for: text, languageCode: language)
+        let payload = try await generateCombinedSuggestion(for: text, languageCode: language)
 
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-
-        struct Body: Encodable {
-            struct Message: Encodable { let role: String; let content: String }
-            let model: String
-            let messages: [Message]
-            let max_tokens: Int
-        }
-
-        let body = Body(
-            model: model,
-            messages: [Body.Message(role: "user", content: prompt)],
-            max_tokens: 80
+        return Suggestion(
+            phonetic: HUDPhoneticResponseFormatter.clean(payload.reply_phonetic),
+            english: payload.reply_english.trimmingCharacters(in: .whitespacesAndNewlines)
         )
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response) = try await urlSession.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw OpenAIError.invalidResponse
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            let message = String(data: data, encoding: .utf8) ?? ""
-            throw OpenAIError.httpFailure(code: http.statusCode, body: message)
-        }
-
-        struct Reply: Decodable {
-            struct Choice: Decodable {
-                struct Message: Decodable { let content: String }
-                let message: Message
-            }
-            let choices: [Choice]
-        }
-        let decoded = try JSONDecoder().decode(Reply.self, from: data)
-        guard let content = decoded.choices.first?.message.content else {
-            throw OpenAIError.emptyReply
-        }
-        return cleanResponse(content)
     }
 
     private func detectLanguageCode(for text: String) -> String {
@@ -67,35 +32,42 @@ final class HUDOpenAISuggestionService {
         return Locale.current.language.languageCode?.identifier ?? "en"
     }
 
-    private func buildPrompt(for message: String, languageCode: String) -> String {
-        """
-        Provide exactly one polite short sentence (max 10 words) responding to the following message. Make it very simple and spelled phonetically. Also, the person reading this response is named Ryan. So, if the message is "what's your name?" the reply should be "my name is Ryan, what's your name?" Reply strictly in language code \(languageCode). Do not prefix explanations or bullet points.
-        Message: \(message)
-        """
+    private struct CombinedSuggestion: Decodable {
+        let reply_native: String
+        let reply_phonetic: String
+        let reply_english: String
     }
 
-    private func cleanResponse(_ response: String) -> String {
-        let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let sentence = trimmed.split(separator: "\n").first {
-            return String(sentence)
+    private func generateCombinedSuggestion(for message: String, languageCode: String) async throws -> CombinedSuggestion {
+        let systemPrompt = """
+        You are Ryan, replying to someone in conversation. Respond naturally in the user's language, and include both a phonetic rewrite and an English translation.
+        Respond with JSON ONLY in this exact shape:
+        {"reply_native":"...", "reply_phonetic":"...", "reply_english":"..."}
+
+        Requirements:
+        - reply_native: one friendly sentence in the requested language (standard spelling).
+        - reply_phonetic: the same text rewritten phonetically using ASCII letters, spaces, commas, apostrophes, hyphens, periods, and question marks so an English speaker can read it aloud.
+        - reply_english: a natural English translation of the same sentence.
+        - No explanations, no code fences, no commentary outside the JSON.
+        - If asked for your name, say it is Ryan and ask for theirs politely in the target language.
+        """
+
+        let messages: [HUDOpenAIChatMessage] = [
+            .init(role: "system", content: systemPrompt),
+            .init(
+                role: "user",
+                content: "Language: \(languageCode)\nUser: \(message)"
+            )
+        ]
+
+        let raw = try await client.complete(messages: messages, maxTokens: 220, temperature: 0.35)
+        guard let data = raw.trimmingCharacters(in: .whitespacesAndNewlines).data(using: .utf8) else {
+            throw HUDOpenAIClient.Error.emptyReply
         }
-        return trimmed
-    }
-
-    enum OpenAIError: LocalizedError {
-        case invalidResponse
-        case httpFailure(code: Int, body: String)
-        case emptyReply
-
-        var errorDescription: String? {
-            switch self {
-            case .invalidResponse:
-                return "OpenAI returned an invalid response."
-            case .httpFailure(let code, let body):
-                return "OpenAI HTTP \(code): \(body)"
-            case .emptyReply:
-                return "OpenAI returned an empty reply."
-            }
+        do {
+            return try JSONDecoder().decode(CombinedSuggestion.self, from: data)
+        } catch {
+            throw TranslationError.other("Failed to parse suggestion JSON")
         }
     }
 }

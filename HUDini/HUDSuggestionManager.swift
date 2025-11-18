@@ -3,9 +3,11 @@ import Combine
 
 @MainActor
 final class HUDSuggestionManager: ObservableObject {
-    @Published var suggestion: String = ""
+    @Published var suggestionPhonetic: String = ""
+    @Published var suggestionEnglish: String = ""
 
     private var task: Task<Void, Never>?
+    private var inFlightSource: String?
     private let openAIService: HUDOpenAISuggestionService?
 
     init(openAIService: HUDOpenAISuggestionService? = nil) {
@@ -25,9 +27,14 @@ final class HUDSuggestionManager: ObservableObject {
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            suggestion = ""
+            suggestionPhonetic = ""
+            suggestionEnglish = ""
+            inFlightSource = nil
             return
         }
+
+        guard trimmed != inFlightSource else { return }
+        inFlightSource = trimmed
 
         task = Task { [weak self] in
             await self?.generateSuggestion(for: trimmed)
@@ -41,16 +48,24 @@ final class HUDSuggestionManager: ObservableObject {
     }
 
     private func generateSuggestion(for text: String) async {
+        defer {
+            if inFlightSource == text {
+                inFlightSource = nil
+            }
+        }
+
         guard !Task.isCancelled else { return }
         guard let openAIService else { return }
 
         do {
             let reply = try await openAIService.suggestion(for: text)
             guard !Task.isCancelled else { return }
-            suggestion = reply
+            suggestionPhonetic = reply.phonetic
+            suggestionEnglish = reply.english
         } catch {
             guard !Task.isCancelled else { return }
-            suggestion = "OpenAI error: \(error.localizedDescription)"
+            suggestionPhonetic = "OpenAI error: \(error.localizedDescription)"
+            suggestionEnglish = ""
         }
     }
 
