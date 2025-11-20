@@ -105,6 +105,13 @@ struct HUDLiveView: View {
         transcription.stop()
         queuedTask?.cancel()
         queuedTask = nil
+        let sourceText = lastTranslatedInput.isEmpty ? transcription.transcript : lastTranslatedInput
+        let trimmed = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            suggestionManager.clearSuggestion()
+            return
+        }
+        suggestionManager.refreshSuggestion(for: trimmed, languageCode: listeningLanguageCode)
     }
 
     private func scheduleTranslation(for text: String) {
@@ -122,7 +129,6 @@ struct HUDLiveView: View {
                 await translator.translate(trimmed)
                 lastTranslatedInput = trimmed
                 integrateLatestTranslation()
-                suggestionManager.refreshSuggestion(for: trimmed)
             } catch {
                 if !(error is CancellationError) {
                     let message = (error as NSError).localizedDescription
