@@ -22,7 +22,5 @@ The HUDini will enable fluid two-way conversation, accelerate language learning,
 
 
 ## Optional features links
-- Team Jira
-- Team Confluence
-- Something else
+- [Team Jira](https://hudinihudini.atlassian.net/jira/software/projects/SCRUM/boards/1/backlog?atlOrigin=eyJpIjoiNmE5ZTc0OWFmNWZhNGU0NGFmZTQ0ZDc3ZjNkZWU4YzciLCJwIjoiaiJ9&selectedIssue=SCRUM-3)
 
