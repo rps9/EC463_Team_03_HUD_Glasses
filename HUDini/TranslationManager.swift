@@ -97,21 +97,15 @@ final class TranslationManager: ObservableObject {
     /// ISO 639-1 language code for the output (e.g., "en", "es"). Default is English.
     @Published var targetLanguageCode: String = "en"
 
-    private let service: TranslationService
+    private let translationClient: HUDTranslationClient
     private var latestRequestID = UUID()
 
     init(service: TranslationService? = nil) {
         if let service {
-            self.service = service
-            return
+            self.translationClient = HUDTranslationClient(service: service)
+        } else {
+            self.translationClient = HUDTranslationClient()
         }
-#if canImport(Translation)
-        if #available(iOS 26.0, *) {
-            self.service = AppleTranslationService()
-            return
-        }
-#endif
-        self.service = LibreTranslateService()
     }
 
     func setTargetLanguage(_ code: String) {
@@ -146,7 +140,7 @@ final class TranslationManager: ObservableObject {
         }
 
         do {
-            let result = try await service.translate(
+            let result = try await translationClient.translate(
                 text: trimmed,
                 source: sourceLanguageCode,
                 target: targetLanguageCode

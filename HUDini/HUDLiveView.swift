@@ -1,16 +1,34 @@
 import SwiftUI
 
-/// Minimal HUD-style view that streams live translations while speech is still coming in.
 struct HUDLiveView: View {
-    @StateObject private var transcription = TranscriptionManager()
-    @StateObject private var translator = TranslationManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
-    @State private var queuedTask: Task<Void, Never>? = nil
+    @State private var hudBuffer: String = HUDLiveView.demoDefaults.hudText
+    @State private var playbackTask: Task<Void, Never>? = nil
+    @State private var isDemoRunning: Bool = false
     @State private var targetLanguage: String = "en"
     @State private var listeningLanguageCode: String = HUDLiveView.defaultListeningLanguageCode
-    @State private var lastTranslatedInput: String = ""
-    @State private var hudBuffer: String = ""
-    @State private var previousFullTranslation: String = ""
+    @State private var defaultsApplied: Bool = false
+
+    // MARK: Demo script configuration (edit for your video)
+    // Define the chunk and when (seconds after pressing Start) it should show.
+    private let demoTranslationTimeline: [(chunk: String, secondsFromStart: Double)] = [
+        ("Excellent", 0.7),
+        ("Excellent, thank you!", 1.2),
+        ("Excellent, thank you. By the way.", 2.2),
+        ("Excellent, thank you. By the way, what's your name?", 3.0)
+    ]
+    private let suggestionRevealDelayAfterLastChunk: UInt64 = 500_000_000 // 0.5s
+
+    // Default text values to seed the UI before playback.
+    private static let demoDefaults = DemoDefaults(
+        hudText: "I wanted to ask you if you know where the chemistry lab is",
+        suggestionPhonetic: "Si por supuesto, esta en el primer el salon a la derechas.",
+        suggestionEnglish: "Yes, of course, it's in the first room on the right."
+    )
+
+    private let demoSuggestedReplyPhonetic: String = "Mi nombre es Ryan. ¿Y tú cómo te llamas?"
+    private let demoSuggestedReplyEnglish: String = "My name is Ryan. And what's your name?"
+
     private let hudCharacterLimit: Int = 260
 
     var body: some View {
@@ -37,10 +55,6 @@ struct HUDLiveView: View {
                             Text(option.name).tag(option.code)
                         }
                     }
-                    .onChange(of: listeningLanguageCode, initial: false) { _, newValue in
-                        transcription.setListeningLanguage(newValue)
-                        translator.setSourceLanguage(newValue)
-                    }
                 } label: {
                     Label(listeningLanguageLabel(for: listeningLanguageCode), systemImage: "ear")
                         .labelStyle(.titleAndIcon)
@@ -54,10 +68,6 @@ struct HUDLiveView: View {
                             Text(option.name).tag(option.code)
                         }
                     }
-                    .onChange(of: targetLanguage, initial: false) { _, newValue in
-                        translator.setTargetLanguage(newValue)
-                        scheduleTranslation(for: transcription.transcript)
-                    }
                 } label: {
                     Label(languageLabel(for: targetLanguage), systemImage: "globe")
                         .labelStyle(.titleAndIcon)
@@ -65,11 +75,11 @@ struct HUDLiveView: View {
                 .menuOrder(.fixed)
                 .tint(.secondary)
 
-                Button(transcription.isTranscribing ? "Stop" : "Start") {
-                    transcription.isTranscribing ? stopListening() : startListening()
+                Button(isDemoRunning ? "Stop" : "Start") {
+                    isDemoRunning ? stopDemo() : startDemo()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(transcription.isTranscribing ? .red : .accentColor)
+                .tint(isDemoRunning ? .red : .accentColor)
                 .font(.title3)
             }
 
@@ -77,82 +87,65 @@ struct HUDLiveView: View {
         }
         .padding(32)
         .background(Color.black.opacity(0.02))
-        .task { await transcription.requestPermissions() }
         .onAppear {
-            transcription.setListeningLanguage(listeningLanguageCode)
-            translator.setSourceLanguage(listeningLanguageCode)
-            translator.setTargetLanguage(targetLanguage)
+            applyDefaultsIfNeeded()
         }
         .onDisappear {
-            queuedTask?.cancel()
-        }
-        .onChange(of: transcription.transcript, initial: false) { _, newValue in
-            scheduleTranslation(for: newValue)
+            playbackTask?.cancel()
+            playbackTask = nil
+            isDemoRunning = false
         }
     }
 
-    private func startListening() {
-        translator.clear()
-        lastTranslatedInput = ""
-        previousFullTranslation = ""
-        hudBuffer = ""
-        suggestionManager.suggestionPhonetic = ""
-        suggestionManager.suggestionEnglish = ""
-        transcription.start()
-    }
+    private func startDemo() {
+        playbackTask?.cancel()
+        playbackTask = nil
 
-    private func stopListening() {
-        transcription.stop()
-        queuedTask?.cancel()
-        queuedTask = nil
-    }
+        hudBuffer = HUDLiveView.demoDefaults.hudText
+        suggestionManager.suggestionPhonetic = HUDLiveView.demoDefaults.suggestionPhonetic
+        suggestionManager.suggestionEnglish = HUDLiveView.demoDefaults.suggestionEnglish
+        isDemoRunning = true
 
-    private func scheduleTranslation(for text: String) {
-        queuedTask?.cancel()
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            queuedTask = nil
-            return
-        }
-        guard trimmed != lastTranslatedInput else { return }
+        let timeline = demoTranslationTimeline.sorted { $0.secondsFromStart < $1.secondsFromStart }
+        playbackTask = Task { [timeline, suggestionRevealDelayAfterLastChunk] in
+            var lastTime: Double = 0
+            for entry in timeline {
+                if Task.isCancelled { break }
 
-        queuedTask = Task { [trimmed] in
-            do {
-                try await Task.sleep(nanoseconds: 150_000_000)
-                await translator.translate(trimmed)
-                lastTranslatedInput = trimmed
-                integrateLatestTranslation()
-                suggestionManager.refreshSuggestion(for: trimmed)
-            } catch {
-                if !(error is CancellationError) {
-                    let message = (error as NSError).localizedDescription
-                    translator.statusMessage = "Translation error: \(message)"
+                let waitTime = max(0, entry.secondsFromStart - lastTime)
+                lastTime = entry.secondsFromStart
+
+                if waitTime > 0 {
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
+                    } catch {
+                        break
+                    }
                 }
+
+                await MainActor.run {
+                    appendToHUDBuffer(entry.chunk)
+                }
+            }
+
+            if Task.isCancelled { return }
+
+            try? await Task.sleep(nanoseconds: suggestionRevealDelayAfterLastChunk)
+            if Task.isCancelled { return }
+
+            await MainActor.run {
+                suggestionManager.suggestionPhonetic = demoSuggestedReplyPhonetic
+                suggestionManager.suggestionEnglish = demoSuggestedReplyEnglish
             }
         }
     }
 
-    private func integrateLatestTranslation() {
-        let latest = translator.translatedText
-        guard !latest.isEmpty else { return }
+    private func appendToHUDBuffer(_ chunk: String) {
+        let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
 
-        let addition: String
-        if latest.hasPrefix(previousFullTranslation) {
-            addition = String(latest.dropFirst(previousFullTranslation.count))
-        } else {
-            addition = latest
-            hudBuffer = ""
-        }
-
-        previousFullTranslation = latest
-
-        let trimmedAddition = addition.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedAddition.isEmpty else { return }
-
-        hudBuffer.append(hudBuffer.isEmpty ? trimmedAddition : " " + trimmedAddition)
-        if hudBuffer.count > hudCharacterLimit {
-            hudBuffer = String(hudBuffer.suffix(hudCharacterLimit))
-        }
+        let limited = trimmed.count > hudCharacterLimit ? String(trimmed.suffix(hudCharacterLimit)) : trimmed
+        hudBuffer = limited
     }
 
     private var suggestionCard: some View {
@@ -187,6 +180,20 @@ struct HUDLiveView: View {
     private func listeningLanguageLabel(for code: String) -> String {
         TranslationLanguages.supported.first(where: { $0.code == code })?.name ?? code.uppercased()
     }
+
+    private func applyDefaultsIfNeeded() {
+        guard !defaultsApplied else { return }
+        defaultsApplied = true
+        hudBuffer = HUDLiveView.demoDefaults.hudText
+        suggestionManager.suggestionPhonetic = HUDLiveView.demoDefaults.suggestionPhonetic
+        suggestionManager.suggestionEnglish = HUDLiveView.demoDefaults.suggestionEnglish
+    }
+
+    private func stopDemo() {
+        playbackTask?.cancel()
+        playbackTask = nil
+        isDemoRunning = false
+    }
 }
 
 #Preview { HUDLiveView() }
@@ -207,5 +214,11 @@ private extension HUDLiveView {
         }
 
         return "en"
+    }
+
+    struct DemoDefaults {
+        let hudText: String
+        let suggestionPhonetic: String
+        let suggestionEnglish: String
     }
 }

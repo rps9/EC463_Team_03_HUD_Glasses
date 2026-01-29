@@ -7,7 +7,7 @@ final class HUDSuggestionManager: ObservableObject {
     @Published var suggestionEnglish: String = ""
 
     private var task: Task<Void, Never>?
-    private var inFlightSource: String?
+    private var inFlightSource: (text: String, language: String)?
     private let openAIService: HUDOpenAISuggestionService?
 
     init(openAIService: HUDOpenAISuggestionService? = nil) {
@@ -22,7 +22,7 @@ final class HUDSuggestionManager: ObservableObject {
         }
     }
 
-    func refreshSuggestion(for text: String) {
+    func refreshSuggestion(for text: String, languageCode: String) {
         task?.cancel()
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -33,12 +33,19 @@ final class HUDSuggestionManager: ObservableObject {
             return
         }
 
-        guard trimmed != inFlightSource else { return }
-        inFlightSource = trimmed
+        if let current = inFlightSource, current.text == trimmed, current.language == languageCode {
+            return
+        }
+        inFlightSource = (trimmed, languageCode)
 
         task = Task { [weak self] in
-            await self?.generateSuggestion(for: trimmed)
+            await self?.generateSuggestion(for: trimmed, languageCode: languageCode)
         }
+    }
+
+    func clearSuggestion() {
+        suggestionPhonetic = ""
+        suggestionEnglish = ""
     }
 
     // (factory helper removed)
@@ -47,9 +54,11 @@ final class HUDSuggestionManager: ObservableObject {
         task?.cancel()
     }
 
-    private func generateSuggestion(for text: String) async {
+    private func generateSuggestion(for text: String, languageCode: String) async {
         defer {
-            if inFlightSource == text {
+            if let current = inFlightSource,
+               current.text == text,
+               current.language == languageCode {
                 inFlightSource = nil
             }
         }
@@ -58,7 +67,7 @@ final class HUDSuggestionManager: ObservableObject {
         guard let openAIService else { return }
 
         do {
-            let reply = try await openAIService.suggestion(for: text)
+            let reply = try await openAIService.suggestion(for: text, languageCode: languageCode)
             guard !Task.isCancelled else { return }
             suggestionPhonetic = reply.phonetic
             suggestionEnglish = reply.english

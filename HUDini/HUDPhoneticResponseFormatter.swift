@@ -12,12 +12,6 @@ enum HUDPhoneticResponseFormatter {
 
         text = stripListPrefix(from: text)
 
-        // Cut at first sentence terminator if present
-        if let idx = text.firstIndex(where: { ".!?".contains($0) }) {
-            let endIndex = text.index(after: idx)
-            text = String(text[..<endIndex])
-        }
-
         // Strip diacritics to keep ASCII only
         let noDiacritics = text.applyingTransform(.stripDiacritics, reverse: false) ?? text
 
