@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>HUDini Glasses</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root{
+      /* Vertical placement of the whole glasses image (more negative = higher) */
+      --glasses-offset-y: -36vh;
+
+      /* Text look */
+      --hud-font-px: 29;           /* from your calibration */
+      --hud-line-height: 1.15;
+      --hud-letter-spacing: 0.01em;
+    }
+
+    html,body{ height:100%; background:#000; color:#fff; }
+    .stage{ position:relative; height:100vh; width:100vw; overflow:hidden; }
+
+    /* Glasses image pinned high */
+    .glasses-wrap{
+      position:absolute; inset:0;
+      display:grid; place-items: start center;   /* top, centered horizontally */
+      transform: translateY(var(--glasses-offset-y));
+    }
+    .glasses-img{ width:min(96vw,1600px); height:auto; user-select:none; pointer-events:none; }
+
+    /* Lens overlay: fixed to the image’s box via script */
+    .overlay{
+      position:absolute; pointer-events:none;
+      display:flex; align-items:flex-start; justify-content:flex-start; /* top-left anchor */
+    }
+    .overlay-inner{
+      width:100%; height:100%;
+      display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-start;
+      text-align:left; padding:1.2vh 1.2vw;
+      filter: drop-shadow(0 0 10px rgba(0,0,0,.55)) drop-shadow(0 0 22px rgba(0,0,0,.35));
+    }
+
+    /* Single text block, wraps downward, clipped to the box */
+    .hudtext{
+      font-weight:600;
+      letter-spacing: var(--hud-letter-spacing);
+      line-height: var(--hud-line-height);
+      font-size: calc(var(--hud-font-px) * 1px);
+      white-space: normal;      /* wrap lines */
+      word-break: break-word;
+      overflow: hidden;         /* keep inside box */
+      margin: 0;
+    }
+
+    /* Bottom minimal controls */
+    .ctrl{
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom:2.2vh; z-index:40;
+      background:rgba(255,255,255,.06); color:#fff;
+      border:1px solid rgba(255,255,255,.12); border-radius:14px;
+      backdrop-filter: blur(6px);
+      display:flex; align-items:center; gap:10px; padding:8px 10px;
+    }
+    .ctrl input[type="text"]{
+      background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18);
+      color:#fff; border-radius:10px; padding:8px 10px; width:min(54vw,680px); outline:none;
+    }
+    .ctrl select{
+      background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18);
+      color:#fff; border-radius:10px; padding:8px 10px; outline:none;
+    }
+    .ctrl button{
+      background:#ffffff10; color:#fff; border:1px solid rgba(255,255,255,.22);
+      border-radius:10px; padding:8px 12px; font-weight:600;
+    }
+    .ctrl button.primary{ background:#22c55e1a; border-color:#22c55e66; }
+    .ctrl .sep{ height:22px; width:1px; background:rgba(255,255,255,.18); margin:0 4px; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <!-- Glasses image (transparent lenses recommended) -->
+    <div class="glasses-wrap">
+      <img id="glassesImg" class="glasses-img" src="/static/assets/glasses.svg" alt="Glasses HUD"/>
+    </div>
+
+    <!-- Left lens overlay: one text block -->
+    <div id="leftLens" class="overlay" aria-live="polite">
+      <div class="overlay-inner">
+        <p id="hudText" class="hudtext"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Minimal controls -->
+  <div class="ctrl">
+    <button id="listenBtn" class="primary">Listen</button>
+    <div class="sep"></div>
+    <select id="targetLang" title="Target language">
+      <option>Spanish</option><option>French</option><option>Italian</option><option>German</option>
+      <option>Portuguese</option><option>Japanese</option><option>Mandarin Chinese</option>
+      <option>Korean</option><option>Arabic</option><option>Hindi</option>
+    </select>
+    <input id="ttsInput" type="text" placeholder="Type to get an English-friendly pronunciation…"/>
+    <button id="phoneticBtn">Phonetic</button>
+  </div>
+
+  <script>
+    // Calibration from your test: x:203 y:256 w:394 h:353 | font:29px
+    const CAL = { x:180, y:550, w:360, h:353, fontPx:29 };
+
+    const img = document.getElementById('glassesImg');
+    const leftLens = document.getElementById('leftLens');
+    const hudText = document.getElementById('hudText');
+
+    const listenBtn = document.getElementById('listenBtn');
+    const ttsInput = document.getElementById('ttsInput');
+    const targetLang = document.getElementById('targetLang');
+    const phoneticBtn = document.getElementById('phoneticBtn');
+
+    // Position the overlay using the calibrated pixel box relative to the image’s top-left.
+    // This keeps the exact fit you approved. If your display never changes, this is perfect.
+    function positionLens() {
+      const r = img.getBoundingClientRect();
+      const x = r.left + CAL.x;
+      const y = r.top  + CAL.y;
+      const w = CAL.w;
+      const h = CAL.h;
+      Object.assign(leftLens.style, { left: x+'px', top: y+'px', width: w+'px', height: h+'px' });
+      // Text size (hardcoded from your calibration)
+      hudText.style.fontSize = CAL.fontPx + 'px';
+    }
+
+    const debounce = (fn, ms=60) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
+    img.addEventListener('load', positionLens);
+    window.addEventListener('resize', debounce(positionLens, 80));
+    if (img.complete) positionLens();
+
+    // Single writer for HUD
+    function setHUD(text) { hudText.textContent = (text || '').trim(); }
+
+    // Mic listen → WS → translation
+    async function startListening() {
+      const preferred = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg','audio/mp4'];
+      const supported = preferred.find(t => MediaRecorder.isTypeSupported?.(t));
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, supported ? { mimeType: supported } : undefined);
+
+      const wsUrl = (path)=> (location.protocol==='https:'?'wss':'ws')+'://'+location.host+path;
+      const ws = new WebSocket(wsUrl('/ws/translate')); window._ws = ws;
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'start', mimeType: mediaRecorder.mimeType || 'audio/webm' }));
+        mediaRecorder.start(250);
+        listenBtn.textContent = 'Stop'; listenBtn.classList.remove('primary');
+      };
+      mediaRecorder.ondataavailable = async (e) => {
+        if (e.data && e.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
+          const buf = await e.data.arrayBuffer(); ws.send(buf);
+        }
+      };
+      mediaRecorder.onstop = () => {
+        setHUD('translating…');  // show status while we wait for server result
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'stop' }));
+        }
+      };
+      ws.onmessage = (evt) => {
+        try { const data = JSON.parse(evt.data); if (data.type === 'result') setHUD(data.translation || ''); } catch {}
+      };
+      ws.onclose = () => { listenBtn.textContent = 'Listen'; listenBtn.classList.add('primary'); window._ws = null; };
+      window._mediaRecorder = mediaRecorder;
+    }
+    function stopListening() {
+      if (window._mediaRecorder && window._mediaRecorder.state !== 'inactive') {
+        window._mediaRecorder.stop();      // triggers mediaRecorder.onstop -> ws.send({"type":"stop"})
+      }
+      // Do NOT close the socket here. The server will close it after sending "result".
+      listenBtn.textContent = 'Listen';
+      listenBtn.classList.add('primary');
+    }
+
+    let recording = false;
+    listenBtn.addEventListener('click', async () => {
+      if (!recording) { recording = true; await startListening(); }
+      else { recording = false; stopListening(); }
+    });
+
+    // Phonetic → /api/phonetic
+    phoneticBtn.addEventListener('click', async () => {
+      const text = (ttsInput.value || '').trim(); if (!text) return;
+
+      setHUD('thinking…');   // show status immediately
+
+      try {
+        const res = await fetch('/api/phonetic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, target: targetLang.value })
+        });
+        if (!res.ok) throw new Error('Server error: ' + res.status);
+        const data = await res.json();
+        setHUD(data.phonetic || '');
+      } catch (e) {
+        // optional: clear or keep the status; your call
+        setHUD(''); // clears the "thinking…" if it fails
+        console.error(e);
+      }
+    });
+  </script>
+</body>
+</html>
