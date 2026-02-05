@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct RootView: View {
+    @StateObject private var authManager = AuthenticationManager()
+    @State private var showSplash = true
+    
     private enum Tab: Hashable {
         case hudDisplay
         case transcription
@@ -19,6 +22,24 @@ struct RootView: View {
     @State private var activeSheet: TesterSheet?
 
     var body: some View {
+        Group {
+            if showSplash {
+                SplashView()
+            } else if authManager.isAuthenticated {
+                mainContentView
+            } else {
+                SignInView()
+                    .environmentObject(authManager)
+            }
+        }
+        .task {
+            // Show splash screen for 0.7 seconds
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            showSplash = false
+        }
+    }
+    
+    private var mainContentView: some View {
         NavigationStack {
             TabView(selection: $selectedTab) {
                 HUDLiveView()
@@ -43,8 +64,12 @@ struct RootView: View {
                     Menu {
                         Button("Transcription QA") { activeSheet = .transcription }
                         Button("Translation QA") { activeSheet = .translation }
+                        Divider()
+                        Button("Sign Out", role: .destructive) {
+                            authManager.signOut()
+                        }
                     } label: {
-                        Label("Testing", systemImage: "testtube.2")
+                        Label("Menu", systemImage: "ellipsis.circle")
                     }
                 }
             }
