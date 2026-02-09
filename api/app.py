@@ -1,4 +1,4 @@
-import re, json, hashlib, hmac, jwt
+import re, json, hashlib, hmac, jwt, os
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
@@ -8,13 +8,14 @@ from psycopg.errors import UniqueViolation
 from crypto_utils import hash_password, verify_password 
 from pydantic import BaseModel, Field, field_validator
 from jwt_utils import create_access_token, current_user, current_admin, current_owner, ACCESS_TOKEN_EXPIRE_MINUTES
-from open_ai_manager import chatManager
 from email_manager import EmailClient, issue_email_verification_link
 from datetime import datetime, timedelta, timezone
-from fastapi.responses import RedirectResponse
-from spotify import router as spotify_router
+from fastapi.responses import RedirectResponse, JSONResponse
 
-ALLOWED_ORIGINS = ["https://rps9.github.io", "http://localhost:5173"]
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+VERIFY_REDIRECT_SUCCESS = os.environ.get("VERIFY_REDIRECT_SUCCESS")
+VERIFY_REDIRECT_INVALID = os.environ.get("VERIFY_REDIRECT_INVALID")
+VERIFY_REDIRECT_EXPIRED = os.environ.get("VERIFY_REDIRECT_EXPIRED")
 
 USERNAME_RE = re.compile(r"^(?![._-])(?!.*[._-]{2})[a-z0-9._-]+(?<![._-])$")
 PASSWORD_RE = re.compile(r"^[\x21-\x7E]+$") # Covers all ASCII but space
@@ -22,14 +23,14 @@ PASSWORD_RE = re.compile(r"^[\x21-\x7E]+$") # Covers all ASCII but space
 security = HTTPBearer(auto_error=False)
 
 app = FastAPI()
-app.include_router(spotify_router)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
-)
+if ALLOWED_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+    )
 
 class SignUpCreds(BaseModel):
     username: str = Field(min_length=3, max_length=32)
@@ -153,6 +154,11 @@ def sign_in(body: SignInCreds):
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="signin failed")
 
+def _verify_redirect_or_json(url: str | None, status_code: int, payload: dict):
+    if url:
+        return RedirectResponse(url=url, status_code=302)
+    return JSONResponse(status_code=status_code, content=payload)
+
 @app.get("/api/auth/verify-email")
 def verify_email(token_id: str, token: str):
     now = datetime.now(timezone.utc)
@@ -165,7 +171,11 @@ def verify_email(token_id: str, token: str):
         row = cur.fetchone()
 
         if not row:
-            return RedirectResponse(url="https://rps9.github.io/verify/invalid.html", status_code=302)
+            return _verify_redirect_or_json(
+                VERIFY_REDIRECT_INVALID,
+                status.HTTP_400_BAD_REQUEST,
+                {"ok": False, "status": "invalid", "message": "invalid token"},
+            )
 
         user_id = row[0]
         token_hash = row[1]
@@ -173,62 +183,30 @@ def verify_email(token_id: str, token: str):
         used_at = row[3]
 
         if used_at is not None or now > expires_at:
-            return RedirectResponse(url="https://rps9.github.io/verify/expired.html", status_code=302)
+            return _verify_redirect_or_json(
+                VERIFY_REDIRECT_EXPIRED,
+                status.HTTP_400_BAD_REQUEST,
+                {"ok": False, "status": "expired", "message": "token expired or already used"},
+            )
 
         presented = hashlib.sha256(token.encode()).hexdigest()
         if not hmac.compare_digest(token_hash, presented):
-            return RedirectResponse(url="https://rps9.github.io/verify/invalid.html", status_code=302)
+            return _verify_redirect_or_json(
+                VERIFY_REDIRECT_INVALID,
+                status.HTTP_400_BAD_REQUEST,
+                {"ok": False, "status": "invalid", "message": "invalid token"},
+            )
 
         cur.execute("UPDATE users SET email_verified = TRUE WHERE id = %s", (user_id,))
         cur.execute("UPDATE email_verifications SET used_at = %s WHERE id = %s", (now, token_id,))
 
-    return RedirectResponse(url="https://rps9.github.io/verify/success.html", status_code=302)
-
-
-class SongInput(BaseModel):
-    song_input: list[str]
-    additional_instructions: str
-
-    @field_validator("song_input")
-    @classmethod
-    def _check_not_empty(cls, song_input):
-        if not song_input:
-            raise ValueError("song_input must have at least one song")
-        return song_input
+    return _verify_redirect_or_json(
+        VERIFY_REDIRECT_SUCCESS,
+        status.HTTP_200_OK,
+        {"ok": True, "status": "verified", "message": "email verified"},
+    )
     
 
-@app.post("/api/admin/songrecs", dependencies=[Depends(current_admin)], status_code=status.HTTP_200_OK)
-def get_recs(body: SongInput):
-    try:
-        song_list = body.song_input
-        seeds = "\n".join(f"- {s}" for s in song_list)
-
-        prompt = (
-            "You are a helpful music recommendation assistant.\n"
-            "Task: Recommend 10 songs similar in vibe to the seed list.\n\n"
-            f"Seeds:\n{seeds}\n\n"
-            "Output format (strict JSON):\n"
-            '[{"title":"...", "artist":"...", "why":"one short sentence"}, {"title":"...", "artist":"...", "why":"..."}]\n'
-            "Rules: Do not include any of the seed songs in the output. Return exactly 10 items. No prose—JSON only."
-        )
-
-        if body.additional_instructions:
-            prompt += f"Additional instructions: {body.additional_instructions}"
-
-        gptAgent = chatManager(model="gpt-5-nano")
-        raw_text_recommendations = gptAgent.chat(prompt=prompt)
-
-        try:
-            json_recommendations = json.loads(raw_text_recommendations)
-        except:
-            json_recommendations = "it failed ]:" # has yet to fail but we'll see 
-
-        return {"recommendations": json_recommendations}
-        
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="songrecs failed")
 
 class BestowRoleBody(BaseModel):
     username: str
