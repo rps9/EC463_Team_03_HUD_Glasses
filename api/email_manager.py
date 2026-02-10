@@ -5,6 +5,9 @@ from db import pool
 from datetime import datetime, timedelta, timezone
 
 BASE_URL = os.environ["BASE_URL"] # so we can switch urls between environments easily
+APP_NAME = os.environ.get("APP_NAME", "our app")
+APP_URL = os.environ.get("APP_URL")
+SENDER_NAME = os.environ.get("SENDER_NAME", "Notifications")
 # it really doesn't have to be a class but I like it, oh well
 class EmailClient:
     def __init__(self):
@@ -13,7 +16,7 @@ class EmailClient:
 
     def send_email(self, recipient_email: str, email_subject: str, email_body: str, html_body: str | None = None):
         msg = EmailMessage()
-        msg["From"] = formataddr(("RPS Notifications", self.sender_email))
+        msg["From"] = formataddr((SENDER_NAME, self.sender_email))
         msg["To"] = recipient_email
         msg["Subject"] = email_subject
         msg.set_content(email_body)  
@@ -30,8 +33,12 @@ class EmailClient:
 
     def send_verification(self, recipient_email: str, verification_url: str):
         subject = "Verify your email"
+        app_line = f"Thanks for making an account for {APP_NAME}!"
+        if APP_URL:
+            app_line = f"Thanks for making an account for {APP_NAME} ({APP_URL})!"
+
         text_body = (
-            "Thanks for making an account for https://rps9.github.io !\n\n"
+            f"{app_line}\n\n"
             f"Please verify your email by opening this link:\n{verification_url}\n\n"
             "If you didn't make an account, please ignore this email."
         )
@@ -63,7 +70,7 @@ class EmailClient:
                         <tr>
                         <td style="padding:28px 28px 24px 28px;">
                             <h1 style="margin:0 0 12px 0;color:{text};font-size:24px;line-height:1.2;font-weight:800;">Verify your email</h1>
-                            <p style="margin:0 0 12px 0;color:{text};line-height:1.55;font-size:16px;">Thanks for making an account for https://rps9.github.io !</p>
+                            <p style="margin:0 0 12px 0;color:{text};line-height:1.55;font-size:16px;">{app_line}</p>
                             <p style="margin:0 0 12px 0;color:{text};line-height:1.55;font-size:16px;">Please confirm your email by clicking the button below.</p>
                             <div style="margin-top:20px;">
                             <a href="{verification_url}"
@@ -108,7 +115,7 @@ def issue_email_verification_link(user_id: int) -> str:
 
 def main():
     notification_email = EmailClient()
-    notification_email.send_verification("ryans6892@gmail.com", "https://rps9.github.io")
+    notification_email.send_verification("test@example.com", "https://example.com")
 
 if __name__ == "__main__":
     main()
