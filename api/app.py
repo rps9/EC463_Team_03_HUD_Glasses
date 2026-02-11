@@ -161,8 +161,9 @@ def sign_up(body: SignUpCreds):
         expires_at = jwt.decode(token, options={"verify_signature": False})["exp"]
         return {"ok": True, "message": "account created", "access_token": token, "token_type": "bearer", "expires_at": expires_at, "role": "user"}
 
-    except UniqueViolation:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username already exists")
+    except UniqueViolation as e:
+        constraint = e.diag.constraint_name
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"That {constraint} has already been used.")
 
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="signup failed")
@@ -324,18 +325,35 @@ def auth_google(body: GoogleAuthBody):
                     """,
                     (username, email, google_email_verified, pwd_hash, google_sub),
                 )
-            except UniqueViolation:
+            except UniqueViolation as e:
+                constraint = (getattr(getattr(e, "diag", None), "constraint_name", "") or "").lower()
+                detail = "account already exists"
+                if "username" in constraint:
+                    detail = "username already exists"
+                elif "email" in constraint:
+                    detail = "email already exists"
+                if detail != "username already exists":
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
                 # If username collided between the pre-check and insert, retry once with a different username.
                 username = _unique_username(cur, base + secrets.token_hex(2))
-                cur.execute(
-                    """
-                    INSERT INTO users (username, email, email_verified, password_hash, google_sub)
-                    VALUES (%s, %s, %s, %s, %s)
-                    """,
-                    (username, email, google_email_verified, pwd_hash, google_sub),
-                )
+                try:
+                    cur.execute(
+                        """
+                        INSERT INTO users (username, email, email_verified, password_hash, google_sub)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (username, email, google_email_verified, pwd_hash, google_sub),
+                    )
+                except UniqueViolation as e2:
+                    constraint = (getattr(getattr(e2, "diag", None), "constraint_name", "") or "").lower()
+                    detail = "account already exists"
+                    if "username" in constraint:
+                        detail = "username already exists"
+                    elif "email" in constraint:
+                        detail = "email already exists"
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
             role = "user"
-
+    
     token = create_access_token(username=username, role=role)
     expires_at = jwt.decode(token, options={"verify_signature": False})["exp"]
     return {
