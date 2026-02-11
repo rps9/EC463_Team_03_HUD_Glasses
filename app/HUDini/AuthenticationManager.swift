@@ -39,6 +39,38 @@ class AuthenticationManager: ObservableObject {
     }
     
     @MainActor
+    func signUp(email: String, password: String, confirmPassword: String) async {
+        isLoading = true
+        errorMessage = ""
+        
+        // Simulate network delay
+        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        
+        // Validation
+        if email.isEmpty || password.isEmpty || confirmPassword.isEmpty {
+            errorMessage = "All fields are required."
+        } else if password.count < 6 {
+            errorMessage = "Password must be at least 6 characters."
+        } else if password != confirmPassword {
+            errorMessage = "Passwords do not match."
+        } else if !isValidEmail(email) {
+            errorMessage = "Please enter a valid email address."
+        } else {
+            // Success - in production, this would call an API to create the account
+            isAuthenticated = true
+            errorMessage = ""
+        }
+        
+        isLoading = false
+    }
+    
+    private func isValidEmail(_ email: String) -> Bool {
+        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
+        let emailPredicate = NSPredicate(format:"SELF MATCHES %@", emailRegex)
+        return emailPredicate.evaluate(with: email)
+    }
+    
+    @MainActor
     func signOut() {
         isAuthenticated = false
     }

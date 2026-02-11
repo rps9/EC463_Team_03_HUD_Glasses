@@ -9,36 +9,62 @@ import SwiftUI
 
 struct SignInView: View {
     @EnvironmentObject var authManager: AuthenticationManager
+    @State private var selectedTab: AuthTab = .login
     @State private var email: String = ""
     @State private var password: String = ""
+    @State private var confirmPassword: String = ""
+    @State private var preferredSourceLanguageCode: String = "es"
     @FocusState private var focusedField: Field?
+    
+    private enum AuthTab: String, CaseIterable {
+        case login = "Login"
+        case signup = "Sign Up"
+    }
     
     private enum Field: Hashable {
         case email
         case password
+        case confirmPassword
     }
     
     var body: some View {
         VStack(spacing: 24) {
             // App Logo/Title
             VStack(spacing: 8) {
-                Image(systemName: "display")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.blue)
+                Image("AppIconImage")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 80, height: 80)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
                 
                 Text("HUDini")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                 
-                Text("Sign in to continue")
+                Text(selectedTab == .login ? "Sign in to continue" : "Create an account")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .padding(.top, 60)
+            .padding(.top, 24)
             
-            Spacer()
+            // Tab Picker
+            Picker("Auth Tab", selection: $selectedTab) {
+                ForEach(AuthTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 32)
+            .onChange(of: selectedTab) {
+                // Clear fields when switching tabs
+                email = ""
+                password = ""
+                confirmPassword = ""
+                preferredSourceLanguageCode = "es"
+                authManager.errorMessage = ""
+            }
             
-            // Sign In Form
+            // Form Content
             VStack(spacing: 20) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Email")
@@ -47,7 +73,7 @@ struct SignInView: View {
                     
                     TextField("Enter your email", text: $email)
                         .textFieldStyle(.roundedBorder)
-                        .textContentType(.emailAddress)
+                        .textContentType(selectedTab == .login ? .emailAddress : .username)
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
                         .focused($focusedField, equals: .email)
@@ -61,9 +87,40 @@ struct SignInView: View {
                     
                     SecureField("Enter your password", text: $password)
                         .textFieldStyle(.roundedBorder)
-                        .textContentType(.password)
                         .focused($focusedField, equals: .password)
-                        .submitLabel(.go)
+                        .submitLabel(selectedTab == .login ? .go : .next)
+                }
+                
+                if selectedTab == .signup {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Confirm Password")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        
+                        SecureField("Confirm your password", text: $confirmPassword)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .confirmPassword)
+                            .submitLabel(.go)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Language to Translate from")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        
+                        Picker("Language to Translate from", selection: $preferredSourceLanguageCode) {
+                            ForEach(TranslationLanguages.sourceOptions) { option in
+                                Text(option.name).tag(option.code)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(.primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
                 }
                 
                 if !authManager.errorMessage.isEmpty {
@@ -75,7 +132,11 @@ struct SignInView: View {
                 
                 Button(action: {
                     Task {
-                        await authManager.signIn(email: email, password: password)
+                        if selectedTab == .login {
+                            await authManager.signIn(email: email, password: password)
+                        } else {
+                            await authManager.signUp(email: email, password: password, confirmPassword: confirmPassword)
+                        }
                     }
                 }) {
                     HStack {
@@ -83,7 +144,7 @@ struct SignInView: View {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         } else {
-                            Text("Sign In")
+                            Text(selectedTab == .login ? "Sign In" : "Sign Up")
                                 .fontWeight(.semibold)
                         }
                     }
@@ -91,18 +152,24 @@ struct SignInView: View {
                     .frame(height: 50)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(authManager.isLoading || email.isEmpty || password.isEmpty)
+                .disabled(authManager.isLoading || email.isEmpty || password.isEmpty || (selectedTab == .signup && confirmPassword.isEmpty))
             }
             .padding(.horizontal, 32)
-            
-            Spacer()
         }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.bottom, 24)
         .onSubmit {
             if focusedField == .email {
                 focusedField = .password
+            } else if focusedField == .password && selectedTab == .signup {
+                focusedField = .confirmPassword
             } else {
                 Task {
-                    await authManager.signIn(email: email, password: password)
+                    if selectedTab == .login {
+                        await authManager.signIn(email: email, password: password)
+                    } else {
+                        await authManager.signUp(email: email, password: password, confirmPassword: confirmPassword)
+                    }
                 }
             }
         }

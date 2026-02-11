@@ -11,6 +11,7 @@ from jwt_utils import create_access_token, current_user, current_admin, current_
 from email_manager import EmailClient, issue_email_verification_link
 from datetime import datetime, timedelta, timezone
 from fastapi.responses import RedirectResponse, JSONResponse
+from mangum import Mangum
 
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
 VERIFY_REDIRECT_SUCCESS = os.environ.get("VERIFY_REDIRECT_SUCCESS")
@@ -23,6 +24,8 @@ PASSWORD_RE = re.compile(r"^[\x21-\x7E]+$") # Covers all ASCII but space
 security = HTTPBearer(auto_error=False)
 
 app = FastAPI()
+handler = Mangum(app)
+
 if ALLOWED_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
