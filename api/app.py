@@ -1,4 +1,4 @@
-import re, json, hashlib, hmac, jwt, os
+import re, json, hashlib, hmac, jwt, os, secrets
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
@@ -11,11 +11,14 @@ from jwt_utils import create_access_token, current_user, current_admin, current_
 from email_manager import EmailClient, issue_email_verification_link
 from datetime import datetime, timedelta, timezone
 from fastapi.responses import RedirectResponse, JSONResponse
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 
-ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 VERIFY_REDIRECT_SUCCESS = os.environ.get("VERIFY_REDIRECT_SUCCESS")
 VERIFY_REDIRECT_INVALID = os.environ.get("VERIFY_REDIRECT_INVALID")
 VERIFY_REDIRECT_EXPIRED = os.environ.get("VERIFY_REDIRECT_EXPIRED")
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 
 USERNAME_RE = re.compile(r"^(?![._-])(?!.*[._-]{2})[a-z0-9._-]+(?<![._-])$")
 PASSWORD_RE = re.compile(r"^[\x21-\x7E]+$") # Covers all ASCII but space
@@ -91,6 +94,45 @@ class SignInCreds(BaseModel):
         return password
     
 
+def _email_local_part(email: str) -> str:
+    return (email.split("@", 1)[0] if email else "").strip().lower()
+
+def _username_base_from_email(email: str) -> str:
+    # Must fit USERNAME_RE: [a-z0-9._-], no leading/trailing ._-, no repeats like ".."
+    s = _email_local_part(email)
+    s = re.sub(r"[^a-z0-9._-]+", ".", s)
+    s = re.sub(r"[._-]{2,}", ".", s)
+    s = s.strip("._-")
+    if not s:
+        s = "user"
+    if len(s) < 3:
+        s = (s + "user")[:3]
+    if not USERNAME_RE.fullmatch(s):
+        s = "user" + secrets.token_hex(3)
+    return s[:32]
+
+def _unique_username(cur, base: str) -> str:
+    # Try base, base1, base2... truncated to 32 chars.
+    for i in range(0, 100):
+        suffix = "" if i == 0 else str(i)
+        candidate = (base[: max(0, 32 - len(suffix))] + suffix)[:32]
+        cur.execute("SELECT 1 FROM users WHERE username = %s", (candidate,))
+        if not cur.fetchone():
+            return candidate
+    return ("user" + secrets.token_hex(10))[:32]
+
+def _verify_google_id_token(credential: str) -> dict:
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="missing GOOGLE_CLIENT_ID")
+    try:
+        return google_id_token.verify_oauth2_token(
+            credential,
+            google_requests.Request(),
+            audience=GOOGLE_CLIENT_ID,
+        )
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid google credential")
+
 @app.get("/api/db/health", dependencies=[Depends(current_admin)])
 def db_health():
     ok = False
@@ -113,8 +155,7 @@ def sign_up(body: SignUpCreds):
 
         verify_url = issue_email_verification_link(user_id)
         EmailClient().send_verification(body.email, verify_url)
-        print(verify_url)
-                                        
+
         # role is user by default, so no need to check the db for role
         token = create_access_token(username=body.username, role="user") 
         expires_at = jwt.decode(token, options={"verify_signature": False})["exp"]
@@ -232,3 +273,76 @@ def bestow_admin(body: BestowRoleBody):
             if row[0] == body.role:
                 return {"ok": True, "message": f"user is already role: {body.role}"}
         return {"ok": True, "message": f"{body.username} is now role: {body.role}"}
+
+
+class GoogleAuthBody(BaseModel):
+    credential: str
+
+
+@app.post("/api/auth/google", status_code=status.HTTP_200_OK)
+def auth_google(body: GoogleAuthBody):
+    idinfo = _verify_google_id_token(body.credential)
+
+    google_sub = idinfo.get("sub")
+    email = (idinfo.get("email") or "").strip().lower()
+    name = (idinfo.get("name") or "").strip()
+    picture = (idinfo.get("picture") or "").strip()
+    google_email_verified = bool(idinfo.get("email_verified"))
+    if not google_sub:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="google token missing sub")
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="google token missing email")
+
+    with pool.connection() as conn, conn.cursor() as cur:
+        # 1) Existing Google-linked account
+        cur.execute(
+            "SELECT id, username, role, email_verified FROM users WHERE google_sub = %s",
+            (google_sub,),
+        )
+        row = cur.fetchone()
+
+        if row:
+            user_id = row[0]
+            username = row[1]
+            role = row[2] or "user"
+            if google_email_verified and not bool(row[3]):
+                cur.execute("UPDATE users SET email_verified = TRUE WHERE id = %s", (user_id,))
+        else:
+            # Create a new local user record for this Google identity (no linking by email).
+            base = _username_base_from_email(email)
+            username = _unique_username(cur, base)
+
+            # Keep password_hash populated to avoid needing to relax NOT NULL in existing schemas.
+            random_pwd = secrets.token_urlsafe(32)
+            pwd_hash = hash_password(random_pwd)
+
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO users (username, email, email_verified, password_hash, google_sub)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (username, email, google_email_verified, pwd_hash, google_sub),
+                )
+            except UniqueViolation:
+                # If username collided between the pre-check and insert, retry once with a different username.
+                username = _unique_username(cur, base + secrets.token_hex(2))
+                cur.execute(
+                    """
+                    INSERT INTO users (username, email, email_verified, password_hash, google_sub)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (username, email, google_email_verified, pwd_hash, google_sub),
+                )
+            role = "user"
+
+    token = create_access_token(username=username, role=role)
+    expires_at = jwt.decode(token, options={"verify_signature": False})["exp"]
+    return {
+        "ok": True,
+        "user": {"email": email, "name": name, "picture": picture, "username": username, "role": role},
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_at": expires_at,
+        "role": role,
+    }
