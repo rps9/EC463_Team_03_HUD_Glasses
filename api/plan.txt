@@ -1,0 +1,7 @@
+1. Password signup
+    - Create account with username/password
+    - Require your existing email verification link before full access
+2. Google signup
+    - Create account using Google id_token
+    - Mark email_verified = TRUE immediately (since Google already verified it)
+    - User must continue using Google for sign‑in
