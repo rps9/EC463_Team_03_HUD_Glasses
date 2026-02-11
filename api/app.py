@@ -92,34 +92,6 @@ class SignInCreds(BaseModel):
         if not PASSWORD_RE.fullmatch(password):
             raise ValueError("password must be 8-64 chars, visible ASCII (no spaces)")
         return password
-    
-
-def _email_local_part(email: str) -> str:
-    return (email.split("@", 1)[0] if email else "").strip().lower()
-
-def _username_base_from_email(email: str) -> str:
-    # Must fit USERNAME_RE: [a-z0-9._-], no leading/trailing ._-, no repeats like ".."
-    s = _email_local_part(email)
-    s = re.sub(r"[^a-z0-9._-]+", ".", s)
-    s = re.sub(r"[._-]{2,}", ".", s)
-    s = s.strip("._-")
-    if not s:
-        s = "user"
-    if len(s) < 3:
-        s = (s + "user")[:3]
-    if not USERNAME_RE.fullmatch(s):
-        s = "user" + secrets.token_hex(3)
-    return s[:32]
-
-def _unique_username(cur, base: str) -> str:
-    # Try base, base1, base2... truncated to 32 chars.
-    for i in range(0, 100):
-        suffix = "" if i == 0 else str(i)
-        candidate = (base[: max(0, 32 - len(suffix))] + suffix)[:32]
-        cur.execute("SELECT 1 FROM users WHERE username = %s", (candidate,))
-        if not cur.fetchone():
-            return candidate
-    return ("user" + secrets.token_hex(10))[:32]
 
 def _verify_google_id_token(credential: str) -> dict:
     if not GOOGLE_CLIENT_ID:
@@ -251,29 +223,37 @@ def verify_email(token_id: str, token: str):
 
 
 class BestowRoleBody(BaseModel):
-    username: str
+    email: str
     role: str
 
-    @field_validator("username", mode="before")
+    @field_validator("email", mode="before")
     @classmethod
-    def _normalize_username(cls, username: str) -> str:
-        return str(username).strip().lower()
+    def _normalize_email(cls, email: str) -> str:
+        return str(email).strip().lower()
+    
+    @field_validator("role", mode="before")
+    @classmethod
+    def _check_role(cls, role: str) -> str:
+        role_list = ["user", "admin", "owner"]
+        if role not in role_list:
+            raise ValueError(f"Role must be one of the following: {role_list}")
+        return role
 
 @app.post("/api/owner/bestow-role", dependencies=[Depends(current_owner)], status_code=status.HTTP_200_OK)
 def bestow_admin(body: BestowRoleBody):
     with pool.connection() as conn, conn.cursor() as cur:
         cur.execute(
-            "UPDATE users SET role = %s WHERE username = %s AND role <> %s",
-            (body.role, body.username, body.role),
+            "UPDATE users SET role = %s WHERE email = %s AND role <> %s",
+            (body.role, body.email, body.role),
         )
         if cur.rowcount == 0:
-            cur.execute("SELECT role FROM users WHERE username = %s", (body.username,))
+            cur.execute("SELECT role FROM users WHERE email = %s", (body.email,))
             row = cur.fetchone()
             if not row:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="email not found")
             if row[0] == body.role:
                 return {"ok": True, "message": f"user is already role: {body.role}"}
-        return {"ok": True, "message": f"{body.username} is now role: {body.role}"}
+        return {"ok": True, "message": f"{body.email} is now role: {body.role}"}
 
 
 class GoogleAuthBody(BaseModel):
@@ -293,29 +273,25 @@ def auth_google(body: GoogleAuthBody):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="google token missing sub")
     if not email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="google token missing email")
+    if not google_email_verified:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Verify google account or use a verified account")
 
     with pool.connection() as conn, conn.cursor() as cur:
-        # 1) Existing Google-linked account
+        # Existing Google-linked account
         cur.execute(
             "SELECT id, username, role, email_verified FROM users WHERE google_sub = %s",
             (google_sub,),
         )
         row = cur.fetchone()
 
-        if row:
-            user_id = row[0]
-            username = row[1]
-            role = row[2] or "user"
-            if google_email_verified and not bool(row[3]):
-                cur.execute("UPDATE users SET email_verified = TRUE WHERE id = %s", (user_id,))
-        else:
+        # If the user doesn't have an account then make one
+        if not row:
             # Create a new local user record for this Google identity (no linking by email).
-            base = _username_base_from_email(email)
-            username = _unique_username(cur, base)
 
             # Keep password_hash populated to avoid needing to relax NOT NULL in existing schemas.
             random_pwd = secrets.token_urlsafe(32)
             pwd_hash = hash_password(random_pwd)
+            username = ("g_" + hashlib.sha256(google_sub.encode()).hexdigest()[:24])[:32]
 
             try:
                 cur.execute(
@@ -326,32 +302,9 @@ def auth_google(body: GoogleAuthBody):
                     (username, email, google_email_verified, pwd_hash, google_sub),
                 )
             except UniqueViolation as e:
-                constraint = (getattr(getattr(e, "diag", None), "constraint_name", "") or "").lower()
-                detail = "account already exists"
-                if "username" in constraint:
-                    detail = "username already exists"
-                elif "email" in constraint:
-                    detail = "email already exists"
-                if detail != "username already exists":
-                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
-                # If username collided between the pre-check and insert, retry once with a different username.
-                username = _unique_username(cur, base + secrets.token_hex(2))
-                try:
-                    cur.execute(
-                        """
-                        INSERT INTO users (username, email, email_verified, password_hash, google_sub)
-                        VALUES (%s, %s, %s, %s, %s)
-                        """,
-                        (username, email, google_email_verified, pwd_hash, google_sub),
-                    )
-                except UniqueViolation as e2:
-                    constraint = (getattr(getattr(e2, "diag", None), "constraint_name", "") or "").lower()
-                    detail = "account already exists"
-                    if "username" in constraint:
-                        detail = "username already exists"
-                    elif "email" in constraint:
-                        detail = "email already exists"
-                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+                constraint = e.diag.constraint_name
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"That {constraint} has already been used.")
+                
             role = "user"
     
     token = create_access_token(username=username, role=role)
@@ -364,3 +317,30 @@ def auth_google(body: GoogleAuthBody):
         "expires_at": expires_at,
         "role": role,
     }
+
+
+class RequestResetPassword(BaseModel):
+    email: str
+
+@app.post("/api/auth/request-reset-password", status_code=status.HTTP_200_OK)
+def reset_password(body: RequestResetPassword):
+    with pool.connection() as conn, conn.cursor() as cur:
+        # Existing Google-linked account
+        cur.execute(
+            "SELECT google_sub FROM users WHERE email = %s",
+            (body.email,),
+        )
+        row = cur.fetchone()
+
+    google_sub = row[0]
+
+    if google_sub:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sign in using google")
+    
+    # Return generic message if the email doesn't exist
+    if not row:
+        return {
+            "ok": True,
+            "message": "If the email exists, then we will send an email to reset your password."
+        }
+    
