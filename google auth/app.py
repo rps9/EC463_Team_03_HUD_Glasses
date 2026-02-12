@@ -30,7 +30,9 @@ def auth_google():
             google_requests.Request(),
             audience=GOOGLE_CLIENT_ID,
         )
+
         session["user"] = {
+            "sub": idinfo.get("sub"),
             "email": idinfo.get("email"),
             "name": idinfo.get("name"),
         }
@@ -41,13 +43,74 @@ def auth_google():
 
 @app.post("/logout")
 def logout():
-    session.pop("user", None)
+    session.clear()
     return jsonify({"ok": True})
 
 
 @app.get("/me")
 def me():
-    return jsonify({"ok": True, "user": session.get("user")})
+    user = session.get("user")
+    return jsonify({"ok": True, "logged_in": bool(user), "user": user})
+
+
+@app.get("/user-data")
+def user_data():
+    user = session.get("user")
+    if not user:
+        return jsonify({"ok": False, "error": "No user data."}), 401
+
+    sub = user.get("sub")
+
+    # Spanish
+    if sub == "104830467548669430044":
+        data = [
+            {
+                "datetime": "2026-02-10 09:01",
+                "phrase_heard": "¿Dónde está el baño?",
+                "translation": "Where is the bathroom?",
+                "suggested_response": "El baño está a la derecha.",
+            },
+            {
+                "datetime": "2026-02-10 11:15",
+                "phrase_heard": "Necesito ayuda",
+                "translation": "I need help",
+                "suggested_response": "Claro, ¿en qué puedo ayudar?",
+            },
+            {
+                "datetime": "2026-02-10 14:22",
+                "phrase_heard": "¿Cuánto cuesta?",
+                "translation": "How much does it cost?",
+                "suggested_response": "Cuesta diez dólares.",
+            },
+        ]
+
+    # French
+    elif sub == "108175577798513320429":
+        data = [
+            {
+                "datetime": "2026-02-10 09:01",
+                "phrase_heard": "Où sont les toilettes ?",
+                "translation": "Where is the bathroom?",
+                "suggested_response": "Les toilettes sont à droite.",
+            },
+            {
+                "datetime": "2026-02-10 11:15",
+                "phrase_heard": "J'ai besoin d'aide",
+                "translation": "I need help",
+                "suggested_response": "Bien sûr, comment puis-je aider ?",
+            },
+            {
+                "datetime": "2026-02-10 14:22",
+                "phrase_heard": "Combien ça coûte ?",
+                "translation": "How much does it cost?",
+                "suggested_response": "Ça coûte dix dollars.",
+            },
+        ]
+
+    else:
+        data = []
+
+    return jsonify({"ok": True, "sub": sub, "data": data})
 
 
 if __name__ == "__main__":
