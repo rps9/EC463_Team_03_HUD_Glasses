@@ -10,11 +10,7 @@ python -m venv .venv
 
 source .venv/bin/activate
 
-pip install flask google-auth
-
-export GOOGLE_CLIENT_ID="insert ID"
-
-export FLASK_SECRET="insert secret"
+pip install flask
 
 Open Activated ENV:
 
