@@ -55,7 +55,7 @@
         const data = await r.json().catch(() => ({}));
         if (r.ok && data && data.access_token) {
           localStorage.setItem("hudini_access_token", data.access_token);
-          localStorage.setItem("hudini_user", JSON.stringify(data.user || null));
+          localStorage.setItem("hudini_email", JSON.stringify(data.email || null));
           localStorage.setItem("hudini_expires_at", String(data.expires_at || ""));
         }
         document.getElementById("out").textContent = JSON.stringify({ status: r.status, data }, null, 2);
@@ -63,12 +63,12 @@
 
       function showLocal() {
         const tok = localStorage.getItem("hudini_access_token");
-        const userRaw = localStorage.getItem("hudini_user");
+        const emailRaw = localStorage.getItem("hudini_email");
         const expiresAt = localStorage.getItem("hudini_expires_at");
-        let user = null;
-        try { user = userRaw ? JSON.parse(userRaw) : null; } catch (e) {}
+        let email = null;
+        try { email = emailRaw ? JSON.parse(emailRaw) : null; } catch (e) {}
         document.getElementById("out").textContent = JSON.stringify(
-          { ok: true, api_base_url: API_BASE_URL, has_access_token: !!tok, expires_at: expiresAt, user },
+          { ok: true, api_base_url: API_BASE_URL, has_access_token: !!tok, expires_at: expiresAt, email },
           null,
           2
         );

@@ -20,7 +20,6 @@ VERIFY_REDIRECT_INVALID = os.environ.get("VERIFY_REDIRECT_INVALID")
 VERIFY_REDIRECT_EXPIRED = os.environ.get("VERIFY_REDIRECT_EXPIRED")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 
-USERNAME_RE = re.compile(r"^(?![._-])(?!.*[._-]{2})[a-z0-9._-]+(?<![._-])$")
 PASSWORD_RE = re.compile(r"^[\x21-\x7E]+$") # Covers all ASCII but space
 
 security = HTTPBearer(auto_error=False)
@@ -36,21 +35,8 @@ if ALLOWED_ORIGINS:
     )
 
 class SignUpCreds(BaseModel):
-    username: str = Field(min_length=3, max_length=32)
     password: str = Field(min_length=8, max_length=64)
     email: str # had some issues with pydantic's EmailStr so I'm just gonna keep it simple
-
-    @field_validator("username", mode="before")
-    @classmethod
-    def _normalize_username(cls, username: str) -> str:
-        return username.strip().lower()
-
-    @field_validator("username")
-    @classmethod
-    def _validate_username(cls, username: str) -> str:
-        if not USERNAME_RE.fullmatch(username):
-            raise ValueError("username may contain a-z, 0-9, dot, underscore, hyphen; cannot start/end with . _ - or contain repeats like '..'")
-        return username
 
     @field_validator("password")
     @classmethod
@@ -71,20 +57,18 @@ class SignUpCreds(BaseModel):
         return email
 
 class SignInCreds(BaseModel):
-    username: str = Field(min_length=3, max_length=32)
+    email: str
     password: str = Field(min_length=8, max_length=64)
 
-    @field_validator("username", mode="before")
+    @field_validator("email", mode="before")
     @classmethod
-    def _normalize_username(cls, username: str) -> str:
-        return username.strip().lower()
-
-    @field_validator("username")
-    @classmethod
-    def _validate_username(cls, username: str) -> str:
-        if not USERNAME_RE.fullmatch(username):
-            raise ValueError("username may contain a-z, 0-9, dot, underscore, hyphen; cannot start/end with . _ - or contain repeats like '..'")
-        return username
+    def _normalize_email(cls, email: str) -> str:
+        if email is None:
+            raise ValueError("email is required")
+        email = str(email).strip().lower()
+        if "@" not in email or "." not in email.split("@")[-1]:
+            raise ValueError("invalid email format")
+        return email
 
     @field_validator("password")
     @classmethod
@@ -120,8 +104,8 @@ def sign_up(body: SignUpCreds):
         pwd_hash = hash_password(body.password)
         with pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO users (username, email, email_verified, password_hash) VALUES (%s, %s, FALSE, %s) RETURNING id",
-                (body.username, body.email, pwd_hash),
+                "INSERT INTO users (email, email_verified, password_hash) VALUES (%s, FALSE, %s) RETURNING id",
+                (body.email, pwd_hash),
             )
             user_id = cur.fetchone()[0]
 
@@ -129,7 +113,7 @@ def sign_up(body: SignUpCreds):
         EmailClient().send_verification(body.email, verify_url)
 
         # role is user by default, so no need to check the db for role
-        token = create_access_token(username=body.username, role="user") 
+        token = create_access_token(email=body.email, role="user") 
         expires_at = jwt.decode(token, options={"verify_signature": False})["exp"]
         return {"ok": True, "message": "account created", "access_token": token, "token_type": "bearer", "expires_at": expires_at, "role": "user"}
 
@@ -144,7 +128,7 @@ def sign_up(body: SignUpCreds):
 def sign_in(body: SignInCreds):
     try:
         with pool.connection() as conn, conn.cursor() as cur:
-            cur.execute("SELECT password_hash, role, email_verified FROM users WHERE username = %s", (body.username,))
+            cur.execute("SELECT password_hash, role, email_verified FROM users WHERE email = %s", (body.email,))
             row = cur.fetchone()
 
         if not row:
@@ -159,7 +143,7 @@ def sign_in(body: SignInCreds):
         if not email_verified:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="email not verified")
         
-        token = create_access_token(username=body.username, role=role)
+        token = create_access_token(email=body.email, role=role)
         expires_at = jwt.decode(token, options={"verify_signature": False})["exp"]
         return {"access_token": token, "token_type": "bearer", "expires_at": expires_at, "role": role}
 
@@ -279,7 +263,7 @@ def auth_google(body: GoogleAuthBody):
     with pool.connection() as conn, conn.cursor() as cur:
         # Existing Google-linked account
         cur.execute(
-            "SELECT id, username, role, email_verified FROM users WHERE google_sub = %s",
+            "SELECT role FROM users WHERE google_sub = %s",
             (google_sub,),
         )
         row = cur.fetchone()
@@ -291,27 +275,28 @@ def auth_google(body: GoogleAuthBody):
             # Keep password_hash populated to avoid needing to relax NOT NULL in existing schemas.
             random_pwd = secrets.token_urlsafe(32)
             pwd_hash = hash_password(random_pwd)
-            username = ("g_" + hashlib.sha256(google_sub.encode()).hexdigest()[:24])[:32]
 
             try:
                 cur.execute(
                     """
-                    INSERT INTO users (username, email, email_verified, password_hash, google_sub)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO users (email, email_verified, password_hash, google_sub)
+                    VALUES (%s, %s, %s, %s)
                     """,
-                    (username, email, google_email_verified, pwd_hash, google_sub),
+                    (email, google_email_verified, pwd_hash, google_sub),
                 )
             except UniqueViolation as e:
                 constraint = e.diag.constraint_name
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"That {constraint} has already been used.")
                 
             role = "user"
+        else:
+            role = row[0]
     
-    token = create_access_token(username=username, role=role)
+    token = create_access_token(email=email, role=role)
     expires_at = jwt.decode(token, options={"verify_signature": False})["exp"]
     return {
         "ok": True,
-        "user": {"email": email, "name": name, "picture": picture, "username": username, "role": role},
+        "user": {"email": email, "name": name, "picture": picture, "role": role},
         "access_token": token,
         "token_type": "bearer",
         "expires_at": expires_at,
