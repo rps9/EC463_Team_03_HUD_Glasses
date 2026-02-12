@@ -28,6 +28,7 @@
 
       <p style="margin-top: 16px;">
         <button onclick="loadMe()">Logged in?</button>
+        <button onclick="loadUserData()">User Data</button>
         <button onclick="logout()">Logout</button>
       </p>
 
@@ -47,7 +48,32 @@
 
       async function loadMe() {
         const r = await fetch("/me");
-        document.getElementById("out").textContent = JSON.stringify(await r.json(), null, 2);
+        const data = await r.json();
+
+        if (!data.logged_in) {
+          document.getElementById("out").textContent = "No one is logged in.";
+          return;
+        }
+
+        document.getElementById("out").textContent =
+          `Logged in as:\n` +
+          `name: ${data.user.name}\n` +
+          `email: ${data.user.email}\n` +
+          `unique id (sub): ${data.user.sub}\n\n` +
+          `Full JSON:\n` + JSON.stringify(data, null, 2);
+      }
+
+      async function loadUserData() {
+        const r = await fetch("/user-data");
+        const data = await r.json();
+
+        if (!data.ok) {
+          document.getElementById("out").textContent = data.error || "Failed to load user data.";
+          return;
+        }
+
+        document.getElementById("out").textContent =
+          `User Data for sub=${data.sub}\n\n` + JSON.stringify(data.data, null, 2);
       }
 
       async function logout() {
