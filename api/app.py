@@ -89,7 +89,7 @@ def _verify_google_id_token(credential: str) -> dict:
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid google credential")
 
-@app.get("/api/db/health", dependencies=[Depends(current_admin)])
+@app.get("/hudini/db/health", dependencies=[Depends(current_admin)])
 def db_health():
     ok = False
     try:
@@ -98,7 +98,7 @@ def db_health():
         return {"ok": False, "error": str(e)}
     return {"ok": ok}
 
-@app.post("/api/auth/signup", status_code=status.HTTP_201_CREATED)
+@app.post("/hudini/auth/signup", status_code=status.HTTP_201_CREATED)
 def sign_up(body: SignUpCreds):
     try:
         pwd_hash = hash_password(body.password)
@@ -124,7 +124,7 @@ def sign_up(body: SignUpCreds):
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="signup failed")
     
-@app.post("/api/auth/signin", status_code=status.HTTP_200_OK)
+@app.post("/hudini/auth/signin", status_code=status.HTTP_200_OK)
 def sign_in(body: SignInCreds):
     try:
         with pool.connection() as conn, conn.cursor() as cur:
@@ -157,7 +157,7 @@ def _verify_redirect_or_json(url: str | None, status_code: int, payload: dict):
         return RedirectResponse(url=url, status_code=302)
     return JSONResponse(status_code=status_code, content=payload)
 
-@app.get("/api/auth/verify-email")
+@app.get("/hudini/auth/verify-email")
 def verify_email(token_id: str, token: str):
     now = datetime.now(timezone.utc)
 
@@ -223,7 +223,7 @@ class BestowRoleBody(BaseModel):
             raise ValueError(f"Role must be one of the following: {role_list}")
         return role
 
-@app.post("/api/owner/bestow-role", dependencies=[Depends(current_owner)], status_code=status.HTTP_200_OK)
+@app.post("/hudini/owner/bestow-role", dependencies=[Depends(current_owner)], status_code=status.HTTP_200_OK)
 def bestow_admin(body: BestowRoleBody):
     with pool.connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -244,7 +244,7 @@ class GoogleAuthBody(BaseModel):
     credential: str
 
 
-@app.post("/api/auth/google", status_code=status.HTTP_200_OK)
+@app.post("/hudini/auth/google", status_code=status.HTTP_200_OK)
 def auth_google(body: GoogleAuthBody):
     idinfo = _verify_google_id_token(body.credential)
 
@@ -307,7 +307,7 @@ def auth_google(body: GoogleAuthBody):
 class RequestResetPassword(BaseModel):
     email: str
 
-@app.post("/api/auth/request-reset-password", status_code=status.HTTP_200_OK)
+@app.post("/hudini/auth/request-reset-password", status_code=status.HTTP_200_OK)
 def reset_password(body: RequestResetPassword):
     with pool.connection() as conn, conn.cursor() as cur:
         # Existing Google-linked account

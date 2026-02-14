@@ -103,7 +103,7 @@ def issue_email_verification_link(user_id: int) -> str:
             (token_id, user_id, token_hash, expires_at)
         )
 
-    base = f"{BASE_URL}/api/auth/verify-email"
+    base = f"{BASE_URL}/hudini/auth/verify-email"
     return f"{base}?token_id={token_id}&token={raw_token}"
 
 def main():
