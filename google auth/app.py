@@ -3,8 +3,8 @@ from flask import Flask, render_template
 
 app = Flask(__name__)
 
-GOOGLE_CLIENT_ID = "947358624267-8r54cdqqa57fvg4b8338mupkei7biu1e.apps.googleusercontent.com"
-API_BASE_URL = "http://localhost:8080"
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://rps9.net")
 DEBUG = os.environ.get("FLASK_DEBUG", "").lower() in {"1", "true", "yes"}
 PORT = int(os.environ.get("PORT", 5000))
 

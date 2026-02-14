@@ -37,7 +37,7 @@
       <p style="margin-top: 16px;">
         <button onclick="showLocal()">Show local session</button>
         <button onclick="clearLocal()">Clear local session</button>
-        <button onclick="callHealth()">Call /api/db/health</button>
+        <button onclick="callHealth()">Call /hudini/db/health</button>
       </p>
 
       <pre id="out">Not signed in yet.</pre>
@@ -47,7 +47,7 @@
       const API_BASE_URL = "{{ api_base_url }}";
 
       async function handleCredentialResponse(response) {
-        const r = await fetch(`${API_BASE_URL}/api/auth/google`, {
+        const r = await fetch(`${API_BASE_URL}/hudini/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ credential: response.credential }),
@@ -83,7 +83,7 @@
 
       async function callHealth() {
         const tok = localStorage.getItem("hudini_access_token");
-        const r = await fetch(`${API_BASE_URL}/api/db/health`, {
+        const r = await fetch(`${API_BASE_URL}/hudini/db/health`, {
           headers: tok ? { Authorization: `Bearer ${tok}` } : {},
         });
         const data = await r.json().catch(() => ({}));
