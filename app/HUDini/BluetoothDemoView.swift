@@ -1,40 +1,40 @@
 import SwiftUI
 
-/// UI for the Bluetooth demo tab. Mirrors the clean, card-based layout used
-/// elsewhere so the tab feels native to HUDini while exercising the new
-/// Bluetooth manager.
 struct BluetoothDemoView: View {
     @StateObject private var manager = BluetoothDemoManager()
-    @State private var outgoingText: String = ""
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                Text("HUDini • Bluetooth Demo")
+                Text("HUDini • Bluetooth Audio")
                     .font(.headline)
 
                 statusCard
-
                 discoverySection
-
-                if case .connected = manager.state {
-                    messagingSection
-                }
-
-                receivedSection
+                streamSection
+                transcriptSection
             }
             .padding()
         }
     }
 
     private var statusCard: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("Status")
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
             Text(manager.statusMessage)
                 .font(.body)
+
             if case let .connected(name) = manager.state {
                 Text("Connected to: \(name)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !manager.peripheralStatus.isEmpty {
+                Text("Device: \(manager.peripheralStatus)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -51,7 +51,7 @@ struct BluetoothDemoView: View {
                 .font(.subheadline)
 
             if manager.discoveredDevices.isEmpty {
-                Text("Tap the scan button to search for LightBlue or another NUS peripheral.")
+                Text("Tap scan to find the ESP32 audio peripheral.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -61,7 +61,7 @@ struct BluetoothDemoView: View {
                             VStack(alignment: .leading) {
                                 Text(device.name)
                                     .font(.body)
-                                Text("Ready to connect")
+                                Text("BLE audio peripheral")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -80,12 +80,12 @@ struct BluetoothDemoView: View {
             }
 
             HStack(spacing: 12) {
-                Button("Scan for devices") {
+                Button("Scan") {
                     manager.beginScanning()
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button("Stop scan") {
+                Button("Stop Scan") {
                     manager.stopScanning()
                 }
                 .buttonStyle(.bordered)
@@ -104,22 +104,23 @@ struct BluetoothDemoView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    private var messagingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Send text to HUD")
+    private var streamSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Streaming")
                 .font(.subheadline)
-            TextField("Type a message", text: $outgoingText, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-            Button("Send via Bluetooth") {
-                manager.send(text: outgoingText)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(outgoingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-            if !manager.lastSentText.isEmpty {
-                Text("Last sent: \(manager.lastSentText)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button("Start Transcription") {
+                    manager.startAudioStream()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!isConnected || manager.isStreaming)
+
+                Button("Stop") {
+                    manager.stopAudioStream()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!manager.isStreaming)
             }
         }
         .padding()
@@ -128,29 +129,37 @@ struct BluetoothDemoView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    private var receivedSection: some View {
+    private var transcriptSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Incoming text")
+            Text("Live Transcript")
                 .font(.subheadline)
+
             ScrollView {
-                Text(manager.receivedText.isEmpty ? "Notifications from the peripheral will appear here." : manager.receivedText)
+                Text(manager.liveTranscript.isEmpty ? "Speech from the ESP32 stream will appear here." : manager.liveTranscript)
                     .font(.body.monospaced())
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
             }
-            .frame(minHeight: 100)
+            .frame(minHeight: 120)
             .background(Color(.tertiarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 12))
 
             HStack {
                 Spacer()
-                Button("Clear log") {
-                    manager.clearTranscripts()
+                Button("Clear") {
+                    manager.clearTranscript()
                 }
                 .buttonStyle(.bordered)
             }
         }
         .padding()
+    }
+
+    private var isConnected: Bool {
+        if case .connected = manager.state {
+            return true
+        }
+        return false
     }
 }
 
