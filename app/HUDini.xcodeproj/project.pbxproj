@@ -400,6 +400,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "HUDini uses Bluetooth to receive live audio from the glasses.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "HUDini uses the microphone to transcribe nearby speech into text.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "HUDini uses speech recognition to convert audio into text.";
 				INFOPLIST_KEY_OpenAIAPIKey = "$(OPENAI_API_KEY)";
@@ -448,6 +449,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "HUDini uses Bluetooth to receive live audio from the glasses.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "HUDini uses the microphone to transcribe nearby speech into text.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "HUDini uses speech recognition to convert audio into text.";
 				INFOPLIST_KEY_OpenAIAPIKey = "$(OPENAI_API_KEY)";
