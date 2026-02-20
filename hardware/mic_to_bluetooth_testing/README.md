@@ -35,4 +35,4 @@ Audio packet format sent in notifications:
 - byte 1: flags (`0` for now)
 - byte 2-3: packet sequence (`uint16`, little endian)
 - byte 4-5: sample count (`uint16`, little endian)
-- bytes 6+: `int16` PCM mono payload (16kHz)
+- bytes 6+: `int16` PCM mono payload (8kHz)

@@ -109,6 +109,13 @@ struct BluetoothDemoView: View {
             Text("Streaming")
                 .font(.subheadline)
 
+            Picker("Input Language", selection: languageBinding) {
+                ForEach(TranslationLanguages.supported) { language in
+                    Text(language.name).tag(language.code)
+                }
+            }
+            .pickerStyle(.menu)
+
             HStack(spacing: 12) {
                 Button("Start Transcription") {
                     manager.startAudioStream()
@@ -160,6 +167,13 @@ struct BluetoothDemoView: View {
             return true
         }
         return false
+    }
+
+    private var languageBinding: Binding<String> {
+        Binding(
+            get: { manager.selectedLanguageCode },
+            set: { manager.setRecognitionLanguage($0) }
+        )
     }
 }
 

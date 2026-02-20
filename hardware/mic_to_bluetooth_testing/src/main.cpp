@@ -6,7 +6,8 @@
 #include <BLE2902.h>
 
 static const i2s_port_t I2S_PORT = I2S_NUM_0;
-static const int SAMPLE_RATE = 16000;
+// 8 kHz keeps BLE throughput within a more reliable range for notifications.
+static const int SAMPLE_RATE = 8000;
 
 // Your wiring
 static const int PIN_I2S_BCLK = 26;
@@ -148,7 +149,7 @@ void loop() {
     return;
   }
 
-  // 80 samples = 5ms at 16kHz. Payload 160 bytes + 6 byte header.
+  // 80 samples = 10ms at 8kHz. Payload 160 bytes + 6 byte header.
   const int N = 80;
   int32_t i2sSamples[N];
   int16_t pcm16[N];
@@ -192,5 +193,5 @@ void loop() {
   audioDataCharacteristic->notify();
 
   packetSeq++;
-  delay(1);
+  delay(2);
 }

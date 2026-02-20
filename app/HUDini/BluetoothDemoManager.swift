@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import CoreBluetooth
 import AVFoundation
 import Speech
@@ -24,7 +25,7 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
     private static let controlCharacteristic = CBUUID(string: "9A1D0003-7E54-4B1A-8B64-3A8F2C1D0001")   // write
     private static let statusCharacteristic = CBUUID(string: "9A1D0004-7E54-4B1A-8B64-3A8F2C1D0001")    // read/notify
 
-    private static let streamSampleRate: Double = 16_000
+    private static let streamSampleRate: Double = 8_000
 
     @Published private(set) var state: ConnectionState = .idle
     @Published private(set) var discoveredDevices: [DiscoveredDevice] = []
@@ -32,6 +33,7 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
     @Published private(set) var liveTranscript: String = ""
     @Published private(set) var peripheralStatus: String = ""
     @Published private(set) var isStreaming: Bool = false
+    @Published private(set) var selectedLanguageCode: String = "en"
 
     private var central: CBCentralManager!
     private var connectedPeripheral: CBPeripheral?
@@ -52,6 +54,11 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        let preferred = Locale.current.language.languageCode?.identifier ?? "en"
+        if TranslationLanguages.supported.contains(where: { $0.code == preferred }) {
+            selectedLanguageCode = preferred
+        }
+        recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguageCode))
         central = CBCentralManager(delegate: self, queue: nil)
         handleState(central.state)
     }
@@ -88,6 +95,29 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
 
     func clearTranscript() {
         liveTranscript = ""
+    }
+
+    func setRecognitionLanguage(_ code: String) {
+        guard TranslationLanguages.supported.contains(where: { $0.code == code }) else {
+            statusMessage = "Unsupported language: \(code)"
+            return
+        }
+        guard let newRecognizer = SFSpeechRecognizer(locale: Locale(identifier: code)) else {
+            statusMessage = "Speech recognizer unavailable for \(TranslationLanguages.displayName(for: code))"
+            return
+        }
+
+        selectedLanguageCode = code
+        recognizer = newRecognizer
+
+        if isStreaming {
+            stopRecognition()
+            if startRecognition() {
+                statusMessage = "Language set to \(TranslationLanguages.displayName(for: code))"
+            }
+        } else {
+            statusMessage = "Language set to \(TranslationLanguages.displayName(for: code))"
+        }
     }
 
     func startAudioStream() {
