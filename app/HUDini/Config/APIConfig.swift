@@ -9,13 +9,13 @@ import Foundation
 
 enum APIConfig {
     /// Base URL for the auth API (no trailing slash)
-    static let baseURL = "https://your-api.com"
+    static let baseURL = "https://rps9.net/hudini"
     
     static var signInURL: URL? {
-        URL(string: "\(baseURL)/api/auth/signin")
+        URL(string: "\(baseURL)/auth/signin")
     }
     
     static var signUpURL: URL? {
-        URL(string: "\(baseURL)/api/auth/signup")
+        URL(string: "\(baseURL)/auth/signup")
     }
 }
