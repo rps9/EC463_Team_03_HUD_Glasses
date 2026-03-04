@@ -17,6 +17,14 @@
     <h2>HUDini Sign in</h2>
 
     <div class="card">
+      <p style="margin-top: 0; color: #444;">
+        This demo uses Google Sign-In to obtain an ID token, then sends it to our FastAPI backend for verification and
+        to mint your API <code>access_token</code>.
+      </p>
+      <p style="margin-top: 0; color: #444;">
+        Backend: <code>{{ api_base_url }}</code>
+      </p>
+
       <div
         id="g_id_onload"
         data-client_id="{{ google_client_id }}"
@@ -27,32 +35,59 @@
       <div class="g_id_signin" data-type="standard" data-size="large"></div>
 
       <p style="margin-top: 16px;">
-        <button onclick="loadMe()">Logged in?</button>
-        <button onclick="logout()">Logout</button>
+        <button onclick="showLocal()">Show local session</button>
+        <button onclick="clearLocal()">Clear local session</button>
+        <button onclick="callHealth()">Call /hudini/db/health</button>
       </p>
 
       <pre id="out">Not signed in yet.</pre>
     </div>
 
     <script>
+      const API_BASE_URL = "{{ api_base_url }}";
+
       async function handleCredentialResponse(response) {
-        const body = new URLSearchParams({ credential: response.credential });
-        const r = await fetch("/auth/google", {
+        const r = await fetch(`${API_BASE_URL}/hudini/auth/google`, {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ credential: response.credential }),
         });
-        document.getElementById("out").textContent = JSON.stringify(await r.json(), null, 2);
+        const data = await r.json().catch(() => ({}));
+        if (r.ok && data && data.access_token) {
+          localStorage.setItem("hudini_access_token", data.access_token);
+          localStorage.setItem("hudini_email", JSON.stringify(data.email || null));
+          localStorage.setItem("hudini_expires_at", String(data.expires_at || ""));
+        }
+        document.getElementById("out").textContent = JSON.stringify({ status: r.status, data }, null, 2);
       }
 
-      async function loadMe() {
-        const r = await fetch("/me");
-        document.getElementById("out").textContent = JSON.stringify(await r.json(), null, 2);
+      function showLocal() {
+        const tok = localStorage.getItem("hudini_access_token");
+        const emailRaw = localStorage.getItem("hudini_email");
+        const expiresAt = localStorage.getItem("hudini_expires_at");
+        let email = null;
+        try { email = emailRaw ? JSON.parse(emailRaw) : null; } catch (e) {}
+        document.getElementById("out").textContent = JSON.stringify(
+          { ok: true, api_base_url: API_BASE_URL, has_access_token: !!tok, expires_at: expiresAt, email },
+          null,
+          2
+        );
       }
 
-      async function logout() {
-        const r = await fetch("/logout", { method: "POST" });
-        document.getElementById("out").textContent = JSON.stringify(await r.json(), null, 2);
+      function clearLocal() {
+        localStorage.removeItem("hudini_access_token");
+        localStorage.removeItem("hudini_user");
+        localStorage.removeItem("hudini_expires_at");
+        showLocal();
+      }
+
+      async function callHealth() {
+        const tok = localStorage.getItem("hudini_access_token");
+        const r = await fetch(`${API_BASE_URL}/hudini/db/health`, {
+          headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+        });
+        const data = await r.json().catch(() => ({}));
+        document.getElementById("out").textContent = JSON.stringify({ status: r.status, data }, null, 2);
       }
     </script>
   </body>

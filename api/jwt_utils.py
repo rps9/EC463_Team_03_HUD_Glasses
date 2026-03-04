@@ -11,10 +11,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 
 security = HTTPBearer(auto_error=False)
 
-def create_access_token(*, username: str, role: str) -> str:
+def create_access_token(*, email: str, role: str) -> str:
 	now = datetime.now(timezone.utc)
 	payload = {
-		"sub": username,
+		"sub": email,
 		"role": role,
 		"iat": int(now.timestamp()),
 		"exp": int((now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp()),
@@ -35,12 +35,12 @@ def current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
 	except jwt.PyJWTError:
 		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token")
 
-	username = data.get("sub")
-	if not username:
+	email = data.get("sub")
+	if not email:
 		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token")
 
 	with pool.connection() as conn, conn.cursor() as cur:
-		cur.execute("SELECT role, email_verified FROM users WHERE username = %s", (username,))
+		cur.execute("SELECT role, email_verified, email FROM users WHERE email = %s", (email,))
 		row = cur.fetchone()
 	if not row:
 		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user not found")
@@ -49,7 +49,7 @@ def current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
 	if not email_verified:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="email not verified")
 
-	return {"username": username, "role": row[0]}
+	return {"email": row[2], "role": row[0]}
 
 def current_admin(user = Depends(current_user)):
 	if user["role"] != "admin" and user["role"] != "owner":
@@ -60,4 +60,3 @@ def current_owner(user = Depends(current_user)):
 	if user["role"] != "owner":
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="owner only")
 	return user
-
