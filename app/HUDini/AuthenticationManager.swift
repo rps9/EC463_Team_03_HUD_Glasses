@@ -24,15 +24,39 @@ class AuthenticationManager: ObservableObject {
         isLoading = true
         errorMessage = ""
         
-        // Simulate network delay
-        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        guard !email.isEmpty, !password.isEmpty else {
+            errorMessage = "Email and password are required."
+            isLoading = false
+            return
+        }
         
-        // Simple validation - in production, this would call an API
-        if !email.isEmpty && !password.isEmpty && password.count >= 6 {
-            isAuthenticated = true
-            errorMessage = ""
-        } else {
-            errorMessage = "Invalid email or password. Password must be at least 6 characters."
+        guard let url = APIConfig.signInURL else {
+            errorMessage = "Invalid API configuration."
+            isLoading = false
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try? JSONEncoder().encode(["email": email, "password": password])
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                errorMessage = "Invalid response from server."
+                isLoading = false
+                return
+            }
+            if (200...299).contains(httpResponse.statusCode) {
+                isAuthenticated = true
+                errorMessage = ""
+            } else {
+                errorMessage = parseAPIError(data: data) ?? "Sign in failed. Please check your email and password."
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
         
         isLoading = false
@@ -43,25 +67,69 @@ class AuthenticationManager: ObservableObject {
         isLoading = true
         errorMessage = ""
         
-        // Simulate network delay
-        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-        
-        // Validation
         if email.isEmpty || password.isEmpty || confirmPassword.isEmpty {
             errorMessage = "All fields are required."
-        } else if password.count < 6 {
+            isLoading = false
+            return
+        }
+        if password.count < 6 {
             errorMessage = "Password must be at least 6 characters."
-        } else if password != confirmPassword {
+            isLoading = false
+            return
+        }
+        if password != confirmPassword {
             errorMessage = "Passwords do not match."
-        } else if !isValidEmail(email) {
+            isLoading = false
+            return
+        }
+        if !isValidEmail(email) {
             errorMessage = "Please enter a valid email address."
-        } else {
-            // Success - in production, this would call an API to create the account
-            isAuthenticated = true
-            errorMessage = ""
+            isLoading = false
+            return
+        }
+        
+        guard let url = APIConfig.signUpURL else {
+            errorMessage = "Invalid API configuration."
+            isLoading = false
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try? JSONEncoder().encode([
+            "email": email,
+            "password": password,
+            "confirmPassword": confirmPassword
+        ])
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                errorMessage = "Invalid response from server."
+                isLoading = false
+                return
+            }
+            if (200...299).contains(httpResponse.statusCode) {
+                isAuthenticated = true
+                errorMessage = ""
+            } else {
+                errorMessage = parseAPIError(data: data) ?? "Sign up failed. Please try again."
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
         
         isLoading = false
+    }
+    
+    private func parseAPIError(data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        if let message = json["message"] as? String { return message }
+        if let error = json["error"] as? String { return error }
+        if let errors = json["errors"] as? [String], let first = errors.first { return first }
+        return nil
     }
     
     private func isValidEmail(_ email: String) -> Bool {
