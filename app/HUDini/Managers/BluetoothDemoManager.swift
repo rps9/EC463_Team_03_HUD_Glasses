@@ -53,6 +53,7 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
     private let partialTranslationInterval: TimeInterval = 0.6
     private var expectedPacketSeq: UInt16?
     private var lastSentRenderedText: String = ""
+    private var textSendTask: Task<Void, Never>?
 
     private lazy var streamFormat: AVAudioFormat = {
         AVAudioFormat(commonFormat: .pcmFormatInt16,
@@ -203,6 +204,25 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         peripheral.writeValue(data, for: char, type: writeType)
     }
 
+    private func writeControl(
+        _ command: String,
+        on peripheral: CBPeripheral,
+        char: CBCharacteristic,
+        preferredType: CBCharacteristicWriteType
+    ) {
+        guard let data = command.data(using: .utf8) else { return }
+        let writeType: CBCharacteristicWriteType
+        switch preferredType {
+        case .withoutResponse:
+            writeType = char.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        case .withResponse:
+            writeType = char.properties.contains(.write) ? .withResponse : .withoutResponse
+        @unknown default:
+            writeType = char.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        }
+        peripheral.writeValue(data, for: char, type: writeType)
+    }
+
     private func sendTextToTransceiver(_ text: String, updateStatus: Bool = false) {
         guard let peripheral = connectedPeripheral, let controlChar else {
             if updateStatus {
@@ -211,14 +231,24 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
             return
         }
 
-        let chunks = chunkForControlWrites(text, maxChunkBytes: 120)
-        writeControl("TEXT_BEGIN", on: peripheral, char: controlChar)
-        for chunk in chunks {
-            writeControl("TEXT_CHUNK:\(chunk)", on: peripheral, char: controlChar)
-        }
-        writeControl("TEXT_END", on: peripheral, char: controlChar)
-        if updateStatus {
-            statusMessage = "Sent rendered text to transceiver"
+        let maxWriteWithResponse = peripheral.maximumWriteValueLength(for: .withResponse)
+        let maxWriteWithoutResponse = peripheral.maximumWriteValueLength(for: .withoutResponse)
+        let maxWriteBytes = min(maxWriteWithResponse, maxWriteWithoutResponse)
+        let prefixBytes = "TEXT_CHUNK:".lengthOfBytes(using: .utf8)
+        let maxChunkBytes = max(1, min(64, maxWriteBytes - prefixBytes))
+        let chunks = chunkForControlWrites(text, maxChunkBytes: maxChunkBytes)
+        textSendTask?.cancel()
+        textSendTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.writeControl("TEXT_BEGIN", on: peripheral, char: controlChar, preferredType: .withoutResponse)
+            for chunk in chunks {
+                self.writeControl("TEXT_CHUNK:\(chunk)", on: peripheral, char: controlChar, preferredType: .withoutResponse)
+                try? await Task.sleep(nanoseconds: 6_000_000)
+            }
+            self.writeControl("TEXT_END", on: peripheral, char: controlChar, preferredType: .withoutResponse)
+            if updateStatus {
+                self.statusMessage = "Sent rendered text to transceiver"
+            }
         }
     }
 
@@ -235,7 +265,7 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
                 current = ""
                 currentBytes = 0
             }
-            current.append(scalar)
+            current.append(contentsOf: scalarString)
             currentBytes += scalarBytes
         }
 

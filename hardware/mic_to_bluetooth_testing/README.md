@@ -19,6 +19,25 @@ If auto-detection fails, pass serial port explicitly:
 
 `./run.sh /dev/cu.usbserial-0001`
 
+## Serial monitor (view text sent back from app)
+
+After flashing, open a serial monitor at 115200 baud:
+
+`pio device monitor -b 115200`
+
+If you need to pick a specific port:
+
+1. List ports:
+   `pio device list`
+2. Open monitor on that port:
+   `pio device monitor -p /dev/cu.usbserial-0001 -b 115200`
+
+When the iOS app sends rendered translated text back over BLE, you should see logs like:
+
+- `[BLE RX] TEXT_BEGIN`
+- `[BLE RX] TEXT_END`
+- `[BLE RX] <translated text>`
+
 ## BLE protocol (matches iOS app)
 
 - Service UUID: `9A1D0001-7E54-4B1A-8B64-3A8F2C1D0001`

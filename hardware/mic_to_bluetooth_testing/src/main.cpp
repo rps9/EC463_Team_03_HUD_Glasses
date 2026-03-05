@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "driver/i2s.h"
+#include "esp_log.h"
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
@@ -30,10 +31,24 @@ static float dcEstimate = 0.0f;
 static float smoothedGain = 1.0f;
 static std::string inboundTextBuffer;
 
+static bool notificationsEnabled(BLECharacteristic *characteristic) {
+  if (characteristic == nullptr) {
+    return false;
+  }
+
+  BLEDescriptor *cccd = characteristic->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
+  if (cccd == nullptr) {
+    return false;
+  }
+
+  BLE2902 *descriptor2902 = static_cast<BLE2902 *>(cccd);
+  return descriptor2902->getNotifications();
+}
+
 class MicServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *server) override {
     deviceConnected = true;
-    if (statusCharacteristic) {
+    if (statusCharacteristic && notificationsEnabled(statusCharacteristic)) {
       statusCharacteristic->setValue("Connected");
       statusCharacteristic->notify();
     }
@@ -61,16 +76,16 @@ class ControlCallbacks : public BLECharacteristicCallbacks {
       ch = static_cast<char>(toupper(static_cast<unsigned char>(ch)));
     }
 
-    if (upperValue.find("START") != std::string::npos) {
+    if (upperValue == "START") {
       streamEnabled = true;
       packetSeq = 0;
-      if (statusCharacteristic) {
+      if (statusCharacteristic && notificationsEnabled(statusCharacteristic)) {
         statusCharacteristic->setValue("Streaming");
         statusCharacteristic->notify();
       }
-    } else if (upperValue.find("STOP") != std::string::npos) {
+    } else if (upperValue == "STOP") {
       streamEnabled = false;
-      if (statusCharacteristic) {
+      if (statusCharacteristic && notificationsEnabled(statusCharacteristic)) {
         statusCharacteristic->setValue("Stopped");
         statusCharacteristic->notify();
       }
@@ -154,6 +169,8 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println("Starting BLE mic streamer");
+  esp_log_level_set("BLECharacteristic", ESP_LOG_NONE);
+  esp_log_level_set("BLE2902", ESP_LOG_NONE);
 
   setupI2S();
   setupBLE();
@@ -161,6 +178,11 @@ void setup() {
 
 void loop() {
   if (!deviceConnected || !streamEnabled || audioDataCharacteristic == nullptr) {
+    delay(10);
+    return;
+  }
+
+  if (!notificationsEnabled(audioDataCharacteristic)) {
     delay(10);
     return;
   }
