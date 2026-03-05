@@ -26,6 +26,9 @@ static BLECharacteristic *statusCharacteristic = nullptr;
 static volatile bool deviceConnected = false;
 static volatile bool streamEnabled = false;
 static uint16_t packetSeq = 0;
+static float dcEstimate = 0.0f;
+static float smoothedGain = 1.0f;
+static std::string inboundTextBuffer;
 
 class MicServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *server) override {
@@ -53,23 +56,36 @@ class ControlCallbacks : public BLECharacteristicCallbacks {
       return;
     }
 
-    for (char &ch : value) {
+    std::string upperValue = value;
+    for (char &ch : upperValue) {
       ch = static_cast<char>(toupper(static_cast<unsigned char>(ch)));
     }
 
-    if (value.find("START") != std::string::npos) {
+    if (upperValue.find("START") != std::string::npos) {
       streamEnabled = true;
       packetSeq = 0;
       if (statusCharacteristic) {
         statusCharacteristic->setValue("Streaming");
         statusCharacteristic->notify();
       }
-    } else if (value.find("STOP") != std::string::npos) {
+    } else if (upperValue.find("STOP") != std::string::npos) {
       streamEnabled = false;
       if (statusCharacteristic) {
         statusCharacteristic->setValue("Stopped");
         statusCharacteristic->notify();
       }
+    } else if (upperValue.rfind("TEXT_BEGIN", 0) == 0) {
+      inboundTextBuffer.clear();
+      Serial.println("[BLE RX] TEXT_BEGIN");
+    } else if (upperValue.rfind("TEXT_CHUNK:", 0) == 0) {
+      inboundTextBuffer += value.substr(11);
+    } else if (upperValue.rfind("TEXT_END", 0) == 0) {
+      Serial.println("[BLE RX] TEXT_END");
+      Serial.print("[BLE RX] ");
+      Serial.println(inboundTextBuffer.c_str());
+    } else if (upperValue.rfind("TEXT:", 0) == 0) {
+      Serial.print("[BLE RX] ");
+      Serial.println(value.substr(5).c_str());
     }
   }
 };
@@ -167,6 +183,8 @@ void loop() {
     count = N;
   }
 
+  // Pass 1: convert, high-pass (DC removal), and estimate packet energy.
+  int32_t sumAbs = 0;
   for (int i = 0; i < count; i++) {
     int32_t s24 = i2sSamples[i] >> 8;
     int32_t s16 = s24 >> 8;
@@ -177,7 +195,28 @@ void loop() {
       s16 = -32768;
     }
 
-    pcm16[i] = (int16_t)s16;
+    // Remove DC drift from MEMS mic front-end with a 1-pole high-pass.
+    dcEstimate += 0.01f * ((float)s16 - dcEstimate);
+    int32_t hp = (int32_t)((float)s16 - dcEstimate);
+    if (hp > 32767) hp = 32767;
+    if (hp < -32768) hp = -32768;
+    pcm16[i] = (int16_t)hp;
+    sumAbs += abs(hp);
+  }
+
+  // Pass 2: light AGC to improve recognizer robustness across speaking distances.
+  const float avgAbs = (count > 0) ? ((float)sumAbs / (float)count) : 0.0f;
+  const float targetAbs = 2500.0f;
+  float desiredGain = targetAbs / max(avgAbs, 250.0f);
+  if (desiredGain < 1.0f) desiredGain = 1.0f;
+  if (desiredGain > 6.0f) desiredGain = 6.0f;
+  smoothedGain = (0.85f * smoothedGain) + (0.15f * desiredGain);
+
+  for (int i = 0; i < count; i++) {
+    int32_t amplified = (int32_t)((float)pcm16[i] * smoothedGain);
+    if (amplified > 30000) amplified = 30000;
+    if (amplified < -30000) amplified = -30000;
+    pcm16[i] = (int16_t)amplified;
   }
 
   packet[0] = 1; // protocol version
@@ -193,5 +232,4 @@ void loop() {
   audioDataCharacteristic->notify();
 
   packetSeq++;
-  delay(2);
 }

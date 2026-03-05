@@ -4,41 +4,67 @@ import Combine
 @MainActor
 final class TranscriptionManager: ObservableObject {
     @Published var transcript: String = ""
+    @Published var renderedText: String = ""
     @Published var isTranscribing: Bool = false
     @Published var statusMessage: String = ""
+    @Published var listeningLanguageCode: String
+    @Published var targetLanguageCode: String
 
-    private let service: HUDTranscriptionService
+    private let pipeline: HUDTranscriptionTranslationPipeline
 
-    init(service: HUDTranscriptionService? = nil) {
-        if let service {
-            self.service = service
+    init(pipeline: HUDTranscriptionTranslationPipeline? = nil) {
+        self.listeningLanguageCode = Self.defaultListeningLanguageCode
+        self.targetLanguageCode = "en"
+
+        if let pipeline {
+            self.pipeline = pipeline
         } else {
-            self.service = HUDTranscriptionService()
+            self.pipeline = HUDTranscriptionTranslationPipeline()
         }
     }
 
     func requestPermissions() async {
-        let permissions = await service.requestPermissions()
+        let permissions = await pipeline.requestPermissions()
         statusMessage = permissions.issuesDescription
     }
 
     func start() {
+        startTranscribing(listeningLanguage: listeningLanguageCode, translatingTo: targetLanguageCode)
+    }
+
+    func startTranscribing(listeningLanguage: String, translatingTo targetLanguage: String) {
         guard !isTranscribing else { return }
-        let started = service.start { [weak self] update in
+        listeningLanguageCode = listeningLanguage
+        targetLanguageCode = targetLanguage
+
+        let started = pipeline.start(
+            listeningLanguageCode: listeningLanguage,
+            targetLanguageCode: targetLanguage
+        ) { [weak self] update in
             guard let self else { return }
-            self.transcript = update.text
+            self.transcript = update.transcript
+            self.renderedText = update.renderedText
             if update.isFinal {
                 self.statusMessage = "Finalized segment"
             }
-        } onError: { [weak self] error in
+        } onError: { [weak self] pipelineError in
             guard let self else { return }
-            self.statusMessage = "Recognition error: \(error.localizedDescription)"
-            self.stop()
+            switch pipelineError {
+            case .transcription(let error):
+                self.statusMessage = "Recognition error: \(error.localizedDescription)"
+                self.stop()
+            case .translation(let error):
+                self.statusMessage = "Translation error: \(error.localizedDescription)"
+            }
         }
 
         isTranscribing = started
         if started {
-            statusMessage = "Listening…"
+            if shouldBypassTranslation {
+                statusMessage = "Listening… (translation skipped)"
+            } else {
+                statusMessage = "Listening and translating…"
+            }
         } else if statusMessage.isEmpty {
             statusMessage = "Speech recognizer unavailable"
         }
@@ -46,25 +72,75 @@ final class TranscriptionManager: ObservableObject {
 
     func stop() {
         guard isTranscribing else { return }
-        service.stop()
+        pipeline.stop()
         isTranscribing = false
     }
 
     func resetTranscript() {
         transcript = ""
+        renderedText = ""
         statusMessage = ""
     }
 
     func setListeningLanguage(_ code: String) {
-        do {
-            let normalized = try service.setListeningLanguage(code)
-            if isTranscribing {
-                statusMessage = "Language updated — restart listening."
-            } else {
-                statusMessage = "Listening language set to \(TranslationLanguages.displayName(for: normalized))."
-            }
-        } catch {
-            statusMessage = error.localizedDescription
+        guard TranslationLanguages.supported.contains(where: { $0.code == code }) else {
+            statusMessage = "Unsupported listening language: \(code)"
+            return
         }
+
+        listeningLanguageCode = code
+        if isTranscribing {
+            statusMessage = "Listening language updated — restart to apply."
+        } else {
+            statusMessage = "Listening language set to \(TranslationLanguages.displayName(for: code))."
+        }
+    }
+
+    func setTargetLanguage(_ code: String) {
+        guard TranslationLanguages.targetOptions.contains(where: { $0.code == code }) else {
+            statusMessage = "Unsupported target language: \(code)"
+            return
+        }
+
+        targetLanguageCode = code
+        if isTranscribing {
+            statusMessage = "Target language updated — restart to apply."
+        } else {
+            statusMessage = "Target language set to \(TranslationLanguages.displayName(for: code))."
+        }
+    }
+
+    private var shouldBypassTranslation: Bool {
+        normalizedLanguageCode(listeningLanguageCode) == normalizedLanguageCode(targetLanguageCode)
+    }
+
+    private func normalizedLanguageCode(_ code: String) -> String {
+        let lowered = code.lowercased()
+        if let dash = lowered.firstIndex(of: "-") {
+            return String(lowered[..<dash])
+        }
+        if let underscore = lowered.firstIndex(of: "_") {
+            return String(lowered[..<underscore])
+        }
+        return lowered
+    }
+}
+
+private extension TranscriptionManager {
+    static var defaultListeningLanguageCode: String {
+        if #available(iOS 16.0, *) {
+            if let current = Locale.current.language.languageCode?.identifier,
+               TranslationLanguages.supported.contains(where: { $0.code == current }) {
+                return current
+            }
+        }
+
+        let identifier = Locale.current.identifier
+        if let prefix = identifier.split(separator: "_").first,
+           TranslationLanguages.supported.contains(where: { $0.code == String(prefix) }) {
+            return String(prefix)
+        }
+
+        return "en"
     }
 }

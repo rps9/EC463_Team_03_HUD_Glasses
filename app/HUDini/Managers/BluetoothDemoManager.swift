@@ -31,9 +31,11 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
     @Published private(set) var discoveredDevices: [DiscoveredDevice] = []
     @Published private(set) var statusMessage: String = "Checking Bluetooth…"
     @Published private(set) var liveTranscript: String = ""
+    @Published private(set) var renderedText: String = ""
     @Published private(set) var peripheralStatus: String = ""
     @Published private(set) var isStreaming: Bool = false
     @Published private(set) var selectedLanguageCode: String = "en"
+    @Published private(set) var targetLanguageCode: String = "en"
 
     private var central: CBCentralManager!
     private var connectedPeripheral: CBPeripheral?
@@ -44,6 +46,13 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var recognizer = SFSpeechRecognizer(locale: Locale.current)
+    private let translationClient = HUDTranslationClient()
+    private var translationTask: Task<Void, Never>?
+    private var latestTranslationRequestID = UUID()
+    private var lastPartialTranslationAt: Date = .distantPast
+    private let partialTranslationInterval: TimeInterval = 0.6
+    private var expectedPacketSeq: UInt16?
+    private var lastSentRenderedText: String = ""
 
     private lazy var streamFormat: AVAudioFormat = {
         AVAudioFormat(commonFormat: .pcmFormatInt16,
@@ -95,6 +104,9 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
 
     func clearTranscript() {
         liveTranscript = ""
+        renderedText = ""
+        lastSentRenderedText = ""
+        cancelTranslation()
     }
 
     func setRecognitionLanguage(_ code: String) {
@@ -120,6 +132,31 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         }
     }
 
+    func setTargetLanguage(_ code: String) {
+        guard TranslationLanguages.targetOptions.contains(where: { $0.code == code }) else {
+            statusMessage = "Unsupported target language: \(code)"
+            return
+        }
+
+        targetLanguageCode = code
+        statusMessage = "Target language set to \(TranslationLanguages.displayName(for: code))"
+    }
+
+    func startTranscribing(listeningLanguage: String, translatingTo targetLanguage: String) {
+        setRecognitionLanguage(listeningLanguage)
+        setTargetLanguage(targetLanguage)
+        startAudioStream()
+    }
+
+    func sendRenderedTextToTransceiver() {
+        let text = renderedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            statusMessage = "No rendered text to send"
+            return
+        }
+        sendTextToTransceiver(text, updateStatus: true)
+    }
+
     func startAudioStream() {
         guard let peripheral = connectedPeripheral, let controlChar else {
             statusMessage = "Connect to a device first"
@@ -128,6 +165,8 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         guard !isStreaming else { return }
 
         statusMessage = "Requesting speech permission…"
+        lastPartialTranslationAt = .distantPast
+        expectedPacketSeq = nil
         Task { @MainActor in
             let authorization = await requestSpeechAuthorization()
             guard authorization == .authorized else {
@@ -164,6 +203,48 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         peripheral.writeValue(data, for: char, type: writeType)
     }
 
+    private func sendTextToTransceiver(_ text: String, updateStatus: Bool = false) {
+        guard let peripheral = connectedPeripheral, let controlChar else {
+            if updateStatus {
+                statusMessage = "Connect to a device first"
+            }
+            return
+        }
+
+        let chunks = chunkForControlWrites(text, maxChunkBytes: 120)
+        writeControl("TEXT_BEGIN", on: peripheral, char: controlChar)
+        for chunk in chunks {
+            writeControl("TEXT_CHUNK:\(chunk)", on: peripheral, char: controlChar)
+        }
+        writeControl("TEXT_END", on: peripheral, char: controlChar)
+        if updateStatus {
+            statusMessage = "Sent rendered text to transceiver"
+        }
+    }
+
+    private func chunkForControlWrites(_ text: String, maxChunkBytes: Int) -> [String] {
+        var result: [String] = []
+        var current = ""
+        var currentBytes = 0
+
+        for scalar in text.unicodeScalars {
+            let scalarString = String(scalar)
+            let scalarBytes = scalarString.lengthOfBytes(using: .utf8)
+            if currentBytes + scalarBytes > maxChunkBytes, !current.isEmpty {
+                result.append(current)
+                current = ""
+                currentBytes = 0
+            }
+            current.append(scalar)
+            currentBytes += scalarBytes
+        }
+
+        if !current.isEmpty {
+            result.append(current)
+        }
+        return result
+    }
+
     private func startRecognition() -> Bool {
         guard let recognizer, recognizer.isAvailable else {
             statusMessage = "Speech recognizer unavailable"
@@ -175,12 +256,14 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
+        request.taskHint = .dictation
         recognitionRequest = request
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             if let result {
                 self.liveTranscript = result.bestTranscription.formattedString
+                self.handleTranscriptUpdate(text: result.bestTranscription.formattedString, isFinal: result.isFinal)
                 if result.isFinal {
                     self.statusMessage = "Finalized segment"
                 }
@@ -198,6 +281,9 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
+        lastPartialTranslationAt = .distantPast
+        expectedPacketSeq = nil
+        cancelTranslation()
     }
 
     private func appendAudioPacket(_ data: Data) {
@@ -206,10 +292,19 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         let version = data[0]
         guard version == 1 else { return }
 
+        let packetSeq = UInt16(data[2]) | (UInt16(data[3]) << 8)
         let sampleCount = Int(UInt16(data[4]) | (UInt16(data[5]) << 8))
         let payloadBytes = sampleCount * MemoryLayout<Int16>.size
         let expectedLength = 6 + payloadBytes
         guard data.count >= expectedLength, payloadBytes > 0 else { return }
+
+        if let expected = expectedPacketSeq {
+            let missing = Int(packetSeq &- expected)
+            if missing > 0 && missing < 64 {
+                appendSilence(samples: sampleCount * missing)
+            }
+        }
+        expectedPacketSeq = packetSeq &+ 1
 
         let payload = data.subdata(in: 6 ..< expectedLength)
         appendPCM16(payload)
@@ -232,6 +327,20 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         request.append(buffer)
     }
 
+    private func appendSilence(samples: Int) {
+        guard samples > 0 else { return }
+        guard let request = recognitionRequest else { return }
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: streamFormat,
+            frameCapacity: AVAudioFrameCount(samples)
+        ) else { return }
+        guard let dst = buffer.int16ChannelData?[0] else { return }
+
+        memset(dst, 0, samples * MemoryLayout<Int16>.size)
+        buffer.frameLength = AVAudioFrameCount(samples)
+        request.append(buffer)
+    }
+
     private func resetConnectionState(message: String) {
         controlChar = nil
         audioDataChar = nil
@@ -242,6 +351,88 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         peripheralStatus = ""
         stopRecognition()
         isStreaming = false
+    }
+
+    private func handleTranscriptUpdate(text: String, isFinal: Bool) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            renderedText = ""
+            return
+        }
+
+        if shouldBypassTranslation(source: selectedLanguageCode, target: targetLanguageCode) {
+            renderedText = text
+            autoSendRenderedTextIfNeeded()
+            return
+        }
+
+        if !isFinal {
+            let now = Date()
+            guard now.timeIntervalSince(lastPartialTranslationAt) >= partialTranslationInterval else {
+                return
+            }
+            lastPartialTranslationAt = now
+        }
+
+        let requestID = UUID()
+        latestTranslationRequestID = requestID
+        translationTask?.cancel()
+        translationTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let translated = try await translationClient.translate(
+                    text: trimmed,
+                    source: selectedLanguageCode,
+                    target: targetLanguageCode
+                )
+                guard !Task.isCancelled else { return }
+                guard latestTranslationRequestID == requestID else { return }
+                renderedText = translated
+                autoSendRenderedTextIfNeeded()
+                if isFinal {
+                    statusMessage = "Finalized segment"
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                guard latestTranslationRequestID == requestID else { return }
+                statusMessage = "Translation error: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func cancelTranslation() {
+        latestTranslationRequestID = UUID()
+        translationTask?.cancel()
+        translationTask = nil
+    }
+
+    private func autoSendRenderedTextIfNeeded() {
+        let text = renderedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        guard text != lastSentRenderedText else { return }
+        lastSentRenderedText = text
+        sendTextToTransceiver(text, updateStatus: false)
+    }
+
+    private func shouldBypassTranslation(source: String, target: String) -> Bool {
+        normalizedLanguageCode(source) == normalizedLanguageCode(target)
+    }
+
+    private func normalizedLanguageCode(_ code: String) -> String {
+        let cleaned = code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleaned.isEmpty else { return cleaned }
+
+        if let firstDash = cleaned.firstIndex(of: "-") {
+            return String(cleaned[..<firstDash])
+        }
+
+        if let firstUnderscore = cleaned.firstIndex(of: "_") {
+            return String(cleaned[..<firstUnderscore])
+        }
+
+        return cleaned
     }
 
     private func startScan() {

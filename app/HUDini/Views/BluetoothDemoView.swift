@@ -116,9 +116,19 @@ struct BluetoothDemoView: View {
             }
             .pickerStyle(.menu)
 
+            Picker("Target Language", selection: targetLanguageBinding) {
+                ForEach(TranslationLanguages.targetOptions) { language in
+                    Text(language.name).tag(language.code)
+                }
+            }
+            .pickerStyle(.menu)
+
             HStack(spacing: 12) {
                 Button("Start Transcription") {
-                    manager.startAudioStream()
+                    manager.startTranscribing(
+                        listeningLanguage: manager.selectedLanguageCode,
+                        translatingTo: manager.targetLanguageCode
+                    )
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!isConnected || manager.isStreaming)
@@ -158,6 +168,19 @@ struct BluetoothDemoView: View {
                 }
                 .buttonStyle(.bordered)
             }
+
+            Text("Rendered Output")
+                .font(.subheadline)
+
+            ScrollView {
+                Text(manager.renderedText.isEmpty ? "Translated output appears here." : manager.renderedText)
+                    .font(.body)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+            }
+            .frame(minHeight: 120)
+            .background(Color(.tertiarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .padding()
     }
@@ -173,6 +196,13 @@ struct BluetoothDemoView: View {
         Binding(
             get: { manager.selectedLanguageCode },
             set: { manager.setRecognitionLanguage($0) }
+        )
+    }
+
+    private var targetLanguageBinding: Binding<String> {
+        Binding(
+            get: { manager.targetLanguageCode },
+            set: { manager.setTargetLanguage($0) }
         )
     }
 }
