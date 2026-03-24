@@ -51,7 +51,7 @@ struct BluetoothDemoView: View {
                 .font(.subheadline)
 
             if manager.discoveredDevices.isEmpty {
-                Text("Tap scan to find the ESP32 audio peripheral.")
+                Text("Tap scan to find the HUDini audio peripheral.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -152,7 +152,7 @@ struct BluetoothDemoView: View {
                 .font(.subheadline)
 
             ScrollView {
-                Text(manager.liveTranscript.isEmpty ? "Speech from the ESP32 stream will appear here." : manager.liveTranscript)
+                Text(manager.liveTranscript.isEmpty ? "Speech from the Bluetooth stream will appear here." : manager.liveTranscript)
                     .font(.body.monospaced())
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
