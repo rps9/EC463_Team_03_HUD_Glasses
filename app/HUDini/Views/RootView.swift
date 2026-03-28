@@ -18,6 +18,10 @@ struct RootView: View {
                 }
             } else if authManager.isAuthenticated {
                 mainContentView
+            } else if let email = authManager.pendingVerificationEmail {
+                VerificationPendingView(email: email)
+                    .environmentObject(authManager)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             } else {
                 SignInView()
                     .environmentObject(authManager)
@@ -346,6 +350,105 @@ struct HamburgerButton: View {
                     .offset(y: isOpen ? -6.5 : 0)
             }
             .animation(.spring(response: 0.34, dampingFraction: 0.82), value: isOpen)
+        }
+    }
+}
+
+struct VerificationPendingView: View {
+    @EnvironmentObject private var authManager: AuthenticationManager
+
+    let email: String
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer(minLength: 24)
+
+            HUDCard {
+                VStack(alignment: .leading, spacing: 20) {
+                    HUDSectionHeader(
+                        eyebrow: "Verify Email",
+                        title: "Check your inbox before continuing.",
+                        detail: "HUDini will keep checking for verification and will let you into the app as soon as your email is confirmed."
+                    )
+
+                    HStack(spacing: 12) {
+                        Image(systemName: "envelope.badge")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(HUDTheme.accent)
+                            .frame(width: 44, height: 44)
+                            .background(HUDTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Verification sent to")
+                                .font(.system(.caption, design: .rounded, weight: .semibold))
+                                .foregroundStyle(HUDTheme.inkMuted)
+
+                            Text(email)
+                                .font(.system(.body, design: .rounded, weight: .semibold))
+                                .foregroundStyle(HUDTheme.ink)
+                        }
+                    }
+                    .padding(16)
+                    .background(.white.opacity(0.74), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        statusRow(text: "Open the verification email and tap the HUDini verification link.", tint: HUDTheme.ink)
+                        statusRow(text: "Once verification completes, the app will admit you automatically.", tint: HUDTheme.mint)
+                    }
+
+                    if !authManager.errorMessage.isEmpty {
+                        statusRow(text: authManager.errorMessage, tint: HUDTheme.rose)
+                    }
+
+                    Button {
+                        Task {
+                            await authManager.checkPendingVerificationStatus()
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            if authManager.isCheckingVerification {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            Text(authManager.isCheckingVerification ? "Checking..." : "Check Again")
+                        }
+                    }
+                    .buttonStyle(HUDPrimaryButtonStyle(tint: HUDTheme.ink))
+                    .disabled(authManager.isCheckingVerification)
+
+                    Button("Use a Different Email") {
+                        authManager.clearPendingVerification()
+                    }
+                    .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.ink))
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 24)
+        .hudScreen()
+        .task(id: email) {
+            while authManager.pendingVerificationEmail == email && !authManager.isAuthenticated {
+                await authManager.checkPendingVerificationStatus()
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
+        }
+    }
+
+    private func statusRow(text: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(tint)
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
+
+            Text(text)
+                .font(.system(.body, design: .rounded))
+                .foregroundStyle(HUDTheme.inkMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

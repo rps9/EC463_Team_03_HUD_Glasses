@@ -16,6 +16,8 @@ class AuthenticationManager: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String = ""
     @Published var statusMessage: String = ""
+    @Published var pendingVerificationEmail: String?
+    @Published var isCheckingVerification: Bool = false
 
     private let session = URLSession.shared
     private let authProviderKey = "hudini.auth.provider"
@@ -118,7 +120,14 @@ class AuthenticationManager: ObservableObject {
                 profilePhotoURLString: authResponse.user?.picture
             )
         } catch {
-            errorMessage = presentableError(from: error, fallback: "Sign in failed. Please check your email and password.")
+            let message = presentableError(from: error, fallback: "Sign in failed. Please check your email and password.")
+            if message.localizedCaseInsensitiveContains("email not verified") {
+                beginPendingVerification(email: email, password: password)
+                errorMessage = ""
+                statusMessage = ""
+            } else {
+                errorMessage = message
+            }
         }
         
         isLoading = false
@@ -166,8 +175,9 @@ class AuthenticationManager: ObservableObject {
         do {
             let _: AuthSessionResponse = try await perform(request)
             errorMessage = ""
-            statusMessage = "Account created. Check your email to verify your account before signing in."
+            statusMessage = ""
             isAuthenticated = false
+            beginPendingVerification(email: email, password: password)
         } catch {
             errorMessage = presentableError(from: error, fallback: "Sign up failed. Please try again.")
         }
@@ -279,8 +289,57 @@ class AuthenticationManager: ObservableObject {
         }
 
         isAuthenticated = true
+        pendingVerificationEmail = nil
+        pendingVerificationPassword = nil
+        isCheckingVerification = false
         errorMessage = ""
         statusMessage = ""
+    }
+
+    @MainActor
+    private func beginPendingVerification(email: String, password: String) {
+        pendingVerificationEmail = email
+        pendingVerificationPassword = password
+        isAuthenticated = false
+        isCheckingVerification = false
+        errorMessage = ""
+        statusMessage = ""
+    }
+
+    @MainActor
+    func clearPendingVerification() {
+        pendingVerificationEmail = nil
+        pendingVerificationPassword = nil
+        isCheckingVerification = false
+        errorMessage = ""
+        statusMessage = ""
+    }
+
+    @MainActor
+    func checkPendingVerificationStatus() async {
+        guard let email = pendingVerificationEmail,
+              let password = pendingVerificationPassword,
+              !isCheckingVerification else { return }
+        guard let url = APIConfig.signInURL else { return }
+
+        isCheckingVerification = true
+        defer { isCheckingVerification = false }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try? JSONEncoder().encode(CredentialsBody(email: email, password: password))
+
+        do {
+            let authResponse: AuthSessionResponse = try await perform(request)
+            finishAuthentication(with: authResponse, email: email, provider: .password)
+        } catch {
+            let message = presentableError(from: error, fallback: "Verification is still pending.")
+            if !message.localizedCaseInsensitiveContains("email not verified") {
+                errorMessage = message
+            }
+        }
     }
 
     private func presentableError(from error: Error, fallback: String) -> String {
@@ -361,6 +420,9 @@ class AuthenticationManager: ObservableObject {
         }
         UserDefaults.standard.removeObject(forKey: authProviderKey)
         isAuthenticated = false
+        pendingVerificationEmail = nil
+        pendingVerificationPassword = nil
+        isCheckingVerification = false
         errorMessage = ""
         statusMessage = ""
     }

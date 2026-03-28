@@ -15,9 +15,9 @@ from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
-VERIFY_REDIRECT_SUCCESS = os.environ.get("VERIFY_REDIRECT_SUCCESS")
-VERIFY_REDIRECT_INVALID = os.environ.get("VERIFY_REDIRECT_INVALID")
-VERIFY_REDIRECT_EXPIRED = os.environ.get("VERIFY_REDIRECT_EXPIRED")
+VERIFY_REDIRECT_SUCCESS = "https://rps9.net/hudini-verify/success.html"
+VERIFY_REDIRECT_INVALID = "https://rps9.net/hudini-verify/invalid.html"
+VERIFY_REDIRECT_EXPIRED = "https://rps9.net/hudini-verify/expired.html"
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 
 PASSWORD_RE = re.compile(r"^[\x21-\x7E]+$") # Covers all ASCII but space
