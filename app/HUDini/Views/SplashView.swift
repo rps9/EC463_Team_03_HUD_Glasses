@@ -47,7 +47,7 @@ struct SplashView: View {
                         .font(.system(size: 48, weight: .bold, design: .rounded))
                         .foregroundStyle(HUDTheme.ink)
 
-                    Text("Swipe up to enter a cleaner live translation workspace.")
+                    Text("Swipe up to enter.")
                         .font(.system(.body, design: .rounded))
                         .foregroundStyle(HUDTheme.inkMuted)
                         .multilineTextAlignment(.center)
