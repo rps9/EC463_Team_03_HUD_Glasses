@@ -17,6 +17,8 @@ class AuthenticationManager: ObservableObject {
     @Published var errorMessage: String = ""
     @Published var statusMessage: String = ""
     @Published var pendingVerificationEmail: String?
+    /// Held only in memory for re-attempting sign-in after email verification; not persisted.
+    private var pendingVerificationPassword: String?
     @Published var isCheckingVerification: Bool = false
 
     private let session = URLSession.shared
@@ -333,7 +335,12 @@ class AuthenticationManager: ObservableObject {
 
         do {
             let authResponse: AuthSessionResponse = try await perform(request)
-            finishAuthentication(with: authResponse, email: email, provider: .password)
+            finishAuthentication(
+                with: authResponse,
+                email: email,
+                provider: .password,
+                profilePhotoURLString: authResponse.user?.picture
+            )
         } catch {
             let message = presentableError(from: error, fallback: "Verification is still pending.")
             if !message.localizedCaseInsensitiveContains("email not verified") {
