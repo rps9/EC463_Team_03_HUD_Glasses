@@ -17,39 +17,43 @@ struct LanguageView: View {
     @State private var showError = false
 
     var body: some View {
-        List {
-            Section {
-                Text("These are the same language packs as in the Translate app. Download here or in Translate → Download Languages.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 18) {
+                HUDCard {
+                    HUDSectionHeader(
+                        eyebrow: "Languages",
+                        title: "Manage translation packs.",
+                        detail: "These match the packs used by the system Translate app, so downloaded languages are shared across the device."
+                    )
+                }
 
-            Section("Languages") {
-                if isLoading {
-                    HStack {
-                        ProgressView()
-                        Text("Loading languages…")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                } else {
-                    ForEach(languageRows) { row in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(row.displayName)
-                                    .font(.body)
-                                Text(row.language.minimalIdentifier)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                HUDCard {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Available Downloads")
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(HUDTheme.ink)
+
+                        if isLoading {
+                            HStack(spacing: 12) {
+                                ProgressView()
+                                Text("Loading languages...")
+                                    .font(.system(.body, design: .rounded))
+                                    .foregroundStyle(HUDTheme.inkMuted)
                             }
-                            Spacer()
-                            statusView(row)
+                        } else {
+                            VStack(spacing: 12) {
+                                ForEach(languageRows) { row in
+                                    languageRow(row)
+                                }
+                            }
                         }
                     }
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
         }
-        .navigationTitle("Language")
+        .hudScreen()
         .task {
             await loadLanguages()
         }
@@ -75,26 +79,43 @@ struct LanguageView: View {
     }
 
     @ViewBuilder
+    private func languageRow(_ row: LanguageRow) -> some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.displayName)
+                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    .foregroundStyle(HUDTheme.ink)
+
+                Text(row.language.minimalIdentifier.uppercased())
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(HUDTheme.inkMuted)
+            }
+
+            Spacer()
+
+            statusView(row)
+        }
+        .padding(16)
+        .background(.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    @ViewBuilder
     private func statusView(_ row: LanguageRow) -> some View {
         switch row.status {
         case .installed:
-            Label("Downloaded", systemImage: "checkmark.circle.fill")
-                .font(.subheadline)
-                .foregroundStyle(.green)
+            HUDStatusPill(text: "Downloaded", tint: HUDTheme.mint, icon: "checkmark.circle.fill")
         case .supported:
             Button {
                 requestDownload(for: row.language)
             } label: {
-                Label("Download", systemImage: "arrow.down.circle")
+                Text("Download")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.accent))
+            .frame(width: 128)
         case .unsupported:
-            Text("Unsupported")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            HUDStatusPill(text: "Unsupported", tint: HUDTheme.amber, icon: "slash.circle")
         @unknown default:
-            Text("—")
-                .foregroundStyle(.tertiary)
+            HUDStatusPill(text: "Unknown", tint: HUDTheme.inkMuted, icon: "questionmark.circle")
         }
     }
 
@@ -141,7 +162,6 @@ private struct LanguageRow: Identifiable {
 }
 #endif
 
-/// Tab content that shows LanguageView when Translation is available, otherwise an unavailable message.
 struct LanguageTabContent: View {
     var body: some View {
         #if canImport(Translation)
@@ -156,20 +176,33 @@ struct LanguageTabContent: View {
     }
 
     private var languageUnavailableView: some View {
-        ContentUnavailableView(
-            "Language",
-            systemImage: "globe",
-            description: Text("Language download is available on a device with iOS 26 and the Translation framework.")
-        )
+        ZStack {
+            HUDBackground()
+
+            VStack(spacing: 18) {
+                Image(systemName: "globe")
+                    .font(.system(size: 42, weight: .semibold))
+                    .foregroundStyle(HUDTheme.accent)
+
+                Text("Language downloads require iOS 26 and the Translation framework.")
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(HUDTheme.inkMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 280)
+            }
+            .padding(28)
+            .background(HUDTheme.cardStrong, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(HUDTheme.stroke, lineWidth: 1)
+            }
+            .padding(24)
+        }
     }
 }
 
 #Preview {
     NavigationStack {
-        if #available(iOS 26.0, *) {
-            LanguageView()
-        } else {
-            Text("Language view requires iOS 26")
-        }
+        LanguageTabContent()
     }
 }

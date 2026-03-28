@@ -45,3 +45,10 @@ xcuserdata/
 
 # Shared Xcode schemes
 HUDini.xcodeproj/xcshareddata/xcschemes/
+
+# Hardware local/generated artifacts
+hardware/**/.pio/
+hardware/**/.venv/
+hardware/**/__pycache__/
+hardware/**/.vscode/
+hardware/**/captures/
