@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HUDLiveView: View {
     @EnvironmentObject private var bluetoothManager: BluetoothDemoManager
+    @AppStorage(wrappedValue: true, APIConfig.AppStorageKey.hudSuggestionEnabled) private var suggestionEnabled: Bool
     @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
     /// HUD only translates into English; target picker stays in UI with a single option (independent of downloaded packs).
@@ -41,7 +42,9 @@ struct HUDLiveView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            suggestionCard
+            if suggestionEnabled {
+                suggestionCard
+            }
 
             HStack(spacing: 16) {
                 Menu {
@@ -115,6 +118,13 @@ struct HUDLiveView: View {
                 lastSentBLEText = ""
             }
         }
+        .onChange(of: suggestionEnabled, initial: false) { _, enabled in
+            if !enabled {
+                suggestionRefreshTask?.cancel()
+                suggestionRefreshTask = nil
+                suggestionManager.clearSuggestion()
+            }
+        }
         .onDisappear {
             suggestionRefreshTask?.cancel()
             suggestionRefreshTask = nil
@@ -161,7 +171,9 @@ struct HUDLiveView: View {
         suggestionRefreshTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
-            suggestionManager.refreshSuggestion(for: text, languageCode: Self.hudTargetLanguageCode)
+            if suggestionEnabled {
+                suggestionManager.refreshSuggestion(for: text, languageCode: Self.hudTargetLanguageCode)
+            }
             pushTranslatedTextToTransceiverIfNeeded(text)
         }
     }

@@ -30,4 +30,15 @@ enum APIConfig {
     static var googleServerClientID: String? {
         Bundle.main.object(forInfoDictionaryKey: "GIDServerClientID") as? String
     }
+
+    /// Optional URL for the suggestion personalization survey (Google Form, Typeform, etc.). When `nil`, Settings hides the survey row.
+    static var suggestionSurveyURL: URL? {
+        nil
+        // Example: URL(string: "https://forms.gle/your-form-id")
+    }
+
+    /// `AppStorage` / `UserDefaults` keys (avoid scattering string literals).
+    enum AppStorageKey {
+        static let hudSuggestionEnabled = "hudSuggestionEnabled"
+    }
 }
