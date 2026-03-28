@@ -43,7 +43,12 @@ final class TranscriptionManager: ObservableObject {
         ) { [weak self] update in
             guard let self else { return }
             self.transcript = update.transcript
-            self.renderedText = update.renderedText
+            // Recognition cancel/stop often delivers an empty final result; keep the last
+            // translated line on screen until the user starts listening again.
+            let trimmedRendered = update.renderedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedRendered.isEmpty {
+                self.renderedText = update.renderedText
+            }
             if update.isFinal {
                 self.statusMessage = "Finalized segment"
             }

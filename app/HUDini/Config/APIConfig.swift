@@ -31,6 +31,9 @@ enum APIConfig {
         Bundle.main.object(forInfoDictionaryKey: "GIDServerClientID") as? String
     }
 
+    /// When `false`, hides Suggestions in Settings / Live HUD and skips OpenAI suggestion calls.
+    static let isSuggestionFeatureEnabled = true
+
     /// Optional URL for the suggestion personalization survey (Google Form, Typeform, etc.). When `nil`, Settings hides the survey row.
     static var suggestionSurveyURL: URL? {
         nil

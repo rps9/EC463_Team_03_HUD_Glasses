@@ -2,17 +2,18 @@ import SwiftUI
 
 struct HUDLiveView: View {
     @EnvironmentObject private var bluetoothManager: BluetoothDemoManager
+    @EnvironmentObject private var conversationHistoryStore: HUDConversationHistoryStore
     @AppStorage(wrappedValue: true, APIConfig.AppStorageKey.hudSuggestionEnabled) private var suggestionEnabled: Bool
     @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
     @State private var targetLanguage: String = "en"
     @State private var listeningLanguageCode: String = HUDLiveView.defaultListeningLanguageCode
     @State private var installedLanguages: [TranslationLanguageOption] = TranslationLanguages.supported
-    @State private var suggestionRefreshTask: Task<Void, Never>?
+    @State private var renderedTextDebounceTask: Task<Void, Never>?
     @State private var lastSentBLEText: String = ""
 
     private let hudCharacterLimit: Int = 260
-    private static let suggestionDebounceNanoseconds: UInt64 = 450_000_000
+    private static let renderedTextDebounceNanoseconds: UInt64 = 450_000_000
     private static let hudTargetLanguageCode = "en"
     private static var hudTargetLanguageOptions: [TranslationLanguageOption] {
         TranslationLanguages.supported.filter { $0.code == hudTargetLanguageCode }
@@ -22,7 +23,9 @@ struct HUDLiveView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 20) {
                 displayCard
-                suggestionCard
+                if APIConfig.isSuggestionFeatureEnabled {
+                    suggestionCard
+                }
                 controlsCard
                 connectionCard
             }
@@ -58,17 +61,23 @@ struct HUDLiveView: View {
             }
         }
         .onChange(of: suggestionEnabled, initial: false) { _, enabled in
+            guard APIConfig.isSuggestionFeatureEnabled else { return }
             if !enabled {
-                suggestionRefreshTask?.cancel()
-                suggestionRefreshTask = nil
+                renderedTextDebounceTask?.cancel()
+                renderedTextDebounceTask = nil
                 suggestionManager.clearSuggestion()
             }
         }
         .onDisappear {
-            suggestionRefreshTask?.cancel()
-            suggestionRefreshTask = nil
+            renderedTextDebounceTask?.cancel()
+            renderedTextDebounceTask = nil
+            if transcriptionManager.isTranscribing {
+                persistConversationSnapshotIfNonEmpty()
+            }
             transcriptionManager.stop()
-            suggestionManager.clearSuggestion()
+            if APIConfig.isSuggestionFeatureEnabled {
+                suggestionManager.clearSuggestion()
+            }
         }
     }
 
@@ -177,12 +186,6 @@ struct HUDLiveView: View {
                         tint: transcriptionManager.isTranscribing ? HUDTheme.rose : HUDTheme.ink
                     )
                 )
-
-                if !transcriptionManager.statusMessage.isEmpty {
-                    Text(transcriptionManager.statusMessage)
-                        .font(.system(.footnote, design: .rounded))
-                        .foregroundStyle(HUDTheme.inkMuted)
-                }
             }
         }
     }
@@ -267,10 +270,13 @@ struct HUDLiveView: View {
 
     private func toggleListening() {
         if transcriptionManager.isTranscribing {
+            persistConversationSnapshotIfNonEmpty()
             transcriptionManager.stop()
-            suggestionRefreshTask?.cancel()
-            suggestionRefreshTask = nil
-            suggestionManager.clearSuggestion()
+            renderedTextDebounceTask?.cancel()
+            renderedTextDebounceTask = nil
+            if APIConfig.isSuggestionFeatureEnabled {
+                suggestionManager.clearSuggestion()
+            }
         } else {
             transcriptionManager.startTranscribing(
                 listeningLanguage: listeningLanguageCode,
@@ -289,12 +295,12 @@ struct HUDLiveView: View {
     }
 
     private func scheduleDebouncedHUDSideEffects(for text: String) {
-        suggestionRefreshTask?.cancel()
-        let delay = Self.suggestionDebounceNanoseconds
-        suggestionRefreshTask = Task { @MainActor in
+        renderedTextDebounceTask?.cancel()
+        let delay = Self.renderedTextDebounceNanoseconds
+        renderedTextDebounceTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
-            if suggestionEnabled {
+            if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
                 suggestionManager.refreshSuggestion(for: text, languageCode: Self.hudTargetLanguageCode)
             }
             pushTranslatedTextToTransceiverIfNeeded(text)
@@ -327,12 +333,29 @@ struct HUDLiveView: View {
         }
         targetLanguage = Self.hudTargetLanguageCode
     }
+
+    /// Saves the current HUD translation when a listening session ends (stop button or leaving Live while mic is on).
+    private func persistConversationSnapshotIfNonEmpty() {
+        let translated = transcriptionManager.renderedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !translated.isEmpty else { return }
+        let source = transcriptionManager.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let entry = HUDConversationHistoryEntry(
+            id: UUID(),
+            createdAt: Date(),
+            sourceText: source,
+            translatedText: translated,
+            listeningLanguageCode: listeningLanguageCode,
+            displayLanguageCode: targetLanguage
+        )
+        conversationHistoryStore.append(entry)
+    }
 }
 
 #Preview {
     NavigationStack {
         HUDLiveView()
             .environmentObject(BluetoothDemoManager())
+            .environmentObject(HUDConversationHistoryStore())
     }
 }
 
