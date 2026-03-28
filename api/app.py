@@ -25,7 +25,6 @@ PASSWORD_RE = re.compile(r"^[\x21-\x7E]+$") # Covers all ASCII but space
 security = HTTPBearer(auto_error=False)
 
 app = FastAPI()
-handler = Mangum(app)
 
 if ALLOWED_ORIGINS:
     app.add_middleware(
