@@ -2,24 +2,15 @@ import SwiftUI
 
 struct RootView: View {
     @StateObject private var authManager = AuthenticationManager()
+    @StateObject private var bluetoothManager = BluetoothDemoManager()
     @State private var showSplash = true
-    
+
     private enum Tab: Hashable {
         case hudDisplay
-        case transcription
-        case translation
-        case bluetooth
-    }
-
-    private enum TesterSheet: Identifiable {
-        case transcription
-        case translation
-
-        var id: Int { hashValue }
+        case settings
     }
 
     @State private var selectedTab: Tab = .hudDisplay
-    @State private var activeSheet: TesterSheet?
 
     var body: some View {
         Group {
@@ -38,76 +29,39 @@ struct RootView: View {
             showSplash = false
         }
     }
-    
+
     private var mainContentView: some View {
         NavigationStack {
             TabView(selection: $selectedTab) {
                 HUDLiveView()
+                    .environmentObject(bluetoothManager)
                     .tag(Tab.hudDisplay)
                     .tabItem { Label("HUDini", systemImage: "display") }
 
-                TranscriptionView()
-                    .tag(Tab.transcription)
-                    .tabItem { Label("Transcription", systemImage: "waveform") }
-
-                TranslationView()
-                    .tag(Tab.translation)
-                    .tabItem { Label("Translate", systemImage: "globe") }
-
-                BluetoothDemoView()
-                    .tag(Tab.bluetooth)
-                    .tabItem { Label("Bluetooth", systemImage: "dot.radiowaves.left.and.right") }
+                SettingsView()
+                    .environmentObject(bluetoothManager)
+                    .tag(Tab.settings)
+                    .tabItem { Label("Settings", systemImage: "gearshape") }
             }
             .navigationTitle(title(for: selectedTab))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Transcription QA") { activeSheet = .transcription }
-                        Button("Translation QA") { activeSheet = .translation }
-                        Divider()
-                        Button("Sign Out", role: .destructive) {
-                            authManager.signOut()
-                        }
-                    } label: {
-                        Label("Menu", systemImage: "ellipsis.circle")
+                    Button("Sign Out", role: .destructive) {
+                        authManager.signOut()
                     }
                 }
             }
         }
-        .sheet(item: $activeSheet) { sheet in
-            NavigationStack {
-                testerView(for: sheet)
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Done") { activeSheet = nil }
-                        }
-                    }
-            }
-        }
+        // TabView does not reliably inherit environment for tab roots; attach above the stack.
+        .environmentObject(bluetoothManager)
     }
 
     private func title(for tab: Tab) -> String {
         switch tab {
         case .hudDisplay:
             return ""
-        case .transcription:
-            return "Live Transcription"
-        case .translation:
-            return "Translation"
-        case .bluetooth:
-            return "Bluetooth"
-        }
-    }
-
-    @ViewBuilder
-    private func testerView(for sheet: TesterSheet) -> some View {
-        switch sheet {
-        case .transcription:
-            TranscriptionTesterView()
-                .navigationTitle("Transcription QA")
-        case .translation:
-            TranslationTesterView()
-                .navigationTitle("Translation QA")
+        case .settings:
+            return "Settings"
         }
     }
 }

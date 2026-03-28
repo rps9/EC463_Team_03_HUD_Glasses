@@ -5,6 +5,8 @@ struct TranslationView: View {
     @State private var inputText: String = ""
     @State private var selectedSourceCode: String = TranslationLanguages.autoCode
     @State private var selectedTargetCode: String = "en"
+    @State private var installedSourceOptions: [TranslationLanguageOption] = TranslationLanguages.sourceOptions
+    @State private var installedTargetOptions: [TranslationLanguageOption] = TranslationLanguages.targetOptions
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -18,7 +20,7 @@ struct TranslationView: View {
                     .foregroundStyle(.secondary)
 
                 Picker("Source language", selection: $selectedSourceCode) {
-                    ForEach(TranslationLanguages.sourceOptions) { option in
+                    ForEach(installedSourceOptions) { option in
                         Text(option.name).tag(option.code)
                     }
                 }
@@ -34,7 +36,7 @@ struct TranslationView: View {
                     .foregroundStyle(.secondary)
 
                 Picker("Target language", selection: $selectedTargetCode) {
-                    ForEach(TranslationLanguages.targetOptions) { option in
+                    ForEach(installedTargetOptions) { option in
                         Text(option.name).tag(option.code)
                     }
                 }
@@ -98,6 +100,9 @@ struct TranslationView: View {
             Spacer(minLength: 0)
         }
         .padding()
+        .task {
+            await loadInstalledLanguages()
+        }
         .onAppear {
             syncWithManager()
         }
@@ -137,6 +142,22 @@ struct TranslationView: View {
             selectedSourceCode = TranslationLanguages.autoCode
         }
         selectedTargetCode = manager.targetLanguageCode
+    }
+
+    private func loadInstalledLanguages() async {
+        let source = await TranslationLanguages.installedSourceOptions()
+        let target = await TranslationLanguages.installedTargetOptions()
+        installedSourceOptions = source
+        installedTargetOptions = target
+        if !installedTargetOptions.contains(where: { $0.code == selectedTargetCode }) {
+            selectedTargetCode = installedTargetOptions.first?.code ?? "en"
+            manager.setTargetLanguage(selectedTargetCode)
+        }
+        if selectedSourceCode != TranslationLanguages.autoCode,
+           !installedTargetOptions.contains(where: { $0.code == selectedSourceCode }) {
+            selectedSourceCode = TranslationLanguages.autoCode
+            manager.setSourceLanguage(nil)
+        }
     }
 }
 

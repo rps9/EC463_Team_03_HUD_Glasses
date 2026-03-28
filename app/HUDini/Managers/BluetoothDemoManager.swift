@@ -158,6 +158,13 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         sendTextToTransceiver(text, updateStatus: true)
     }
 
+    /// Sends text over BLE using `TEXT_BEGIN` / `TEXT_CHUNK` / `TEXT_END` (e.g. iPhone-mic HUD translated line).
+    func sendHUDTextToTransceiver(_ text: String, updateStatus: Bool = false) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        sendTextToTransceiver(trimmed, updateStatus: updateStatus)
+    }
+
     func startAudioStream() {
         guard let peripheral = connectedPeripheral, let controlChar else {
             statusMessage = "Connect to a device first"

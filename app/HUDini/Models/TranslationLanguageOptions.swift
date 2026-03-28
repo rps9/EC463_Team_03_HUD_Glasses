@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Translation)
+import Translation
+#endif
 
 struct TranslationLanguageOption: Identifiable, Hashable {
     let code: String
@@ -38,5 +41,46 @@ enum TranslationLanguages {
         }
         return supported.first(where: { $0.code == normalized })?.name ?? normalized.uppercased()
     }
+
+    /// Returns only languages that are installed (downloaded) for Apple Translate. Use for Translation and HUDini pickers.
+    /// When Translation framework is unavailable (e.g. simulator), returns full supported list.
+    static func installedTargetOptions() async -> [TranslationLanguageOption] {
+        #if canImport(Translation)
+        if #available(iOS 26.0, *) {
+            return await _installedTargetOptionsFromAvailability()
+        }
+        #endif
+        return supported
+    }
+
+    /// Source options for translation: Auto Detect + installed languages only.
+    static func installedSourceOptions() async -> [TranslationLanguageOption] {
+        let installed = await installedTargetOptions()
+        return [.init(code: autoCode, name: "Auto Detect")] + installed
+    }
 }
+
+#if canImport(Translation)
+@available(iOS 26.0, *)
+private func _installedTargetOptionsFromAvailability() async -> [TranslationLanguageOption] {
+    let availability = LanguageAvailability()
+    let reference = Locale.Language(identifier: "en")
+    let supported = await availability.supportedLanguages
+    var result: [TranslationLanguageOption] = []
+    let locale = Locale.current
+    for lang in supported {
+        let id = lang.minimalIdentifier
+        if id == "en" {
+            result.append(.init(code: "en", name: "English"))
+            continue
+        }
+        let status = await availability.status(from: reference, to: lang)
+        if status == .installed {
+            let name = locale.localizedString(forLanguageCode: lang.languageCode?.identifier ?? id) ?? TranslationLanguages.supported.first(where: { $0.code == id })?.name ?? id
+            result.append(.init(code: id, name: name))
+        }
+    }
+    return result.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+}
+#endif
 

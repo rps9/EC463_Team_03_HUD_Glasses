@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+#if canImport(Translation)
+import Translation
+#endif
 
 struct SignInView: View {
     @EnvironmentObject var authManager: AuthenticationManager
@@ -14,6 +17,8 @@ struct SignInView: View {
     @State private var password: String = ""
     @State private var confirmPassword: String = ""
     @State private var preferredSourceLanguageCode: String = "es"
+    @State private var fireDownloadPreferredLanguage: Bool = false
+    @State private var showDownloadLanguageConfirmation: Bool = false
     @FocusState private var focusedField: Field?
     
     private enum AuthTab: String, CaseIterable {
