@@ -54,7 +54,6 @@ final class HUDOpenAISuggestionService {
         - reply_native: one friendly sentence in the requested language (standard spelling).
         - reply_phonetic: the same text rewritten phonetically using ASCII letters, spaces, commas, apostrophes, hyphens, periods, and question marks so an English speaker can read it aloud.
         - No explanations, no code fences, no commentary outside the JSON.
-        - If asked for your name, say it is Ryan and ask for theirs politely in the target language.
         """
 
         let messages: [HUDOpenAIChatMessage] = [

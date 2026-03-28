@@ -4,7 +4,6 @@ struct HUDLiveView: View {
     @EnvironmentObject private var bluetoothManager: BluetoothDemoManager
     @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
-    /// HUD only translates into English; target picker stays in UI with a single option (independent of downloaded packs).
     @State private var targetLanguage: String = "en"
     @State private var listeningLanguageCode: String = HUDLiveView.defaultListeningLanguageCode
     @State private var installedLanguages: [TranslationLanguageOption] = TranslationLanguages.supported
@@ -19,84 +18,26 @@ struct HUDLiveView: View {
     }
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer(minLength: 0)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Translated Result")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Text(hudDisplayText.isEmpty ? "…" : hudDisplayText)
-                    .font(.system(size: 40, weight: .semibold, design: .rounded))
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.6)
-                    .lineLimit(6)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity)
-                    .padding(24)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                displayCard
+                suggestionCard
+                controlsCard
+                connectionCard
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            suggestionCard
-
-            HStack(spacing: 16) {
-                Menu {
-                    Picker("Listening language", selection: $listeningLanguageCode) {
-                        ForEach(installedLanguages) { option in
-                            Text(option.name).tag(option.code)
-                        }
-                    }
-                } label: {
-                    Label(listeningLanguageLabel(for: listeningLanguageCode), systemImage: "ear")
-                        .labelStyle(.titleAndIcon)
-                }
-                .menuOrder(.fixed)
-                .tint(.secondary)
-
-                Menu {
-                    Picker("Target language", selection: $targetLanguage) {
-                        ForEach(Self.hudTargetLanguageOptions) { option in
-                            Text(option.name).tag(option.code)
-                        }
-                    }
-                } label: {
-                    Label(targetLanguageLabel, systemImage: "globe")
-                        .labelStyle(.titleAndIcon)
-                }
-                .menuOrder(.fixed)
-                .tint(.secondary)
-
-                Button(transcriptionManager.isTranscribing ? "Stop" : "Start") {
-                    toggleListening()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(transcriptionManager.isTranscribing ? .red : .accentColor)
-                .font(.title3)
-            }
-
-            if !transcriptionManager.statusMessage.isEmpty {
-                Text(transcriptionManager.statusMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            Text(isTransceiverConnected
-                 ? "Transceiver connected — translated text is sent over BLE when it updates."
-                 : "No BLE transceiver connected — connect in Settings → Bluetooth to send text to the device.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
-
-            Spacer(minLength: 0)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 30)
         }
-        .padding(32)
-        .background(Color.black.opacity(0.02))
+        .hudScreen()
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Live HUD")
+                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(HUDTheme.ink)
+            }
+        }
         .task {
             await transcriptionManager.requestPermissions()
             await loadInstalledLanguages()
@@ -121,6 +62,190 @@ struct HUDLiveView: View {
             transcriptionManager.stop()
             suggestionManager.clearSuggestion()
         }
+    }
+
+    private var displayCard: some View {
+        HUDCard(padding: 18) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text("Translated Output")
+                        .font(.system(.headline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(HUDTheme.ink)
+
+                    Spacer()
+
+                    HUDStatusPill(
+                        text: "\(hudDisplayText.count) chars",
+                        tint: HUDTheme.accent
+                    )
+                }
+
+                Text(hudDisplayText.isEmpty ? "Translation output appears here as speech is processed." : hudDisplayText)
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.58)
+                    .lineLimit(hudDisplayText.isEmpty ? 4 : 6)
+                    .foregroundStyle(HUDTheme.ink)
+                    .frame(maxWidth: .infinity, minHeight: 220, alignment: .center)
+                    .multilineTextAlignment(.center)
+                    .padding(24)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.98), HUDTheme.backgroundTop.opacity(0.9)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 26, style: .continuous)
+                            .stroke(HUDTheme.strokeStrong.opacity(0.7), lineWidth: 1)
+                    }
+            }
+        }
+    }
+
+    private var suggestionCard: some View {
+        HUDCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text("Suggested Reply")
+                        .font(.system(.headline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(HUDTheme.ink)
+
+                    Spacer()
+
+                    Image(systemName: "quote.bubble")
+                        .foregroundStyle(HUDTheme.inkMuted)
+                }
+
+                Text(suggestionManager.suggestionPhonetic.isEmpty ? "Suggestions appear while the live stream is running." : suggestionManager.suggestionPhonetic)
+                    .font(.system(size: 24, weight: .semibold, design: .rounded))
+                    .foregroundStyle(HUDTheme.ink)
+
+                if !suggestionManager.suggestionEnglish.isEmpty {
+                    Text(suggestionManager.suggestionEnglish)
+                        .font(.system(.body, design: .rounded))
+                        .foregroundStyle(HUDTheme.inkMuted)
+                }
+            }
+        }
+    }
+
+    private var controlsCard: some View {
+        HUDCard {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Session Controls")
+                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(HUDTheme.ink)
+
+                HStack(spacing: 14) {
+                    languagePickerCard(
+                        title: "Listening Language",
+                        value: listeningLanguageLabel(for: listeningLanguageCode),
+                        icon: "globe.badge.chevron.backward",
+                        selection: $listeningLanguageCode,
+                        options: installedLanguages
+                    )
+
+                    languagePickerCard(
+                        title: "Display Language",
+                        value: targetLanguageLabel,
+                        icon: "globe.badge.chevron.forward",
+                        selection: $targetLanguage,
+                        options: Self.hudTargetLanguageOptions
+                    )
+                }
+
+                Button {
+                    toggleListening()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: transcriptionManager.isTranscribing ? "stop.fill" : "mic.fill")
+                        Text(transcriptionManager.isTranscribing ? "Stop Listening" : "Start Listening")
+                    }
+                }
+                .buttonStyle(
+                    HUDPrimaryButtonStyle(
+                        tint: transcriptionManager.isTranscribing ? HUDTheme.rose : HUDTheme.ink
+                    )
+                )
+
+                if !transcriptionManager.statusMessage.isEmpty {
+                    Text(transcriptionManager.statusMessage)
+                        .font(.system(.footnote, design: .rounded))
+                        .foregroundStyle(HUDTheme.inkMuted)
+                }
+            }
+        }
+    }
+
+    private var connectionCard: some View {
+        HUDCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Device Sync")
+                        .font(.system(.headline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(HUDTheme.ink)
+                    Spacer()
+                    HUDStatusPill(
+                        text: isTransceiverConnected ? "Ready to send" : "Not connected",
+                        tint: isTransceiverConnected ? HUDTheme.mint : HUDTheme.amber,
+                        icon: "antenna.radiowaves.left.and.right"
+                    )
+                }
+
+                Text(isTransceiverConnected
+                     ? "Translated output is mirrored to the BLE transceiver automatically whenever the rendered text changes."
+                     : "Connect the HUD transceiver from Settings > Bluetooth to send rendered output to the device.")
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(HUDTheme.inkMuted)
+            }
+        }
+    }
+
+    private func languagePickerCard(
+        title: String,
+        value: String,
+        icon: String,
+        selection: Binding<String>,
+        options: [TranslationLanguageOption]
+    ) -> some View {
+        Menu {
+            Picker(title, selection: selection) {
+                ForEach(options) { option in
+                    Text(option.name).tag(option.code)
+                }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: icon)
+                    Text(title)
+                }
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(HUDTheme.inkMuted)
+
+                HStack {
+                    Text(value)
+                        .font(.system(.body, design: .rounded, weight: .semibold))
+                        .foregroundStyle(HUDTheme.ink)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(HUDTheme.inkMuted)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(HUDTheme.strokeStrong, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .menuOrder(.fixed)
     }
 
     private var hudDisplayText: String {
@@ -175,30 +300,6 @@ struct HUDLiveView: View {
         bluetoothManager.sendHUDTextToTransceiver(trimmed, updateStatus: false)
     }
 
-    private var suggestionCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Suggested reply")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(suggestionManager.suggestionPhonetic.isEmpty ? "Suggestions appear while listening." : suggestionManager.suggestionPhonetic)
-                    .font(.title3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if !suggestionManager.suggestionEnglish.isEmpty {
-                    Text(suggestionManager.suggestionEnglish)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(18)
-            .background(Color(.tertiarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-        }
-    }
-
     private var targetLanguageLabel: String {
         Self.hudTargetLanguageOptions.first?.name
             ?? TranslationLanguages.displayName(for: Self.hudTargetLanguageCode)
@@ -219,8 +320,10 @@ struct HUDLiveView: View {
 }
 
 #Preview {
-    HUDLiveView()
-        .environmentObject(BluetoothDemoManager())
+    NavigationStack {
+        HUDLiveView()
+            .environmentObject(BluetoothDemoManager())
+    }
 }
 
 private extension HUDLiveView {
