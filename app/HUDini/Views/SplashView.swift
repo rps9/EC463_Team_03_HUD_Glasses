@@ -63,7 +63,7 @@ struct SplashView: View {
                         .foregroundStyle(HUDTheme.inkMuted)
                         .offset(y: pulse ? -6 : 0)
 
-                    Text("Swipe up on the logo")
+                    Text("Swipe up")
                         .font(.system(.subheadline, design: .rounded, weight: .semibold))
                         .foregroundStyle(HUDTheme.inkMuted)
                 }

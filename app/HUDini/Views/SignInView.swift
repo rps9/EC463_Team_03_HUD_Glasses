@@ -49,7 +49,7 @@ struct SignInView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 28)
                 .padding(.bottom, 24)
-                .frame(minHeight: geometry.size.height, alignment: .center)
+                .frame(minHeight: geometry.size.height, alignment: .top)
             }
             .scrollDismissesKeyboard(.interactively)
         }
@@ -98,10 +98,6 @@ struct SignInView: View {
                         .font(.system(size: 40, weight: .bold, design: .rounded))
                         .foregroundStyle(HUDTheme.ink)
 
-                    Text(selectedTab == .login ? "Live translation and HUD controls with a cleaner operating surface." : "Create your workspace and choose the language you want to listen for first.")
-                        .font(.system(.body, design: .rounded))
-                        .foregroundStyle(HUDTheme.inkMuted)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -141,59 +137,33 @@ struct SignInView: View {
     private var formSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             field("Email") {
-                ZStack(alignment: .leading) {
-                    if email.isEmpty {
-                        Text("you@example.com")
-                            .font(.system(.body, design: .rounded))
-                            .foregroundStyle(HUDTheme.inkMuted)
-                            .padding(.horizontal, 16)
-                            .allowsHitTesting(false)
-                    }
-
-                    TextField("", text: $email)
-                        .textContentType(selectedTab == .login ? .emailAddress : .username)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focusedField, equals: .email)
-                        .submitLabel(.next)
-                        .tint(HUDTheme.ink)
-                        .foregroundStyle(HUDTheme.ink)
-                        .hudInputFieldStyle()
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    focusedField = .email
-                }
+                placeholderTextField(
+                    text: $email,
+                    placeholder: "you@example.com",
+                    focus: .email,
+                    submitLabel: .next,
+                    textContentType: selectedTab == .login ? .emailAddress : .username,
+                    keyboardType: .emailAddress
+                )
             }
 
             field("Password") {
-                SecureField("Enter password", text: $password)
-                    .focused($focusedField, equals: .password)
-                    .submitLabel(selectedTab == .login ? .go : .next)
-                    .hudInputFieldStyle()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        focusedField = .password
-                    }
+                placeholderSecureField(
+                    text: $password,
+                    placeholder: "Enter password",
+                    focus: .password,
+                    submitLabel: selectedTab == .login ? .go : .next
+                )
             }
 
             if selectedTab == .signup {
                 field("Confirm Password") {
-                    SecureField("Re-enter password", text: $confirmPassword)
-                        .focused($focusedField, equals: .confirmPassword)
-                        .submitLabel(.go)
-                        .hudInputFieldStyle()
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            focusedField = .confirmPassword
-                        }
+                    placeholderSecureField(
+                        text: $confirmPassword,
+                        placeholder: "Re-enter password",
+                        focus: .confirmPassword,
+                        submitLabel: .go
+                    )
                 }
 
                 field("Primary Listening Language") {
@@ -298,6 +268,75 @@ struct SignInView: View {
         }
         .padding(14)
         .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func placeholderSecureField(
+        text: Binding<String>,
+        placeholder: String,
+        focus: Field,
+        submitLabel: SubmitLabel
+    ) -> some View {
+        ZStack(alignment: .leading) {
+            if text.wrappedValue.isEmpty {
+                Text(placeholder)
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(HUDTheme.inkMuted)
+                    .padding(.horizontal, 16)
+                    .allowsHitTesting(false)
+            }
+
+            SecureField("", text: text)
+                .focused($focusedField, equals: focus)
+                .submitLabel(submitLabel)
+                .tint(HUDTheme.ink)
+                .foregroundStyle(HUDTheme.ink)
+                .hudInputFieldStyle()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .background(Color.clear.contentShape(Rectangle()))
+        .contentShape(Rectangle())
+        .highPriorityGesture(TapGesture().onEnded {
+            focusedField = focus
+        })
+    }
+
+    private func placeholderTextField(
+        text: Binding<String>,
+        placeholder: String,
+        focus: Field,
+        submitLabel: SubmitLabel,
+        textContentType: UITextContentType?,
+        keyboardType: UIKeyboardType
+    ) -> some View {
+        ZStack(alignment: .leading) {
+            if text.wrappedValue.isEmpty {
+                Text(placeholder)
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(HUDTheme.inkMuted)
+                    .padding(.horizontal, 16)
+                    .allowsHitTesting(false)
+            }
+
+            TextField("", text: text)
+                .textContentType(textContentType)
+                .keyboardType(keyboardType)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($focusedField, equals: focus)
+                .submitLabel(submitLabel)
+                .textFieldStyle(.plain)
+                .tint(HUDTheme.ink)
+                .foregroundStyle(HUDTheme.ink)
+                .hudInputFieldStyle()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .background(Color.clear.contentShape(Rectangle()))
+        .contentShape(Rectangle())
+        .highPriorityGesture(TapGesture().onEnded {
+            focusedField = focus
+        })
     }
 
     private func submitCredentials() {
