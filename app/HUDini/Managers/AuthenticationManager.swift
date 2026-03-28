@@ -57,6 +57,24 @@ class AuthenticationManager: ObservableObject {
     init() {
         isAuthenticated = KeychainHelper.loadToken() != nil
     }
+
+    /// Email last reported by the backend or sign-in flow (may be empty for some sessions).
+    var accountEmail: String? {
+        let value = UserDefaults.standard.string(forKey: userEmailKey)
+        return (value?.isEmpty == false) ? value : nil
+    }
+
+    /// Human-readable sign-in method for the active session.
+    var accountSignInMethodDescription: String {
+        switch UserDefaults.standard.string(forKey: authProviderKey) {
+        case AuthProvider.google.rawValue:
+            return "Google"
+        case AuthProvider.password.rawValue:
+            return "Email & password"
+        default:
+            return "—"
+        }
+    }
     
     @MainActor
     func signIn(email: String, password: String) async {

@@ -40,6 +40,10 @@ enum APIConfig {
         // Example: URL(string: "https://forms.gle/your-form-id")
     }
 
+    /// Optional legal / support links for Account Settings. When `nil`, the row is hidden.
+    static var privacyPolicyURL: URL? { nil }
+    static var termsOfServiceURL: URL? { nil }
+
     /// `AppStorage` / `UserDefaults` keys (avoid scattering string literals).
     enum AppStorageKey {
         static let hudSuggestionEnabled = "hudSuggestionEnabled"
