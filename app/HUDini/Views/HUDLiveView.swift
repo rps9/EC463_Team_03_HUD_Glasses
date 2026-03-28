@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HUDLiveView: View {
+    @EnvironmentObject private var bluetoothManager: BluetoothDemoManager
     @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
     /// HUD only translates into English; target picker stays in UI with a single option (independent of downloaded packs).
@@ -8,6 +9,7 @@ struct HUDLiveView: View {
     @State private var listeningLanguageCode: String = HUDLiveView.defaultListeningLanguageCode
     @State private var installedLanguages: [TranslationLanguageOption] = TranslationLanguages.supported
     @State private var suggestionRefreshTask: Task<Void, Never>?
+    @State private var lastSentBLEText: String = ""
 
     private let hudCharacterLimit: Int = 260
     private static let suggestionDebounceNanoseconds: UInt64 = 450_000_000
@@ -83,6 +85,14 @@ struct HUDLiveView: View {
                     .multilineTextAlignment(.center)
             }
 
+            Text(isTransceiverConnected
+                 ? "Transceiver connected — translated text is sent over BLE when it updates."
+                 : "No BLE transceiver connected — connect in Settings → Bluetooth to send text to the device.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 8)
+
             Spacer(minLength: 0)
         }
         .padding(32)
@@ -98,7 +108,12 @@ struct HUDLiveView: View {
             transcriptionManager.setTargetLanguage(newValue)
         }
         .onChange(of: transcriptionManager.renderedText, initial: false) { _, newValue in
-            scheduleDebouncedSuggestionRefresh(for: newValue)
+            scheduleDebouncedHUDSideEffects(for: newValue)
+        }
+        .onChange(of: bluetoothManager.state, initial: false) { _, newState in
+            if !isTransceiverConnected(state: newState) {
+                lastSentBLEText = ""
+            }
         }
         .onDisappear {
             suggestionRefreshTask?.cancel()
@@ -131,14 +146,33 @@ struct HUDLiveView: View {
         }
     }
 
-    private func scheduleDebouncedSuggestionRefresh(for text: String) {
+    private var isTransceiverConnected: Bool {
+        isTransceiverConnected(state: bluetoothManager.state)
+    }
+
+    private func isTransceiverConnected(state: BluetoothDemoManager.ConnectionState) -> Bool {
+        if case .connected = state { return true }
+        return false
+    }
+
+    private func scheduleDebouncedHUDSideEffects(for text: String) {
         suggestionRefreshTask?.cancel()
         let delay = Self.suggestionDebounceNanoseconds
         suggestionRefreshTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
             suggestionManager.refreshSuggestion(for: text, languageCode: Self.hudTargetLanguageCode)
+            pushTranslatedTextToTransceiverIfNeeded(text)
         }
+    }
+
+    private func pushTranslatedTextToTransceiverIfNeeded(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard isTransceiverConnected else { return }
+        guard trimmed != lastSentBLEText else { return }
+        lastSentBLEText = trimmed
+        bluetoothManager.sendHUDTextToTransceiver(trimmed, updateStatus: false)
     }
 
     private var suggestionCard: some View {
@@ -184,7 +218,10 @@ struct HUDLiveView: View {
     }
 }
 
-#Preview { HUDLiveView() }
+#Preview {
+    HUDLiveView()
+        .environmentObject(BluetoothDemoManager())
+}
 
 private extension HUDLiveView {
     static var defaultListeningLanguageCode: String {

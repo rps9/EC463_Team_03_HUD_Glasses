@@ -2,12 +2,12 @@ import SwiftUI
 
 struct RootView: View {
     @StateObject private var authManager = AuthenticationManager()
+    @StateObject private var bluetoothManager = BluetoothDemoManager()
     @State private var showSplash = true
 
     private enum Tab: Hashable {
         case hudDisplay
-        case language
-        case bluetooth
+        case settings
     }
 
     @State private var selectedTab: Tab = .hudDisplay
@@ -34,16 +34,14 @@ struct RootView: View {
         NavigationStack {
             TabView(selection: $selectedTab) {
                 HUDLiveView()
+                    .environmentObject(bluetoothManager)
                     .tag(Tab.hudDisplay)
                     .tabItem { Label("HUDini", systemImage: "display") }
 
-                LanguageTabContent()
-                    .tag(Tab.language)
-                    .tabItem { Label("Language", systemImage: "character.book.closed") }
-
-                BluetoothDemoView()
-                    .tag(Tab.bluetooth)
-                    .tabItem { Label("Bluetooth", systemImage: "dot.radiowaves.left.and.right") }
+                SettingsView()
+                    .environmentObject(bluetoothManager)
+                    .tag(Tab.settings)
+                    .tabItem { Label("Settings", systemImage: "gearshape") }
             }
             .navigationTitle(title(for: selectedTab))
             .toolbar {
@@ -54,16 +52,16 @@ struct RootView: View {
                 }
             }
         }
+        // TabView does not reliably inherit environment for tab roots; attach above the stack.
+        .environmentObject(bluetoothManager)
     }
 
     private func title(for tab: Tab) -> String {
         switch tab {
         case .hudDisplay:
             return ""
-        case .language:
-            return "Language"
-        case .bluetooth:
-            return "Bluetooth"
+        case .settings:
+            return "Settings"
         }
     }
 }
