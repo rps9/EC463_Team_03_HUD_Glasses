@@ -7,6 +7,17 @@ struct SettingsView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
                 NavigationLink {
+                    AccountSettingsView()
+                } label: {
+                    settingsRow(
+                        title: "Account Settings",
+                        icon: "person.crop.circle",
+                        tint: HUDTheme.rose
+                    )
+                }
+                .buttonStyle(.plain)
+
+                NavigationLink {
                     BluetoothDemoView()
                         .environmentObject(bluetoothManager)
                         .navigationTitle("Bluetooth")
@@ -86,5 +97,8 @@ struct SettingsView: View {
     NavigationStack {
         SettingsView()
             .environmentObject(BluetoothDemoManager())
+            .environmentObject(AuthenticationManager())
+            .environmentObject(HUDConversationHistoryStore())
+            .environmentObject(SuggestionProfileStore())
     }
 }

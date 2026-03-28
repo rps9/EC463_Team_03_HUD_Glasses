@@ -83,7 +83,9 @@ struct RootView: View {
             }
         }
         .tint(HUDTheme.accent)
+        .environmentObject(authManager)
         .environmentObject(suggestionProfileStore)
+        .environmentObject(conversationHistoryStore)
     }
 
     private var appMenu: some View {
@@ -91,7 +93,9 @@ struct RootView: View {
             NavigationLink {
                 SettingsView()
                     .environmentObject(bluetoothManager)
+                    .environmentObject(authManager)
                     .environmentObject(suggestionProfileStore)
+                    .environmentObject(conversationHistoryStore)
             } label: {
                 menuRow(title: "Settings", icon: "slider.horizontal.3")
             }
