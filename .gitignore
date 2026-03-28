@@ -9,6 +9,23 @@ __pycache__
 # Node
 node_modules/
 
+# PlatformIO build artifacts
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# PlatformIO editor settings
+.vscode/
+
+# Firmware/build outputs
+*.elf
+*.hex
+*.bin
+*.map
+*.a
+*.o
+*.dblite
+
 # Local secrets overrides
 HUDini/Secrets.xcconfig
 
