@@ -1,41 +1,21 @@
 import SwiftUI
 
 struct HUDLiveView: View {
+    @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
-    @State private var hudBuffer: String = HUDLiveView.demoDefaults.hudText
-    @State private var playbackTask: Task<Void, Never>? = nil
-    @State private var isDemoRunning: Bool = false
     @State private var targetLanguage: String = "en"
     @State private var listeningLanguageCode: String = HUDLiveView.defaultListeningLanguageCode
-    @State private var defaultsApplied: Bool = false
-
-    // MARK: Demo script configuration (edit for your video)
-    // Define the chunk and when (seconds after pressing Start) it should show.
-    private let demoTranslationTimeline: [(chunk: String, secondsFromStart: Double)] = [
-        ("Excellent", 0.7),
-        ("Excellent, thank you!", 1.2),
-        ("Excellent, thank you. By the way.", 2.2),
-        ("Excellent, thank you. By the way, what's your name?", 3.0)
-    ]
-    private let suggestionRevealDelayAfterLastChunk: UInt64 = 500_000_000 // 0.5s
-
-    // Default text values to seed the UI before playback.
-    private static let demoDefaults = DemoDefaults(
-        hudText: "I wanted to ask you if you know where the chemistry lab is",
-        suggestionPhonetic: "Si por supuesto, esta en el primer el salon a la derechas.",
-        suggestionEnglish: "Yes, of course, it's in the first room on the right."
-    )
-
-    private let demoSuggestedReplyPhonetic: String = "Mi nombre es Ryan. ¿Y tú cómo te llamas?"
-    private let demoSuggestedReplyEnglish: String = "My name is Ryan. And what's your name?"
+    @State private var installedLanguages: [TranslationLanguageOption] = TranslationLanguages.supported
+    @State private var suggestionRefreshTask: Task<Void, Never>?
 
     private let hudCharacterLimit: Int = 260
+    private static let suggestionDebounceNanoseconds: UInt64 = 450_000_000
 
     var body: some View {
         VStack(spacing: 24) {
             Spacer(minLength: 0)
 
-            Text(hudBuffer.isEmpty ? "…" : hudBuffer)
+            Text(hudDisplayText.isEmpty ? "…" : hudDisplayText)
                 .font(.system(size: 40, weight: .semibold, design: .rounded))
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.6)
@@ -51,7 +31,7 @@ struct HUDLiveView: View {
             HStack(spacing: 16) {
                 Menu {
                     Picker("Listening language", selection: $listeningLanguageCode) {
-                        ForEach(TranslationLanguages.supported) { option in
+                        ForEach(installedLanguages) { option in
                             Text(option.name).tag(option.code)
                         }
                     }
@@ -64,7 +44,7 @@ struct HUDLiveView: View {
 
                 Menu {
                     Picker("Target language", selection: $targetLanguage) {
-                        ForEach(TranslationLanguages.targetOptions) { option in
+                        ForEach(installedLanguages) { option in
                             Text(option.name).tag(option.code)
                         }
                     }
@@ -75,77 +55,78 @@ struct HUDLiveView: View {
                 .menuOrder(.fixed)
                 .tint(.secondary)
 
-                Button(isDemoRunning ? "Stop" : "Start") {
-                    isDemoRunning ? stopDemo() : startDemo()
+                Button(transcriptionManager.isTranscribing ? "Stop" : "Start") {
+                    toggleListening()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(isDemoRunning ? .red : .accentColor)
+                .tint(transcriptionManager.isTranscribing ? .red : .accentColor)
                 .font(.title3)
+            }
+
+            if !transcriptionManager.statusMessage.isEmpty {
+                Text(transcriptionManager.statusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
 
             Spacer(minLength: 0)
         }
         .padding(32)
         .background(Color.black.opacity(0.02))
-        .onAppear {
-            applyDefaultsIfNeeded()
+        .task {
+            await transcriptionManager.requestPermissions()
+            await loadInstalledLanguages()
+        }
+        .onChange(of: listeningLanguageCode, initial: false) { _, newValue in
+            transcriptionManager.setListeningLanguage(newValue)
+        }
+        .onChange(of: targetLanguage, initial: false) { _, newValue in
+            transcriptionManager.setTargetLanguage(newValue)
+        }
+        .onChange(of: transcriptionManager.renderedText, initial: false) { _, newValue in
+            scheduleDebouncedSuggestionRefresh(for: newValue)
         }
         .onDisappear {
-            playbackTask?.cancel()
-            playbackTask = nil
-            isDemoRunning = false
+            suggestionRefreshTask?.cancel()
+            suggestionRefreshTask = nil
+            transcriptionManager.stop()
+            suggestionManager.clearSuggestion()
         }
     }
 
-    private func startDemo() {
-        playbackTask?.cancel()
-        playbackTask = nil
+    private var hudDisplayText: String {
+        let raw = transcriptionManager.renderedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return "" }
+        if raw.count > hudCharacterLimit {
+            return String(raw.suffix(hudCharacterLimit))
+        }
+        return raw
+    }
 
-        hudBuffer = HUDLiveView.demoDefaults.hudText
-        suggestionManager.suggestionPhonetic = HUDLiveView.demoDefaults.suggestionPhonetic
-        suggestionManager.suggestionEnglish = HUDLiveView.demoDefaults.suggestionEnglish
-        isDemoRunning = true
-
-        let timeline = demoTranslationTimeline.sorted { $0.secondsFromStart < $1.secondsFromStart }
-        playbackTask = Task { [timeline, suggestionRevealDelayAfterLastChunk] in
-            var lastTime: Double = 0
-            for entry in timeline {
-                if Task.isCancelled { break }
-
-                let waitTime = max(0, entry.secondsFromStart - lastTime)
-                lastTime = entry.secondsFromStart
-
-                if waitTime > 0 {
-                    do {
-                        try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
-                    } catch {
-                        break
-                    }
-                }
-
-                await MainActor.run {
-                    appendToHUDBuffer(entry.chunk)
-                }
-            }
-
-            if Task.isCancelled { return }
-
-            try? await Task.sleep(nanoseconds: suggestionRevealDelayAfterLastChunk)
-            if Task.isCancelled { return }
-
-            await MainActor.run {
-                suggestionManager.suggestionPhonetic = demoSuggestedReplyPhonetic
-                suggestionManager.suggestionEnglish = demoSuggestedReplyEnglish
-            }
+    private func toggleListening() {
+        if transcriptionManager.isTranscribing {
+            transcriptionManager.stop()
+            suggestionRefreshTask?.cancel()
+            suggestionRefreshTask = nil
+            suggestionManager.clearSuggestion()
+        } else {
+            transcriptionManager.startTranscribing(
+                listeningLanguage: listeningLanguageCode,
+                translatingTo: targetLanguage
+            )
         }
     }
 
-    private func appendToHUDBuffer(_ chunk: String) {
-        let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        let limited = trimmed.count > hudCharacterLimit ? String(trimmed.suffix(hudCharacterLimit)) : trimmed
-        hudBuffer = limited
+    private func scheduleDebouncedSuggestionRefresh(for text: String) {
+        suggestionRefreshTask?.cancel()
+        let delay = Self.suggestionDebounceNanoseconds
+        let lang = targetLanguage
+        suggestionRefreshTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            suggestionManager.refreshSuggestion(for: text, languageCode: lang)
+        }
     }
 
     private var suggestionCard: some View {
@@ -164,7 +145,6 @@ struct HUDLiveView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(18)
@@ -174,25 +154,22 @@ struct HUDLiveView: View {
     }
 
     private func languageLabel(for code: String) -> String {
-        TranslationLanguages.targetOptions.first(where: { $0.code == code })?.name ?? code.uppercased()
+        installedLanguages.first(where: { $0.code == code })?.name ?? TranslationLanguages.displayName(for: code)
     }
 
     private func listeningLanguageLabel(for code: String) -> String {
-        TranslationLanguages.supported.first(where: { $0.code == code })?.name ?? code.uppercased()
+        installedLanguages.first(where: { $0.code == code })?.name ?? TranslationLanguages.displayName(for: code)
     }
 
-    private func applyDefaultsIfNeeded() {
-        guard !defaultsApplied else { return }
-        defaultsApplied = true
-        hudBuffer = HUDLiveView.demoDefaults.hudText
-        suggestionManager.suggestionPhonetic = HUDLiveView.demoDefaults.suggestionPhonetic
-        suggestionManager.suggestionEnglish = HUDLiveView.demoDefaults.suggestionEnglish
-    }
-
-    private func stopDemo() {
-        playbackTask?.cancel()
-        playbackTask = nil
-        isDemoRunning = false
+    private func loadInstalledLanguages() async {
+        let installed = await TranslationLanguages.installedTargetOptions()
+        installedLanguages = installed
+        if !installed.contains(where: { $0.code == listeningLanguageCode }) {
+            listeningLanguageCode = installed.first?.code ?? "en"
+        }
+        if !installed.contains(where: { $0.code == targetLanguage }) {
+            targetLanguage = installed.first?.code ?? "en"
+        }
     }
 }
 
@@ -214,11 +191,5 @@ private extension HUDLiveView {
         }
 
         return "en"
-    }
-
-    struct DemoDefaults {
-        let hudText: String
-        let suggestionPhonetic: String
-        let suggestionEnglish: String
     }
 }

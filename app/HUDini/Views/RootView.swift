@@ -8,6 +8,7 @@ struct RootView: View {
         case hudDisplay
         case transcription
         case translation
+        case language
         case bluetooth
     }
 
@@ -54,6 +55,10 @@ struct RootView: View {
                     .tag(Tab.translation)
                     .tabItem { Label("Translate", systemImage: "globe") }
 
+                LanguageTabContent()
+                    .tag(Tab.language)
+                    .tabItem { Label("Language", systemImage: "character.book.closed") }
+
                 BluetoothDemoView()
                     .tag(Tab.bluetooth)
                     .tabItem { Label("Bluetooth", systemImage: "dot.radiowaves.left.and.right") }
@@ -94,6 +99,8 @@ struct RootView: View {
             return "Live Transcription"
         case .translation:
             return "Translation"
+        case .language:
+            return "Language"
         case .bluetooth:
             return "Bluetooth"
         }

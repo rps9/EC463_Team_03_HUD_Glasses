@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+#if canImport(Translation)
+import Translation
+#endif
 
 struct SignInView: View {
     @EnvironmentObject var authManager: AuthenticationManager
@@ -14,6 +17,8 @@ struct SignInView: View {
     @State private var password: String = ""
     @State private var confirmPassword: String = ""
     @State private var preferredSourceLanguageCode: String = "es"
+    @State private var fireDownloadPreferredLanguage: Bool = false
+    @State private var showDownloadLanguageConfirmation: Bool = false
     @FocusState private var focusedField: Field?
     
     private enum AuthTab: String, CaseIterable {
@@ -131,6 +136,10 @@ struct SignInView: View {
                 }
                 
                 Button(action: {
+                    if selectedTab == .signup,
+                       preferredSourceLanguageCode != TranslationLanguages.autoCode {
+                        showDownloadLanguageConfirmation = true
+                    }
                     Task {
                         if selectedTab == .login {
                             await authManager.signIn(email: email, password: password)
@@ -158,6 +167,21 @@ struct SignInView: View {
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .padding(.bottom, 24)
+        .confirmationDialog("Download language?", isPresented: $showDownloadLanguageConfirmation, titleVisibility: .visible) {
+            Button("Download") {
+                fireDownloadPreferredLanguage = true
+            }
+            Button("Not Now", role: .cancel) { }
+        } message: {
+            let name = TranslationLanguages.displayName(for: preferredSourceLanguageCode)
+            Text("Do you want to download \(name) for offline translation? You can also download it later from the Language tab.")
+        }
+        #if canImport(Translation)
+        .modifier(SignUpPreferredLanguageDownloadModifier(
+            preferredSourceLanguageCode: $preferredSourceLanguageCode,
+            fireDownloadOnSignUp: $fireDownloadPreferredLanguage
+        ))
+        #endif
         .onSubmit {
             if focusedField == .email {
                 focusedField = .password
@@ -179,3 +203,44 @@ struct SignInView: View {
 #Preview {
     SignInView()
 }
+
+// MARK: - Auto-download preferred language (Apple Translate) on sign up
+
+#if canImport(Translation)
+@available(iOS 26.0, *)
+struct SignUpPreferredLanguageDownloadModifier: ViewModifier {
+    @Binding var preferredSourceLanguageCode: String
+    @Binding var fireDownloadOnSignUp: Bool
+
+    private let referenceLanguage = Locale.Language(identifier: "en")
+
+    @State private var downloadConfiguration: TranslationSession.Configuration?
+    @State private var triggerDownload = false
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: fireDownloadOnSignUp) { _, shouldFire in
+                if shouldFire {
+                    triggerDownloadIfNeeded(for: preferredSourceLanguageCode)
+                    fireDownloadOnSignUp = false
+                }
+            }
+            .translationTask(downloadConfiguration) { session in
+                if triggerDownload {
+                    try? await session.prepareTranslation()
+                    triggerDownload = false
+                }
+            }
+    }
+
+    private func triggerDownloadIfNeeded(for code: String) {
+        guard code != TranslationLanguages.autoCode else { return }
+        downloadConfiguration?.invalidate()
+        downloadConfiguration = TranslationSession.Configuration(
+            source: referenceLanguage,
+            target: Locale.Language(identifier: code)
+        )
+        triggerDownload = true
+    }
+}
+#endif
