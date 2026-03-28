@@ -20,14 +20,7 @@ struct AccountSettingsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HUDCard(padding: 18) {
                     HStack(alignment: .center, spacing: 16) {
-                        ZStack {
-                            Circle()
-                                .fill(HUDTheme.accent.opacity(0.15))
-                                .frame(width: 56, height: 56)
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundStyle(HUDTheme.accent)
-                        }
+                        AccountSettingsAvatarView(photoURL: authManager.accountPhotoURL)
 
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Signed in")
@@ -192,6 +185,58 @@ struct AccountSettingsView: View {
         }
     }
 
+}
+
+// MARK: - Avatar
+
+private struct AccountSettingsAvatarView: View {
+    let photoURL: URL?
+
+    private let size: CGFloat = 56
+
+    var body: some View {
+        Group {
+            if let url = photoURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .frame(width: size, height: size)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        placeholder
+                    @unknown default:
+                        placeholder
+                    }
+                }
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+                .overlay {
+                    Circle()
+                        .stroke(HUDTheme.strokeStrong.opacity(0.55), lineWidth: 1)
+                }
+            } else {
+                placeholder
+            }
+        }
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            Circle()
+                .fill(HUDTheme.accent.opacity(0.15))
+                .frame(width: size, height: size)
+            Image(systemName: "person.crop.circle.fill")
+                .font(.system(size: 32))
+                .foregroundStyle(HUDTheme.accent)
+        }
+    }
+}
+
+private extension AccountSettingsView {
     private func accountLinkRow(title: String, icon: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)

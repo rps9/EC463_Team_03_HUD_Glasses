@@ -20,6 +20,7 @@ class AuthenticationManager: ObservableObject {
     private let session = URLSession.shared
     private let authProviderKey = "hudini.auth.provider"
     private let userEmailKey = "hudini.auth.email"
+    private let userPictureURLKey = "hudini.auth.pictureURL"
 
     private enum AuthProvider: String {
         case password
@@ -75,6 +76,14 @@ class AuthenticationManager: ObservableObject {
             return "—"
         }
     }
+
+    /// Profile photo URL from the last sign-in (Google SDK or backend `user.picture`).
+    var accountPhotoURL: URL? {
+        let raw = UserDefaults.standard.string(forKey: userPictureURLKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let raw, !raw.isEmpty else { return nil }
+        return URL(string: raw)
+    }
     
     @MainActor
     func signIn(email: String, password: String) async {
@@ -102,7 +111,12 @@ class AuthenticationManager: ObservableObject {
         
         do {
             let authResponse: AuthSessionResponse = try await perform(request)
-            finishAuthentication(with: authResponse, email: email, provider: .password)
+            finishAuthentication(
+                with: authResponse,
+                email: email,
+                provider: .password,
+                profilePhotoURLString: authResponse.user?.picture
+            )
         } catch {
             errorMessage = presentableError(from: error, fallback: "Sign in failed. Please check your email and password.")
         }
@@ -207,7 +221,15 @@ class AuthenticationManager: ObservableObject {
             request.httpBody = try JSONEncoder().encode(GoogleAuthBody(credential: credential))
 
             let authResponse: AuthSessionResponse = try await perform(request)
-            finishAuthentication(with: authResponse, email: authResponse.user?.email ?? user.profile?.email, provider: .google)
+            let fromAPI = authResponse.user?.picture?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fromGoogle = user.profile?.imageURL(withDimension: 160)?.absoluteString
+            let picture = (fromAPI?.isEmpty == false) ? fromAPI : fromGoogle
+            finishAuthentication(
+                with: authResponse,
+                email: authResponse.user?.email ?? user.profile?.email,
+                provider: .google,
+                profilePhotoURLString: picture
+            )
         } catch {
             if isUserCancelledGoogleSignIn(error) {
                 errorMessage = ""
@@ -235,11 +257,25 @@ class AuthenticationManager: ObservableObject {
     }
 
     @MainActor
-    private func finishAuthentication(with response: AuthSessionResponse, email: String?, provider: AuthProvider) {
+    private func finishAuthentication(
+        with response: AuthSessionResponse,
+        email: String?,
+        provider: AuthProvider,
+        profilePhotoURLString: String?
+    ) {
         KeychainHelper.saveToken(response.access_token)
         UserDefaults.standard.set(provider.rawValue, forKey: authProviderKey)
         if let email, !email.isEmpty {
             UserDefaults.standard.set(email, forKey: userEmailKey)
+        }
+
+        let fromUser = response.user?.picture?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = profilePhotoURLString?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pictureToStore = (resolved?.isEmpty == false) ? resolved : (fromUser?.isEmpty == false ? fromUser : nil)
+        if let pictureToStore, !pictureToStore.isEmpty {
+            UserDefaults.standard.set(pictureToStore, forKey: userPictureURLKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: userPictureURLKey)
         }
 
         isAuthenticated = true
@@ -318,6 +354,7 @@ class AuthenticationManager: ObservableObject {
     func signOut() {
         KeychainHelper.deleteToken()
         UserDefaults.standard.removeObject(forKey: userEmailKey)
+        UserDefaults.standard.removeObject(forKey: userPictureURLKey)
 
         if UserDefaults.standard.string(forKey: authProviderKey) == AuthProvider.google.rawValue {
             GIDSignIn.sharedInstance.signOut()
