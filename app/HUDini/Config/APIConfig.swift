@@ -18,4 +18,16 @@ enum APIConfig {
     static var signUpURL: URL? {
         URL(string: "\(baseURL)/auth/signup")
     }
+
+    static var googleAuthURL: URL? {
+        URL(string: "\(baseURL)/auth/google")
+    }
+
+    static var googleClientID: String? {
+        Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String
+    }
+
+    static var googleServerClientID: String? {
+        Bundle.main.object(forInfoDictionaryKey: "GIDServerClientID") as? String
+    }
 }
