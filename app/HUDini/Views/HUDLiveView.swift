@@ -3,6 +3,7 @@ import SwiftUI
 struct HUDLiveView: View {
     @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
+    /// HUD only translates into English; target picker stays in UI with a single option (independent of downloaded packs).
     @State private var targetLanguage: String = "en"
     @State private var listeningLanguageCode: String = HUDLiveView.defaultListeningLanguageCode
     @State private var installedLanguages: [TranslationLanguageOption] = TranslationLanguages.supported
@@ -10,21 +11,33 @@ struct HUDLiveView: View {
 
     private let hudCharacterLimit: Int = 260
     private static let suggestionDebounceNanoseconds: UInt64 = 450_000_000
+    private static let hudTargetLanguageCode = "en"
+    private static var hudTargetLanguageOptions: [TranslationLanguageOption] {
+        TranslationLanguages.supported.filter { $0.code == hudTargetLanguageCode }
+    }
 
     var body: some View {
         VStack(spacing: 24) {
             Spacer(minLength: 0)
 
-            Text(hudDisplayText.isEmpty ? "…" : hudDisplayText)
-                .font(.system(size: 40, weight: .semibold, design: .rounded))
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.6)
-                .lineLimit(6)
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity)
-                .padding(24)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 20))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Translated Result")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(hudDisplayText.isEmpty ? "…" : hudDisplayText)
+                    .font(.system(size: 40, weight: .semibold, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(6)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .padding(24)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             suggestionCard
 
@@ -44,12 +57,12 @@ struct HUDLiveView: View {
 
                 Menu {
                     Picker("Target language", selection: $targetLanguage) {
-                        ForEach(installedLanguages) { option in
+                        ForEach(Self.hudTargetLanguageOptions) { option in
                             Text(option.name).tag(option.code)
                         }
                     }
                 } label: {
-                    Label(languageLabel(for: targetLanguage), systemImage: "globe")
+                    Label(targetLanguageLabel, systemImage: "globe")
                         .labelStyle(.titleAndIcon)
                 }
                 .menuOrder(.fixed)
@@ -113,7 +126,7 @@ struct HUDLiveView: View {
         } else {
             transcriptionManager.startTranscribing(
                 listeningLanguage: listeningLanguageCode,
-                translatingTo: targetLanguage
+                translatingTo: Self.hudTargetLanguageCode
             )
         }
     }
@@ -121,11 +134,10 @@ struct HUDLiveView: View {
     private func scheduleDebouncedSuggestionRefresh(for text: String) {
         suggestionRefreshTask?.cancel()
         let delay = Self.suggestionDebounceNanoseconds
-        let lang = targetLanguage
         suggestionRefreshTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
-            suggestionManager.refreshSuggestion(for: text, languageCode: lang)
+            suggestionManager.refreshSuggestion(for: text, languageCode: Self.hudTargetLanguageCode)
         }
     }
 
@@ -153,8 +165,9 @@ struct HUDLiveView: View {
         }
     }
 
-    private func languageLabel(for code: String) -> String {
-        installedLanguages.first(where: { $0.code == code })?.name ?? TranslationLanguages.displayName(for: code)
+    private var targetLanguageLabel: String {
+        Self.hudTargetLanguageOptions.first?.name
+            ?? TranslationLanguages.displayName(for: Self.hudTargetLanguageCode)
     }
 
     private func listeningLanguageLabel(for code: String) -> String {
@@ -165,11 +178,9 @@ struct HUDLiveView: View {
         let installed = await TranslationLanguages.installedTargetOptions()
         installedLanguages = installed
         if !installed.contains(where: { $0.code == listeningLanguageCode }) {
-            listeningLanguageCode = installed.first?.code ?? "en"
+            listeningLanguageCode = installed.first?.code ?? Self.hudTargetLanguageCode
         }
-        if !installed.contains(where: { $0.code == targetLanguage }) {
-            targetLanguage = installed.first?.code ?? "en"
-        }
+        targetLanguage = Self.hudTargetLanguageCode
     }
 }
 
