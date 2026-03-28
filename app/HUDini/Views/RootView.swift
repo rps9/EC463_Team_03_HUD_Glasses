@@ -3,6 +3,8 @@ import SwiftUI
 struct RootView: View {
     @StateObject private var authManager = AuthenticationManager()
     @StateObject private var bluetoothManager = BluetoothDemoManager()
+    @StateObject private var conversationHistoryStore = HUDConversationHistoryStore()
+    @StateObject private var suggestionProfileStore = SuggestionProfileStore()
     @State private var hasEnteredApp = false
     @State private var showAppMenu = false
 
@@ -26,42 +28,58 @@ struct RootView: View {
     }
 
     private var mainContentView: some View {
-        NavigationStack {
-            HUDLiveView()
-                .environmentObject(bluetoothManager)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
-                                showAppMenu.toggle()
-                            }
-                        } label: {
-                            HamburgerButton(isOpen: showAppMenu)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(showAppMenu ? "Close Menu" : "Open Menu")
-                    }
-                }
-                .overlay(alignment: .topTrailing) {
-                    if showAppMenu {
-                        ZStack(alignment: .topTrailing) {
-                            Color.black.opacity(0.001)
-                                .ignoresSafeArea()
-                                .onTapGesture {
-                                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
-                                        showAppMenu = false
-                                    }
+        TabView {
+            NavigationStack {
+                HUDLiveView()
+                    .environmentObject(bluetoothManager)
+                    .environmentObject(conversationHistoryStore)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                                    showAppMenu.toggle()
                                 }
-
-                            appMenu
-                                .padding(.top, 12)
-                                .padding(.trailing, 20)
-                                .transition(.asymmetric(insertion: .scale(scale: 0.92, anchor: .topTrailing).combined(with: .opacity), removal: .scale(scale: 0.96, anchor: .topTrailing).combined(with: .opacity)))
-                                .zIndex(2)
+                            } label: {
+                                HamburgerButton(isOpen: showAppMenu)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(showAppMenu ? "Close Menu" : "Open Menu")
                         }
                     }
-                }
+                    .overlay(alignment: .topTrailing) {
+                        if showAppMenu {
+                            ZStack(alignment: .topTrailing) {
+                                Color.black.opacity(0.001)
+                                    .ignoresSafeArea()
+                                    .onTapGesture {
+                                        withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                                            showAppMenu = false
+                                        }
+                                    }
+
+                                appMenu
+                                    .padding(.top, 12)
+                                    .padding(.trailing, 20)
+                                    .transition(.asymmetric(insertion: .scale(scale: 0.92, anchor: .topTrailing).combined(with: .opacity), removal: .scale(scale: 0.96, anchor: .topTrailing).combined(with: .opacity)))
+                                    .zIndex(2)
+                            }
+                        }
+                    }
+            }
+            .tabItem {
+                Label("Live", systemImage: "dot.radiowaves.left.and.right")
+            }
+
+            NavigationStack {
+                ConversationHistoryView()
+                    .environmentObject(conversationHistoryStore)
+            }
+            .tabItem {
+                Label("History", systemImage: "clock.arrow.circlepath")
+            }
         }
+        .tint(HUDTheme.accent)
+        .environmentObject(suggestionProfileStore)
     }
 
     private var appMenu: some View {
@@ -69,6 +87,7 @@ struct RootView: View {
             NavigationLink {
                 SettingsView()
                     .environmentObject(bluetoothManager)
+                    .environmentObject(suggestionProfileStore)
             } label: {
                 menuRow(title: "Settings", icon: "slider.horizontal.3")
             }

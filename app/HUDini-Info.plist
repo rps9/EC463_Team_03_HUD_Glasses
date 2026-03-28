@@ -39,6 +39,8 @@
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>HUDini uses Bluetooth to receive live audio from the glasses.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>HUDini uses your current location only when you choose to detect it, to personalize suggestion replies.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>HUDini uses the microphone to transcribe nearby speech into text.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
