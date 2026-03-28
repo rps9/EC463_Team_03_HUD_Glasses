@@ -263,42 +263,64 @@ def auth_google(body: GoogleAuthBody):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Verify google account or use a verified account")
 
     with pool.connection() as conn, conn.cursor() as cur:
-        # Existing Google-linked account
         cur.execute(
-            "SELECT role FROM users WHERE google_sub = %s",
+            "SELECT email, role FROM users WHERE google_sub = %s",
             (google_sub,),
         )
         row = cur.fetchone()
 
-        # If the user doesn't have an account then make one
-        if not row:
-            # Create a new local user record for this Google identity (no linking by email).
-
-            # Keep password_hash populated to avoid needing to relax NOT NULL in existing schemas.
-            random_pwd = secrets.token_urlsafe(32)
-            pwd_hash = hash_password(random_pwd)
-
-            try:
-                cur.execute(
-                    """
-                    INSERT INTO users (email, email_verified, password_hash, google_sub)
-                    VALUES (%s, %s, %s, %s)
-                    """,
-                    (email, google_email_verified, pwd_hash, google_sub),
-                )
-            except UniqueViolation as e:
-                constraint = e.diag.constraint_name
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"That {constraint} has already been used.")
-                
-            role = "user"
+        if row:
+            account_email = row[0]
+            role = row[1]
         else:
-            role = row[0]
-    
-    token = create_access_token(email=email, role=role)
+            # Link to an existing password account with the same email before creating a new row.
+            cur.execute(
+                "SELECT id, role, google_sub FROM users WHERE email = %s",
+                (email,),
+            )
+            row = cur.fetchone()
+
+            if row:
+                user_id = row[0]
+                role = row[1]
+                existing_google_sub = row[2]
+
+                if existing_google_sub and existing_google_sub != google_sub:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="email is already linked to a different google account",
+                    )
+
+                cur.execute(
+                    "UPDATE users SET google_sub = %s, email_verified = TRUE WHERE id = %s",
+                    (google_sub, user_id),
+                )
+                account_email = email
+            else:
+                # Keep password_hash populated to avoid needing to relax NOT NULL in existing schemas.
+                random_pwd = secrets.token_urlsafe(32)
+                pwd_hash = hash_password(random_pwd)
+
+                try:
+                    cur.execute(
+                        """
+                        INSERT INTO users (email, email_verified, password_hash, google_sub)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (email, google_email_verified, pwd_hash, google_sub),
+                    )
+                except UniqueViolation as e:
+                    constraint = e.diag.constraint_name
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"That {constraint} has already been used.")
+
+                account_email = email
+                role = "user"
+
+    token = create_access_token(email=account_email, role=role)
     expires_at = jwt.decode(token, options={"verify_signature": False})["exp"]
     return {
         "ok": True,
-        "user": {"email": email, "name": name, "picture": picture, "role": role},
+        "user": {"email": account_email, "name": name, "picture": picture, "role": role},
         "access_token": token,
         "token_type": "bearer",
         "expires_at": expires_at,
