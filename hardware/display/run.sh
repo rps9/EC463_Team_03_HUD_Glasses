@@ -3,20 +3,19 @@ set -euo pipefail
 
 # Usage:
 #   ./run.sh
-#   ./run.sh /dev/cu.usbmodemXXXX
-
+#   ./run.sh /dev/cu.usbserial-0001
 PORT="${1:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-find_serial_port() {
-  pio device list --json-output | python3 -c '
+if [[ -z "${PORT}" ]]; then
+  PORT="$(pio device list --json-output | python3 -c '
 import json, re, sys
 devices = json.load(sys.stdin)
 
-good_port = re.compile(r"(usb(serial|modem)|ttyUSB|ttyACM|ACM)", re.I)
+good_port = re.compile(r"(usb(serial|modem)|SLAB|ttyUSB|ttyACM)", re.I)
 bad_port = re.compile(r"(debug-console|Bluetooth-Incoming-Port)", re.I)
-good_desc = re.compile(r"(RP2|Pico|USB.*Serial|CDC)", re.I)
+good_desc = re.compile(r"(CP210|CH340|USB.*UART|FTDI|Silicon Labs)", re.I)
 
 for d in devices:
     p = d.get("port", "")
@@ -34,21 +33,13 @@ for d in devices:
     if p:
         print(p)
         raise SystemExit(0)
-'
-}
-
-echo "Put the Pico 2 W into BOOTSEL mode if upload is needed."
-pio run -e pico2w -t upload
-
-if [[ -z "${PORT}" ]]; then
-  sleep 2
-  PORT="$(find_serial_port || true)"
+')"
 fi
 
 if [[ -z "${PORT}" ]]; then
-  echo "Upload finished, but no serial port was detected automatically." >&2
-  echo "Open the monitor manually with: pio device monitor -b 115200" >&2
-  exit 0
+  echo "No serial device found. Pass port explicitly: ./run.sh /dev/cu.usbserial-0001" >&2
+  exit 1
 fi
 
+pio run -e esp32dev -t upload --upload-port "${PORT}"
 pio device monitor --port "${PORT}" --baud 115200
