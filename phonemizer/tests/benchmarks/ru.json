@@ -1,0 +1,13 @@
+{
+  "language": "ru",
+  "required_rule_families": ["greeting", "politeness", "common_phrase", "academic", "lexical_rules"],
+  "thresholds": {"minimum_holdout_cases": 2, "max_exception_dependency_rate": 0.8},
+  "cases": [
+    {"text": "привет", "expected": "pree-VYET", "rule_family": "greeting", "split": "train"},
+    {"text": "спасибо", "expected": "spah-SEE-bah", "rule_family": "politeness", "split": "train"},
+    {"text": "пожалуйста", "expected": "pah-ZHAH-loo-stah", "rule_family": "common_phrase", "split": "train"},
+    {"text": "университет", "expected": "oo-nee-vehr-see-TYET", "rule_family": "academic", "split": "train"},
+    {"text": "музыка", "expected": "moo-ZIH-kah", "rule_family": "lexical_rules", "split": "holdout"},
+    {"text": "язык", "expected": "YAH-zihk", "rule_family": "lexical_rules", "split": "holdout"}
+  ]
+}

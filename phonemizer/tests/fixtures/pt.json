@@ -1,0 +1,7 @@
+[
+  {"text": "olá", "expected": "oh-LAH"},
+  {"text": "obrigado", "expected": "oh-bree-GAH-doh"},
+  {"text": "por favor", "expected": "pohr fah-VOR"},
+  {"text": "universidade", "expected": "oo-nee-vehr-see-DAH-jee"},
+  {"text": "engenharia", "expected": "ehn-zheh-nyah-REE-ah"}
+]

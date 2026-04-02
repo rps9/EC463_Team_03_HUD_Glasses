@@ -1,0 +1,13 @@
+{
+  "language": "pt",
+  "required_rule_families": ["greeting", "politeness", "academic", "technical_word", "lexical_rules"],
+  "thresholds": {"minimum_holdout_cases": 2, "max_exception_dependency_rate": 0.8},
+  "cases": [
+    {"text": "olá", "expected": "oh-LAH", "rule_family": "greeting", "split": "train"},
+    {"text": "obrigado", "expected": "oh-bree-GAH-doh", "rule_family": "politeness", "split": "train"},
+    {"text": "universidade", "expected": "oo-nee-vehr-see-DAH-jee", "rule_family": "academic", "split": "train"},
+    {"text": "engenharia", "expected": "ehn-zheh-nyah-REE-ah", "rule_family": "technical_word", "split": "train"},
+    {"text": "cidade", "expected": "see-DAH-deh", "rule_family": "lexical_rules", "split": "holdout"},
+    {"text": "trabalho", "expected": "trah-BAH-loh", "rule_family": "lexical_rules", "split": "holdout"}
+  ]
+}

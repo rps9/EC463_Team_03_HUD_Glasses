@@ -1,0 +1,7 @@
+[
+  {"text": "привет", "expected": "pree-VYET"},
+  {"text": "спасибо", "expected": "spah-SEE-bah"},
+  {"text": "пожалуйста", "expected": "pah-ZHAH-loo-stah"},
+  {"text": "университет", "expected": "oo-nee-vehr-see-TYET"},
+  {"text": "компьютер", "expected": "kohm-PYOO-tehr"}
+]

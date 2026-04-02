@@ -1,0 +1,9 @@
+[
+  {"text": "hallo", "expected": "HAH-loh"},
+  {"text": "guten tag", "expected": "GOO-ten tahk"},
+  {"text": "danke", "expected": "DAHN-kuh"},
+  {"text": "bitte", "expected": "BIT-tuh"},
+  {"text": "Scheiße", "expected": "SHY-suh"},
+  {"text": "tschüss", "expected": "CHOOS"},
+  {"text": "auf wiedersehen", "expected": "owf VEE-dehr-zayn"}
+]
