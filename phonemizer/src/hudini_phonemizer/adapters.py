@@ -387,11 +387,15 @@ class HindiAdapter(BaseAdapter):
 class BengaliAdapter(BaseAdapter):
     language_code = "bn"
 
+    def __init__(self) -> None:
+        self._epitran = epitran.Epitran("ben-Beng")
+
     def _phoneticize_word(self, word: str) -> str:
         exception = self._word_exception(word)
         if exception is not None:
             return exception
-        return _stylize_bengali_word(word)
+        ipa = self._epitran.transliterate(word)
+        return _stylize_bengali_word(word, ipa)
 
 
 class GermanAdapter(BaseAdapter):
@@ -452,15 +456,11 @@ class UrduAdapter(BaseAdapter):
 class RussianAdapter(BaseAdapter):
     language_code = "ru"
 
-    def __init__(self) -> None:
-        self._epitran = epitran.Epitran("rus-Cyrl")
-
     def _phoneticize_word(self, word: str) -> str:
         exception = self._word_exception(word)
         if exception is not None:
             return exception
-        ipa = self._epitran.transliterate(word)
-        return _stylize_russian_word(word, ipa)
+        return _stylize_russian_word(word)
 
 
 class IndonesianAdapter(BaseAdapter):
@@ -537,21 +537,35 @@ def _stylize_hindi_word(word: str, ipa: str | None = None) -> str:
     return _stylize_latin_word(romanized, stress_index=stress_index)
 
 
-def _stylize_bengali_word(word: str) -> str:
+def _stylize_bengali_word(word: str, ipa: str | None = None) -> str:
+    if ipa:
+        syllables = _syllabify_ipa(ipa)
+        if syllables:
+            readable = [_map_bengali_ipa_syllable(syllable) for syllable in syllables]
+            if (
+                len(syllables) == 2
+                and syllables[-1] in {"ʂa", "ɕa"}
+                and readable[0].endswith("ah")
+            ):
+                readable[0] += "s"
+                readable[-1] = "sah"
+            stress_index = len(readable) - 2 if len(readable) > 1 else 0
+            return StyledPronunciation(readable, stress_index=stress_index).render()
+
     romanized = _uroman_word(word).lower()
     romanized = romanized.replace("aa", "a").replace("ii", "i").replace("uu", "u")
-    romanized = romanized.replace("bh", "b").replace("dh", "d").replace("th", "t")
-    romanized = romanized.replace("sh", "sh").replace("chh", "ch").replace("kh", "k")
-    romanized = romanized.replace("ng", "ng")
+    romanized = romanized.replace("sh", "sh").replace("chh", "ch")
     stress_index = _default_penultimate_stress(romanized)
     return _stylize_latin_word(romanized, stress_index=stress_index)
 
 
 def _stylize_arabic_word(word: str) -> str:
-    romanized = _uroman_word(word).lower()
+    romanized = _romanize_abjad_word(word, variant="ar")
+    if not romanized:
+        romanized = _uroman_word(word).lower()
     romanized = romanized.replace("'", "")
     romanized = romanized.replace("aa", "a").replace("ii", "i").replace("uu", "u")
-    romanized = romanized.replace("kh", "h").replace("gh", "gh").replace("sh", "sh")
+    romanized = romanized.replace("kh", "kh").replace("gh", "gh").replace("sh", "sh")
     romanized = romanized.replace("dh", "d").replace("th", "t").replace("7", "h")
     romanized = _restore_abjad_vowels(romanized)
     stress_index = _default_penultimate_stress(romanized)
@@ -581,19 +595,21 @@ def _stylize_urdu_word(word: str) -> str:
     return _stylize_latin_word(romanized, stress_index=stress_index)
 
 def _stylize_russian_word(word: str, ipa: str | None = None) -> str:
-    if ipa:
-        syllables = _syllabify_ipa(ipa)
-        if syllables:
-            readable = [_map_russian_ipa_syllable(syllable) for syllable in syllables]
-            stress_index = len(readable) - 2 if len(readable) > 1 else 0
-            return StyledPronunciation(readable, stress_index=stress_index).render()
+    raw_romanized = _uroman_word(word).lower()
+    if raw_romanized.startswith(("ya", "ye", "yo", "yu")):
+        rest = raw_romanized[2:]
+        if rest and len(_roman_syllables(raw_romanized)) == 1:
+            readable = [
+                _map_russian_roman_syllable(raw_romanized[:2]),
+                _map_russian_roman_syllable(_prepare_russian_romanized(rest)),
+            ]
+            return StyledPronunciation(readable, stress_index=0).render()
 
-    romanized = _uroman_word(word).lower()
-    romanized = romanized.replace("zh", "zh").replace("kh", "h").replace("shch", "sh")
-    romanized = romanized.replace("sh", "sh").replace("ch", "ch").replace("yu", "yoo")
-    romanized = romanized.replace("ya", "yah").replace("yo", "yoh").replace("ye", "ye")
-    stress_index = _default_penultimate_stress(romanized)
-    return _stylize_latin_word(romanized, stress_index=stress_index)
+    romanized = _prepare_russian_romanized(raw_romanized)
+    syllables = _roman_syllables(romanized)
+    readable = [_map_russian_roman_syllable(syllable) for syllable in syllables]
+    stress_index = len(readable) - 2 if len(readable) > 1 else 0
+    return StyledPronunciation(readable, stress_index=stress_index).render()
 
 
 def _stylize_indonesian_word(word: str) -> str:
@@ -1253,6 +1269,48 @@ def _map_hindi_ipa_syllable(syllable: str) -> str:
     return _map_ipa_syllable_with(syllable, _map_hindi_ipa_unit)
 
 
+def _map_bengali_ipa_syllable(syllable: str) -> str:
+    return _map_ipa_syllable_with(syllable, _map_bengali_ipa_unit)
+
+
+def _map_bengali_ipa_unit(unit: str) -> str:
+    if unit.endswith("̃"):
+        return _map_bengali_ipa_unit(unit[:-1]) + "n"
+
+    base = unit.replace("ː", "")
+    return {
+        "a": "ah",
+        "ɔ": "oh",
+        "b": "b",
+        "b̤": "b",
+        "d": "d",
+        "d̪": "d",
+        "d̪̤": "d",
+        "f": "f",
+        "g": "g",
+        "h": "h",
+        "i": "ee",
+        "j": "y",
+        "k": "k",
+        "l": "l",
+        "l̪": "l",
+        "m": "m",
+        "n": "n",
+        "n̪": "n",
+        "ŋ": "ng",
+        "o": "oh",
+        "p": "p",
+        "r": "r",
+        "s": "s",
+        "s̪": "s",
+        "t": "t",
+        "t̪": "t",
+        "u": "oo",
+        "ɕ": "sh",
+        "ʂ": "sh",
+    }.get(base, _map_residual_ipa_unit(base))
+
+
 def _map_hindi_ipa_unit(unit: str) -> str:
     if unit.endswith("̃"):
         return _map_hindi_ipa_unit(unit[:-1]) + "n"
@@ -1293,6 +1351,66 @@ def _map_russian_ipa_syllable(syllable: str) -> str:
     return _map_ipa_syllable_with(syllable, _map_russian_ipa_unit)
 
 
+def _map_russian_roman_syllable(syllable: str) -> str:
+    text = syllable
+    replacements = [
+        ("Q", "{SH}"),
+        ("J", "{ZH}"),
+        ("X", "{KH}"),
+        ("S", "{SH}"),
+        ("C", "{CH}"),
+        ("T", "{TS}"),
+        ("yu", "{YOO}"),
+        ("yo", "{YOH}"),
+        ("ye", "{YE}"),
+        ("ya", "{YAH}"),
+    ]
+    for source, target in replacements:
+        text = text.replace(source, target)
+
+    vowel_replacements = [
+        ("a", "ah"),
+        ("e", "eh"),
+        ("i", "ee"),
+        ("o", "oh"),
+        ("u", "oo"),
+        ("y", "ih"),
+    ]
+    for source, target in vowel_replacements:
+        text = text.replace(source, target)
+
+    placeholder_replacements = [
+        ("{SH}", "sh"),
+        ("{ZH}", "zh"),
+        ("{KH}", "kh"),
+        ("{CH}", "ch"),
+        ("{TS}", "ts"),
+        ("{YOO}", "yoo"),
+        ("{YOH}", "yoh"),
+        ("{YE}", "ye"),
+        ("{YAH}", "yah"),
+    ]
+    for source, target in placeholder_replacements:
+        text = text.replace(source, target)
+
+    text = text.replace("j", "y")
+    return _cleanup_chunk(text)
+
+
+def _prepare_russian_romanized(text: str) -> str:
+    prepared = text
+    for source, target in (
+        ("shch", "Q"),
+        ("zh", "J"),
+        ("kh", "X"),
+        ("sh", "S"),
+        ("ch", "C"),
+        ("ts", "T"),
+    ):
+        prepared = prepared.replace(source, target)
+    return prepared
+
+
 def _map_russian_ipa_unit(unit: str) -> str:
     palatalized = unit.endswith("ʲ")
     base = unit[:-1] if palatalized else unit
@@ -1321,16 +1439,33 @@ def _map_russian_ipa_unit(unit: str) -> str:
         "y": "ih",
         "z": "z",
         "ɨ": "ih",
+        "x": "kh",
         "ʂ": "sh",
+        "ɕ": "sh",
         "ʃ": "sh",
         "ʒ": "zh",
-    }.get(base, base)
+        "t͡ɕ": "ch",
+        "t͡ʃ": "ch",
+        "t͡s": "ts",
+        "d͡ʒ": "j",
+    }.get(base, _map_residual_ipa_unit(base))
     if palatalized and mapped and mapped[-1] not in {"h", "y"}:
         return f"{mapped}y"
     return mapped
 
 
 def _map_portuguese_ipa_syllable(syllable: str) -> str:
+    normalized = (
+        syllable.replace("ɐ̃w̃", "own")
+        .replace("ɐ̃w", "own")
+        .replace("ẽj̃", "ayn")
+        .replace("õj̃", "oyn")
+        .replace("ɛj", "ay")
+        .replace("ej", "ay")
+        .replace("kʷ", "k")
+    )
+    if normalized != syllable:
+        return _cleanup_chunk(normalized)
     return _map_ipa_syllable_with(syllable, _map_portuguese_ipa_unit)
 
 
@@ -1369,8 +1504,11 @@ def _map_portuguese_ipa_unit(unit: str) -> str:
         "ʁ": "h",
         "ʃ": "sh",
         "ʒ": "zh",
+        "ʎ": "ly",
         "ɐ": "ah",
-    }.get(base, base)
+        "t͡ʃ": "ch",
+        "d͡ʒ": "j",
+    }.get(base, _map_residual_ipa_unit(base))
 
 
 def _map_ipa_syllable_with(syllable: str, mapper) -> str:
@@ -1381,8 +1519,158 @@ def _map_ipa_syllable_with(syllable: str, mapper) -> str:
     return _cleanup_chunk("".join(pieces))
 
 
+def _map_residual_ipa_unit(unit: str) -> str:
+    base = unit.replace("ː", "").replace("̯", "")
+    return {
+        "ç": "kh",
+        "ø": "uh",
+        "œ": "uh",
+        "ɐ": "uh",
+        "ə": "uh",
+        "ɔ": "oh",
+        "ɨ": "ih",
+        "ɡ": "g",
+        "ɲ": "ny",
+        "ŋ": "ng",
+        "ʀ": "r",
+        "ʁ": "r",
+        "ʃ": "sh",
+        "ʒ": "zh",
+        "ʂ": "sh",
+        "ɕ": "sh",
+        "x": "kh",
+        "t͡ɕ": "ch",
+        "t͡ʃ": "ch",
+        "t͡s": "ts",
+        "d͡ʒ": "j",
+    }.get(base, base)
+
+
 def _cleanup_chunk(text: str) -> str:
+    text = (
+        text.replace("ʷ", "w")
+        .replace("̩", "uh")
+        .replace("͡", "")
+    )
+    for source, target in (
+        ("ø", "uh"),
+        ("œ", "uh"),
+        ("ç", "kh"),
+        ("ɕ", "sh"),
+        ("ʂ", "sh"),
+        ("ʃ", "sh"),
+        ("ʒ", "zh"),
+        ("ɾ", "r"),
+        ("ɡ", "g"),
+        ("ŋ", "ng"),
+        ("ɨ", "ih"),
+        ("ə", "uh"),
+        ("ɐ", "uh"),
+        ("ɔ", "oh"),
+        ("ʎ", "ly"),
+    ):
+        text = text.replace(source, target)
     text = text.replace("eee", "ee")
     text = text.replace("eeeh", "ee-eh")
+    text = text.replace("uhuh", "uh")
+    text = text.replace("shk", "shk")
     text = re.sub(r"(.)\1{2,}", r"\1\1", text)
     return text
+
+
+def _romanize_abjad_word(word: str, variant: str) -> str:
+    normalized = word
+    for mark in ("\u064e", "\u064f", "\u0650", "\u0652", "\u0651", "\u064b", "\u064c", "\u064d"):
+        normalized = normalized.replace(mark, "")
+
+    consonants = {
+        "ء": "",
+        "ا": "a",
+        "آ": "aa",
+        "أ": "a",
+        "إ": "i",
+        "ب": "b",
+        "پ": "p",
+        "ت": "t",
+        "ٹ": "t",
+        "ث": "s",
+        "ج": "j",
+        "چ": "ch",
+        "ح": "h",
+        "خ": "kh",
+        "د": "d",
+        "ڈ": "d",
+        "ذ": "z",
+        "ر": "r",
+        "ڑ": "r",
+        "ز": "z",
+        "ژ": "zh",
+        "س": "s",
+        "ش": "sh",
+        "ص": "s",
+        "ض": "d",
+        "ط": "t",
+        "ظ": "z",
+        "ع": "a",
+        "غ": "gh",
+        "ف": "f",
+        "ق": "k",
+        "ك": "k",
+        "ک": "k",
+        "گ": "g",
+        "ل": "l",
+        "م": "m",
+        "ن": "n",
+        "ں": "n",
+        "ه": "h",
+        "ہ": "h",
+        "ة": "a",
+        "و": "oo",
+        "ؤ": "oo",
+        "ي": "ee",
+        "ی": "ee",
+        "ئ": "ee",
+        "ى": "a",
+        "ے": "e",
+    }
+
+    pieces: list[str] = []
+    index = 0
+    while index < len(normalized):
+        char = normalized[index]
+        next_char = normalized[index + 1] if index + 1 < len(normalized) else ""
+
+        if variant == "ar" and index == 0 and normalized.startswith("ال"):
+            pieces.extend(["a", "l"])
+            index = 2
+            continue
+
+        if char in {"ي", "ی"} and next_char == "ا":
+            pieces.append("ya")
+            index += 2
+            continue
+        if char == "و" and next_char == "ا":
+            pieces.append("wa")
+            index += 2
+            continue
+
+        mapped = consonants.get(char, "")
+        if mapped:
+            pieces.append(mapped)
+        index += 1
+
+    compact: list[str] = []
+    vowels = {"a", "e", "i", "o", "u", "y"}
+    for index, piece in enumerate(pieces):
+        compact.append(piece)
+        if index + 1 >= len(pieces):
+            continue
+        current = piece[-1]
+        nxt = pieces[index + 1][0]
+        if current in vowels or nxt in vowels:
+            continue
+        if piece.endswith("h") or pieces[index + 1].startswith(("h", "y", "w")):
+            continue
+        compact.append("a")
+
+    return "".join(compact)

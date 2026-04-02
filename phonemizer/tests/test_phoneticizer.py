@@ -123,3 +123,22 @@ def test_rule_layer_examples(text: str, language: str, expected: str) -> None:
 )
 def test_sentence_level_outputs(text: str, language: str, expected: str) -> None:
     assert phoneticize(text, language) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "language", "expected"),
+    [
+        ("سيارة", "ar", "SYAH-rah"),
+        ("শহর", "bn", "shoh-HOH-roh"),
+        ("schön", "de", "SHUHN"),
+        ("acción", "es", "AHKS-yohn"),
+        ("croissant", "fr", "krwah-SAHN"),
+        ("pakistan", "id", "pah-KEES-tahn"),
+        ("queijo", "pt", "KAY-zhoh"),
+        ("учитель", "ru", "oo-CHEE-tehl"),
+        ("پاکستان", "ur", "pah-kees-TAHN"),
+        ("学生", "zh", "shweh-shuhng"),
+    ],
+)
+def test_additional_generalization_examples(text: str, language: str, expected: str) -> None:
+    assert phoneticize(text, language) == expected

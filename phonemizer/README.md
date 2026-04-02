@@ -38,8 +38,9 @@ Examples:
 - Offline backends:
   - Mandarin: `pypinyin`
   - Spanish/French: prefer `phonemizer` with `espeak` if available, otherwise fall back to `epitran`
-  - Hindi, Bengali, Arabic, Urdu, Russian: `uroman`
-  - Indonesian and Portuguese: lightweight Latin-script formatting plus overrides
+  - Hindi, Bengali, Portuguese, German, Russian: `epitran` plus readable post-processing
+  - Arabic and Urdu: script-aware fallback plus `uroman` repair
+  - Indonesian: lightweight Latin-script formatting plus overrides
 
 ## Setup
 
@@ -101,7 +102,9 @@ python coverage_report.py --write-review-template review_template.csv
 
 - This module is intentionally narrow. It is not a full pronunciation engine.
 - French and Spanish can use `phonemizer` plus `espeak` when that backend exists on the host, but the implementation is still fully usable offline without it because the Python-only fallbacks are bundled in the virtual environment.
-- Arabic and Urdu are the weakest fully offline additions because ordinary script often omits short vowels. Common phrases are tuned with overrides, while unknown words fall back to romanization-oriented formatting.
+- Arabic and Urdu still need heuristic vowel restoration because ordinary script often omits short vowels, but the fallback now reads the script directly before applying romanization repair.
+- Bengali now uses IPA-driven rendering instead of raw romanization, which improves consonant clusters and vowel quality on unseen words.
+- Russian fallback now protects multi-letter consonant sounds before syllable splitting, which reduces broken outputs like `ch` splitting into `c` + `h`.
 - Fallback behavior:
   - Mandarin returns pinyin if readable mapping fails.
   - Other supported languages return the original token when the mapper cannot confidently improve it.
