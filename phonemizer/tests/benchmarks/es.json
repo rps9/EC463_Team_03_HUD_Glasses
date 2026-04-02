@@ -1,0 +1,13 @@
+{
+  "language": "es",
+  "required_rule_families": ["greeting", "politeness", "question", "family_word", "direction"],
+  "thresholds": {"minimum_holdout_cases": 2, "max_exception_dependency_rate": 0.75},
+  "cases": [
+    {"text": "hola", "expected": "OH-lah", "rule_family": "greeting", "split": "train"},
+    {"text": "gracias", "expected": "GRAH-see-ahs", "rule_family": "politeness", "split": "train"},
+    {"text": "por favor", "expected": "pohr fah-VOR", "rule_family": "politeness", "split": "train"},
+    {"text": "como esta", "expected": "KOH-moh ehs-TAH", "rule_family": "question", "split": "train"},
+    {"text": "familia", "expected": "fah-MEE-lyah", "rule_family": "family_word", "split": "holdout"},
+    {"text": "izquierda", "expected": "eesk-YEHR-dah", "rule_family": "direction", "split": "holdout"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "language": "fr",
+  "required_rule_families": ["greeting", "politeness", "travel", "food", "nasal_vowel"],
+  "thresholds": {"minimum_holdout_cases": 2, "max_exception_dependency_rate": 0.75},
+  "cases": [
+    {"text": "bonjour", "expected": "bohn-ZHOOR", "rule_family": "greeting", "split": "train"},
+    {"text": "merci", "expected": "mehr-SEE", "rule_family": "politeness", "split": "train"},
+    {"text": "au revoir", "expected": "oh ruh-VWAHR", "rule_family": "travel", "split": "train"},
+    {"text": "fromage", "expected": "froh-MAHZH", "rule_family": "food", "split": "train"},
+    {"text": "croissant", "expected": "krwah-SAHN", "rule_family": "nasal_vowel", "split": "holdout"},
+    {"text": "pain", "expected": "PEHN", "rule_family": "food", "split": "holdout"}
+  ]
+}

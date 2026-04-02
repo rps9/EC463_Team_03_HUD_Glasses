@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+src/hudini_phonemizer/__init__.py
+src/hudini_phonemizer/adapters.py
+src/hudini_phonemizer/core.py
+src/hudini_phonemizer/exceptions.py
+src/hudini_phonemizer/style.py
+src/hudini_phonemizer.egg-info/PKG-INFO
+src/hudini_phonemizer.egg-info/SOURCES.txt
+src/hudini_phonemizer.egg-info/dependency_links.txt
+src/hudini_phonemizer.egg-info/requires.txt
+src/hudini_phonemizer.egg-info/top_level.txt
+tests/test_phoneticizer.py

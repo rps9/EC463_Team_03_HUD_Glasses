@@ -1,0 +1,15 @@
+{
+  "language": "de",
+  "required_rule_families": ["greeting", "politeness", "loanword", "ich_sound", "technical_compound"],
+  "thresholds": {"minimum_holdout_cases": 3, "max_exception_dependency_rate": 0.7},
+  "cases": [
+    {"text": "hallo", "expected": "HAH-loh", "rule_family": "greeting", "split": "train"},
+    {"text": "danke", "expected": "DAHN-kuh", "rule_family": "politeness", "split": "train"},
+    {"text": "bitte", "expected": "BIT-tuh", "rule_family": "politeness", "split": "train"},
+    {"text": "Computer", "expected": "kuhm-PYOO-tehr", "rule_family": "loanword", "split": "train"},
+    {"text": "Ingenieur", "expected": "ehn-zhee-NYOOR", "rule_family": "technical_compound", "split": "train"},
+    {"text": "Ich", "expected": "IKH", "rule_family": "ich_sound", "split": "holdout"},
+    {"text": "Technische", "expected": "TEHK-nih-shuh", "rule_family": "ich_sound", "split": "holdout"},
+    {"text": "Computeringenieur", "expected": "kuhm-PYOO-tehr-ehn-zhee-NYOOR", "rule_family": "technical_compound", "split": "holdout"}
+  ]
+}

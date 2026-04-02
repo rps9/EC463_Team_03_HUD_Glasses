@@ -1,0 +1,13 @@
+{
+  "language": "zh",
+  "required_rule_families": ["greeting", "politeness", "question", "people"],
+  "thresholds": {"minimum_holdout_cases": 2, "max_exception_dependency_rate": 0.7},
+  "cases": [
+    {"text": "你好", "expected": "nee-how", "rule_family": "greeting", "split": "train"},
+    {"text": "谢谢", "expected": "shyeh-shyeh", "rule_family": "politeness", "split": "train"},
+    {"text": "请问", "expected": "cheeng-wuhn", "rule_family": "question", "split": "train"},
+    {"text": "老师", "expected": "low-shr", "rule_family": "people", "split": "train"},
+    {"text": "学生", "expected": "shweh-shuhng", "rule_family": "people", "split": "holdout"},
+    {"text": "朋友", "expected": "puhng-yoh", "rule_family": "people", "split": "holdout"}
+  ]
+}

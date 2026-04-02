@@ -1,0 +1,13 @@
+{
+  "language": "id",
+  "required_rule_families": ["greeting", "politeness", "common_phrase", "technology", "lexical_rules"],
+  "thresholds": {"minimum_holdout_cases": 2, "max_exception_dependency_rate": 0.7},
+  "cases": [
+    {"text": "halo", "expected": "HAH-loh", "rule_family": "greeting", "split": "train"},
+    {"text": "terima kasih", "expected": "tuh-REE-mah KAH-see", "rule_family": "politeness", "split": "train"},
+    {"text": "selamat pagi", "expected": "suh-LAH-maht PAH-gee", "rule_family": "common_phrase", "split": "train"},
+    {"text": "komputer", "expected": "kohm-PYOO-tehr", "rule_family": "technology", "split": "train"},
+    {"text": "bahasa", "expected": "bah-HAH-sah", "rule_family": "lexical_rules", "split": "holdout"},
+    {"text": "selamat", "expected": "seh-LAH-maht", "rule_family": "lexical_rules", "split": "holdout"}
+  ]
+}
