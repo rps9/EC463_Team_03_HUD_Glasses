@@ -11,7 +11,7 @@ struct BluetoothDemoView: View {
                         HUDSectionHeader(
                             eyebrow: "Bluetooth",
                             title: "Connect the HUD transceiver.",
-                            detail: "Use a clean scan-and-connect flow with the current peripheral status surfaced clearly."
+                            detail: "Scan for the MDBT42Q HUD device, connect once, and use the live peripheral status to confirm the BLE link."
                         )
 
                         HStack(spacing: 12) {
@@ -30,6 +30,12 @@ struct BluetoothDemoView: View {
                         Text(statusDisplayText)
                             .font(.system(.body, design: .rounded))
                             .foregroundStyle(HUDTheme.inkMuted)
+
+                        if !manager.peripheralStatus.isEmpty {
+                            Text("Peripheral: \(manager.peripheralStatus)")
+                                .font(.system(.footnote, design: .rounded, weight: .medium))
+                                .foregroundStyle(HUDTheme.accent)
+                        }
 
                         HStack(spacing: 12) {
                             Button("Scan") {
@@ -59,7 +65,7 @@ struct BluetoothDemoView: View {
                             .foregroundStyle(HUDTheme.ink)
 
                         if manager.discoveredDevices.isEmpty {
-                            Text("No devices discovered yet. Start a scan to find the HUDini BLE peripheral.")
+                            Text("No devices discovered yet. Start a scan to find the HUDini MDBT42Q BLE peripheral.")
                                 .font(.system(.body, design: .rounded))
                                 .foregroundStyle(HUDTheme.inkMuted)
                         } else {
@@ -78,7 +84,7 @@ struct BluetoothDemoView: View {
                                             Text(device.name)
                                                 .font(.system(.body, design: .rounded, weight: .semibold))
                                                 .foregroundStyle(HUDTheme.ink)
-                                            Text("BLE audio peripheral")
+                                            Text("HUD mic + display BLE peripheral")
                                                 .font(.system(.caption, design: .rounded))
                                                 .foregroundStyle(HUDTheme.inkMuted)
                                         }

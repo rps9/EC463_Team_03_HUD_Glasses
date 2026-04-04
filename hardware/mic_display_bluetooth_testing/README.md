@@ -27,8 +27,8 @@ The ESP32 still:
 - `DIN` / `MOSI` -> `GPIO23`
 - `CLK` / `SCK` -> `GPIO18`
 - `CS` -> `GPIO5`
-- `DC` -> `GPIO16`
-- `RST` -> `GPIO17`
+- `DC` -> `GPIO21`
+- `RST` -> `GPIO22`
 
 Notes:
 

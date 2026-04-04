@@ -216,15 +216,20 @@ struct TranscriptionView: View {
                 .foregroundStyle(.secondary)
 
             if bluetoothManager.discoveredDevices.isEmpty {
-                Text("Tap Scan to find a HUDini BLE mic.")
+                Text("Tap Scan to find the HUDini MDBT42Q BLE mic.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 8) {
                     ForEach(bluetoothManager.discoveredDevices) { device in
                         HStack {
-                            Text(device.name)
-                                .font(.body)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(device.name)
+                                    .font(.body)
+                                Text("RSSI \(device.rssi.intValue) dBm")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                             Spacer()
                             Button("Connect") {
                                 bluetoothManager.connect(to: device)

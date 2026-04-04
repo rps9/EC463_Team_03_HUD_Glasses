@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <PDM.h>
+#include <U8g2lib.h>
 #include <bluefruit.h>
+
 #include <cstring>
 
 namespace {
@@ -19,6 +21,16 @@ constexpr size_t PDM_READ_CHUNK_SAMPLES = 128;
 constexpr int PIN_PDM_CLK = 2;
 constexpr int PIN_PDM_DIN = 3;
 
+constexpr int PIN_DISPLAY_CLK = 13;
+constexpr int PIN_DISPLAY_MOSI = 14;
+constexpr int PIN_DISPLAY_CS = 15;
+constexpr int PIN_DISPLAY_DC = 16;
+constexpr int PIN_DISPLAY_RST = 17;
+
+constexpr size_t MAX_TEXT_LEN = 160;
+constexpr uint8_t LINE_HEIGHT = 10;
+constexpr uint8_t MAX_LINES = 6;
+
 const char *DEVICE_NAME = "HUDini-Mic";
 const char *SERVICE_UUID = "9A1D0001-7E54-4B1A-8B64-3A8F2C1D0001";
 const char *AUDIO_DATA_UUID = "9A1D0002-7E54-4B1A-8B64-3A8F2C1D0001";
@@ -29,6 +41,14 @@ BLEService audioService(SERVICE_UUID);
 BLECharacteristic audioDataCharacteristic(AUDIO_DATA_UUID);
 BLECharacteristic controlCharacteristic(CONTROL_UUID);
 BLECharacteristic statusCharacteristic(STATUS_UUID);
+
+U8G2_SSD1306_128X64_NONAME_F_4W_SW_SPI display(
+    U8G2_R0,
+    PIN_DISPLAY_CLK,
+    PIN_DISPLAY_MOSI,
+    PIN_DISPLAY_CS,
+    PIN_DISPLAY_DC,
+    PIN_DISPLAY_RST);
 
 volatile bool deviceConnected = false;
 volatile bool streamEnabled = false;
@@ -41,6 +61,9 @@ uint16_t packetSeq = 0;
 float dcEstimate = 0.0f;
 float smoothedGain = 1.0f;
 String inboundTextBuffer;
+String currentDisplayText = "Waiting for BLE text";
+String pendingDisplayText;
+volatile bool displayDirty = false;
 char statusValue[32] = "Idle";
 
 int16_t micRing[MIC_RING_CAPACITY];
@@ -51,9 +74,84 @@ size_t nextIndex(size_t index) {
   return (index + 1U) % MIC_RING_CAPACITY;
 }
 
+void queueDisplayText(const String &text) {
+  String trimmed = text;
+  trimmed.trim();
+  if (trimmed.length() == 0) {
+    trimmed = " ";
+  }
+
+  if (trimmed.length() > MAX_TEXT_LEN) {
+    trimmed.remove(MAX_TEXT_LEN);
+  }
+
+  pendingDisplayText = trimmed;
+  displayDirty = true;
+}
+
+void drawWrappedText(const String &text) {
+  display.clearBuffer();
+  display.setFont(u8g2_font_5x7_tf);
+
+  String remaining = text;
+  uint8_t y = 8;
+
+  for (uint8_t line = 0; line < MAX_LINES && remaining.length() > 0; ++line) {
+    int split = remaining.length();
+    while (split > 0 && display.getStrWidth(remaining.substring(0, split).c_str()) > 128) {
+      --split;
+    }
+
+    if (split <= 0) {
+      split = 1;
+    }
+
+    int preferredSplit = split;
+    while (preferredSplit > 1 && remaining[preferredSplit - 1] != ' ') {
+      --preferredSplit;
+    }
+    if (preferredSplit > 1) {
+      split = preferredSplit;
+    }
+
+    String lineText = remaining.substring(0, split);
+    lineText.trim();
+    display.drawStr(0, y, lineText.c_str());
+    y += LINE_HEIGHT;
+
+    remaining = remaining.substring(split);
+    remaining.trim();
+  }
+
+  display.sendBuffer();
+}
+
+void flushDisplayIfNeeded() {
+  if (!displayDirty) {
+    return;
+  }
+
+  currentDisplayText = pendingDisplayText;
+  displayDirty = false;
+  drawWrappedText(currentDisplayText);
+}
+
+void showBootScreen() {
+  display.begin();
+  display.clearBuffer();
+  display.setFont(u8g2_font_5x7_tf);
+  display.drawStr(0, 8, "HUDini MDBT42Q test");
+  display.drawStr(0, 18, "BLE mic + display");
+  display.drawStr(0, 28, "PDM: C2 D3");
+  display.drawStr(0, 38, "OLED: S13 M14");
+  display.drawStr(0, 48, "CS15 DC16 R17");
+  display.sendBuffer();
+}
+
 void setStatusValue(const char *text) {
   strncpy(statusValue, text, sizeof(statusValue) - 1);
   statusValue[sizeof(statusValue) - 1] = '\0';
+
   statusCharacteristic.write(reinterpret_cast<const uint8_t *>(statusValue),
                              strlen(statusValue));
   if (deviceConnected && statusNotifyEnabled) {
@@ -164,9 +262,11 @@ void controlWriteCallback(uint16_t connHandle, BLECharacteristic *characteristic
     packetSeq = 0;
     dcEstimate = 0.0f;
     smoothedGain = 1.0f;
+    queueDisplayText("Streaming audio...");
     setStatusValue("Streaming");
   } else if (upperValue == "STOP") {
     streamEnabled = false;
+    queueDisplayText("Stream stopped");
     setStatusValue("Stopped");
   } else if (upperValue.startsWith("TEXT_BEGIN")) {
     inboundTextBuffer = "";
@@ -177,9 +277,14 @@ void controlWriteCallback(uint16_t connHandle, BLECharacteristic *characteristic
     Serial.println("[BLE RX] TEXT_END");
     Serial.print("[BLE RX] ");
     Serial.println(inboundTextBuffer);
+    queueDisplayText(inboundTextBuffer);
+    setStatusValue("Rendered text");
   } else if (upperValue.startsWith("TEXT:")) {
+    const String text = originalValue.substring(5);
     Serial.print("[BLE RX] ");
-    Serial.println(originalValue.substring(5));
+    Serial.println(text);
+    queueDisplayText(text);
+    setStatusValue("Rendered text");
   }
 }
 
@@ -188,6 +293,7 @@ void connectCallback(uint16_t connHandle) {
   deviceConnected = true;
   audioNotifyEnabled = false;
   statusNotifyEnabled = false;
+  queueDisplayText("BLE connected");
   setStatusValue("Connected");
 }
 
@@ -200,6 +306,7 @@ void disconnectCallback(uint16_t connHandle, uint8_t reason) {
   streamEnabled = false;
   audioNotifyEnabled = false;
   statusNotifyEnabled = false;
+  queueDisplayText("BLE disconnected");
   setStatusValue("Disconnected");
   Bluefruit.Advertising.start(0);
 }
@@ -225,7 +332,7 @@ void setupBle() {
 
   controlCharacteristic.setProperties(CHR_PROPS_WRITE | CHR_PROPS_WRITE_WO_RESP);
   controlCharacteristic.setPermission(SECMODE_OPEN, SECMODE_OPEN);
-  controlCharacteristic.setMaxLen(128);
+  controlCharacteristic.setMaxLen(192);
   controlCharacteristic.setWriteCallback(controlWriteCallback);
   controlCharacteristic.begin();
 
@@ -251,6 +358,7 @@ void setupMic() {
   PDM.onReceive(onPdmData);
   if (!PDM.begin(1, PDM_SAMPLE_RATE)) {
     Serial.println("Failed to start PDM microphone");
+    queueDisplayText("PDM mic start failed");
     while (true) {
       delay(1000);
     }
@@ -360,15 +468,17 @@ void emitDiagnostics() {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("Starting MDBT42Q BLE mic streamer");
+  Serial.println("Starting MDBT42Q BLE mic + HUD display streamer");
 
+  showBootScreen();
   setupBle();
   setupMic();
+  queueDisplayText(currentDisplayText);
 }
 
 void loop() {
+  flushDisplayIfNeeded();
   buildAndSendAudioPacket();
   emitDiagnostics();
   delay(1);
 }
-

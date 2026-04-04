@@ -20,8 +20,8 @@ static const int PIN_I2S_DIN = 33;
 static const int PIN_DISPLAY_MOSI = 23;
 static const int PIN_DISPLAY_CLK = 18;
 static const int PIN_DISPLAY_CS = 5;
-static const int PIN_DISPLAY_DC = 16;
-static const int PIN_DISPLAY_RST = 17;
+static const int PIN_DISPLAY_DC = 21;
+static const int PIN_DISPLAY_RST = 22;
 
 static const size_t MAX_TEXT_LEN = 160;
 static const uint8_t LINE_HEIGHT = 10;
@@ -32,7 +32,7 @@ static BLEUUID AUDIO_DATA_UUID("9A1D0002-7E54-4B1A-8B64-3A8F2C1D0001");
 static BLEUUID CONTROL_UUID("9A1D0003-7E54-4B1A-8B64-3A8F2C1D0001");
 static BLEUUID STATUS_UUID("9A1D0004-7E54-4B1A-8B64-3A8F2C1D0001");
 
-U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI display(U8G2_R0, PIN_DISPLAY_CS, PIN_DISPLAY_DC, PIN_DISPLAY_RST);
+U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI display(U8G2_R2, PIN_DISPLAY_CS, PIN_DISPLAY_DC, PIN_DISPLAY_RST);
 
 BLECharacteristic *audioDataCharacteristic = nullptr;
 BLECharacteristic *statusCharacteristic = nullptr;
@@ -125,7 +125,7 @@ void showBootScreen() {
   display.drawStr(0, 18, "BLE mic + display");
   display.drawStr(0, 28, "Mic: B26 W25 D33");
   display.drawStr(0, 38, "OLED: S18 M23");
-  display.drawStr(0, 48, "CS5 DC16 RST17");
+  display.drawStr(0, 48, "CS5 DC21 RST22");
   display.sendBuffer();
 }
 

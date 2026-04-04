@@ -10,6 +10,7 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         let id = UUID()
         let name: String
         let peripheral: CBPeripheral
+        let rssi: NSNumber
     }
 
     enum ConnectionState: Equatable {
@@ -477,7 +478,7 @@ final class BluetoothDemoManager: NSObject, ObservableObject {
         discoveredDevices = []
         central.scanForPeripherals(withServices: [Self.audioService], options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
         state = .scanning
-        statusMessage = "Scanning for HUDini mic devices…"
+        statusMessage = "Scanning for HUDini MDBT42Q mic devices…"
     }
 
     private func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
@@ -501,9 +502,26 @@ extension BluetoothDemoManager: CBCentralManagerDelegate {
                                     advertisementData: [String : Any],
                                     rssi RSSI: NSNumber) {
         Task { @MainActor in
-            let name = peripheral.name ?? "Unnamed"
-            if discoveredDevices.contains(where: { $0.peripheral == peripheral }) { return }
-            discoveredDevices.append(DiscoveredDevice(name: name, peripheral: peripheral))
+            let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+            let deviceName = advertisedName ?? peripheral.name ?? "HUDini BLE Device"
+
+            if let existingIndex = discoveredDevices.firstIndex(where: { $0.peripheral == peripheral }) {
+                discoveredDevices[existingIndex] = DiscoveredDevice(
+                    name: deviceName,
+                    peripheral: peripheral,
+                    rssi: RSSI
+                )
+                return
+            }
+
+            discoveredDevices.append(
+                DiscoveredDevice(
+                    name: deviceName,
+                    peripheral: peripheral,
+                    rssi: RSSI
+                )
+            )
+            discoveredDevices.sort { $0.rssi.intValue > $1.rssi.intValue }
         }
     }
 
