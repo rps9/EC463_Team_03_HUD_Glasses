@@ -2,7 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @StateObject private var authManager = AuthenticationManager()
-    @StateObject private var bluetoothManager = BluetoothDemoManager()
+    @StateObject private var frameManager = FrameBluetoothManager()
     @StateObject private var conversationHistoryStore = HUDConversationHistoryStore()
     @StateObject private var suggestionProfileStore = SuggestionProfileStore()
     @State private var hasEnteredApp = false
@@ -35,7 +35,7 @@ struct RootView: View {
         TabView {
             NavigationStack {
                 HUDLiveView()
-                    .environmentObject(bluetoothManager)
+                    .environmentObject(frameManager)
                     .environmentObject(conversationHistoryStore)
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
@@ -92,7 +92,7 @@ struct RootView: View {
         VStack(alignment: .leading, spacing: 8) {
             NavigationLink {
                 SettingsView()
-                    .environmentObject(bluetoothManager)
+                    .environmentObject(frameManager)
                     .environmentObject(authManager)
                     .environmentObject(suggestionProfileStore)
                     .environmentObject(conversationHistoryStore)

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HUDLiveView: View {
-    @EnvironmentObject private var bluetoothManager: BluetoothDemoManager
+    @EnvironmentObject private var frameManager: FrameBluetoothManager
     @EnvironmentObject private var conversationHistoryStore: HUDConversationHistoryStore
     @AppStorage(wrappedValue: true, APIConfig.AppStorageKey.hudSuggestionEnabled) private var suggestionEnabled: Bool
     @StateObject private var transcriptionManager = TranscriptionManager()
@@ -48,17 +48,32 @@ struct HUDLiveView: View {
         }
         .onChange(of: listeningLanguageCode, initial: false) { _, newValue in
             transcriptionManager.setListeningLanguage(newValue)
+            frameManager.setRecognitionLanguage(newValue)
         }
         .onChange(of: targetLanguage, initial: false) { _, newValue in
             transcriptionManager.setTargetLanguage(newValue)
+            frameManager.setTargetLanguage(newValue)
         }
         .onChange(of: transcriptionManager.renderedText, initial: false) { _, newValue in
-            scheduleDebouncedHUDSideEffects(for: newValue)
+            if !shouldUseFrameMic {
+                scheduleDebouncedHUDSideEffects(for: newValue)
+            }
         }
-        .onChange(of: bluetoothManager.state, initial: false) { _, newState in
-            if !isTransceiverConnected(state: newState) {
+        .onChange(of: frameManager.renderedText, initial: false) { _, newValue in
+            if shouldUseFrameMic {
+                scheduleDebouncedHUDSideEffects(for: newValue)
+            }
+        }
+        .onChange(of: frameManager.state, initial: false) { _, newState in
+            if !isFrameConnected(state: newState) {
                 lastSentBLEText = ""
             }
+        }
+        .onChange(of: suggestionManager.suggestionEnglish, initial: false) { _, _ in
+            pushSuggestionToFrame()
+        }
+        .onChange(of: suggestionManager.suggestionPhonetic, initial: false) { _, _ in
+            pushSuggestionToFrame()
         }
         .onChange(of: suggestionEnabled, initial: false) { _, enabled in
             guard APIConfig.isSuggestionFeatureEnabled else { return }
@@ -66,17 +81,22 @@ struct HUDLiveView: View {
                 renderedTextDebounceTask?.cancel()
                 renderedTextDebounceTask = nil
                 suggestionManager.clearSuggestion()
+                frameManager.sendSuggestions([])
             }
         }
         .onDisappear {
             renderedTextDebounceTask?.cancel()
             renderedTextDebounceTask = nil
-            if transcriptionManager.isTranscribing {
+            if isListening {
                 persistConversationSnapshotIfNonEmpty()
             }
             transcriptionManager.stop()
+            if frameManager.isStreaming {
+                frameManager.stopAudioStream()
+            }
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
+                frameManager.sendSuggestions([])
             }
         }
     }
@@ -177,13 +197,13 @@ struct HUDLiveView: View {
                     toggleListening()
                 } label: {
                     HStack(spacing: 10) {
-                        Image(systemName: transcriptionManager.isTranscribing ? "stop.fill" : "mic.fill")
-                        Text(transcriptionManager.isTranscribing ? "Stop Listening" : "Start Listening")
+                        Image(systemName: isListening ? "stop.fill" : "mic.fill")
+                        Text(isListening ? "Stop Listening" : "Start Listening")
                     }
                 }
                 .buttonStyle(
                     HUDPrimaryButtonStyle(
-                        tint: transcriptionManager.isTranscribing ? HUDTheme.rose : HUDTheme.ink
+                        tint: isListening ? HUDTheme.rose : HUDTheme.ink
                     )
                 )
             }
@@ -199,15 +219,15 @@ struct HUDLiveView: View {
                         .foregroundStyle(HUDTheme.ink)
                     Spacer()
                     HUDStatusPill(
-                        text: isTransceiverConnected ? "Ready to send" : "Not connected",
-                        tint: isTransceiverConnected ? HUDTheme.mint : HUDTheme.amber,
+                        text: isFrameConnected ? "Ready to send" : "Not connected",
+                        tint: isFrameConnected ? HUDTheme.mint : HUDTheme.amber,
                         icon: "antenna.radiowaves.left.and.right"
                     )
                 }
 
-                Text(isTransceiverConnected
-                     ? "Translated output is mirrored to the BLE transceiver automatically whenever the rendered text changes."
-                     : "Connect the HUD transceiver from Settings > Bluetooth to send rendered output to the device.")
+                Text(isFrameConnected
+                     ? "Translated output is mirrored to the Frame glasses automatically whenever the rendered text changes."
+                     : "Connect the Frame glasses from Settings > Bluetooth to send rendered output to the device.")
                     .font(.system(.body, design: .rounded))
                     .foregroundStyle(HUDTheme.inkMuted)
             }
@@ -260,7 +280,8 @@ struct HUDLiveView: View {
     }
 
     private var hudDisplayText: String {
-        let raw = transcriptionManager.renderedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceText = shouldUseFrameMic ? frameManager.renderedText : transcriptionManager.renderedText
+        let raw = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return "" }
         if raw.count > hudCharacterLimit {
             return String(raw.suffix(hudCharacterLimit))
@@ -268,28 +289,56 @@ struct HUDLiveView: View {
         return raw
     }
 
+    private var activeTranscriptText: String {
+        shouldUseFrameMic ? frameManager.liveTranscript : transcriptionManager.transcript
+    }
+
+    private var activeRenderedText: String {
+        shouldUseFrameMic ? frameManager.renderedText : transcriptionManager.renderedText
+    }
+
+    private var shouldUseFrameMic: Bool {
+        isFrameConnected
+    }
+
+    private var isListening: Bool {
+        shouldUseFrameMic ? frameManager.isStreaming : transcriptionManager.isTranscribing
+    }
+
     private func toggleListening() {
-        if transcriptionManager.isTranscribing {
+        if isListening {
             persistConversationSnapshotIfNonEmpty()
-            transcriptionManager.stop()
+            if shouldUseFrameMic {
+                frameManager.stopAudioStream()
+            } else {
+                transcriptionManager.stop()
+            }
             renderedTextDebounceTask?.cancel()
             renderedTextDebounceTask = nil
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
+                frameManager.sendSuggestions([])
             }
         } else {
-            transcriptionManager.startTranscribing(
-                listeningLanguage: listeningLanguageCode,
-                translatingTo: Self.hudTargetLanguageCode
-            )
+            if shouldUseFrameMic {
+                frameManager.startTranscribing(
+                    listeningLanguage: listeningLanguageCode,
+                    translatingTo: Self.hudTargetLanguageCode
+                )
+            } else {
+                transcriptionManager.startTranscribing(
+                    listeningLanguage: listeningLanguageCode,
+                    translatingTo: Self.hudTargetLanguageCode
+                )
+            }
         }
     }
 
-    private var isTransceiverConnected: Bool {
-        isTransceiverConnected(state: bluetoothManager.state)
+    private var isFrameConnected: Bool {
+        isFrameConnected(state: frameManager.state)
     }
 
-    private func isTransceiverConnected(state: BluetoothDemoManager.ConnectionState) -> Bool {
+    private func isFrameConnected(state: FrameBluetoothManager.ConnectionState) -> Bool {
         if case .connected = state { return true }
         return false
     }
@@ -303,17 +352,32 @@ struct HUDLiveView: View {
             if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
                 suggestionManager.refreshSuggestion(for: text, languageCode: Self.hudTargetLanguageCode)
             }
-            pushTranslatedTextToTransceiverIfNeeded(text)
+            pushTranslatedTextToFrameIfNeeded(text)
         }
     }
 
-    private func pushTranslatedTextToTransceiverIfNeeded(_ text: String) {
+    private func pushTranslatedTextToFrameIfNeeded(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        guard isTransceiverConnected else { return }
+        guard isFrameConnected else { return }
         guard trimmed != lastSentBLEText else { return }
         lastSentBLEText = trimmed
-        bluetoothManager.sendHUDTextToTransceiver(trimmed, updateStatus: false)
+        frameManager.sendHUDTextToFrame(trimmed, isPartial: false, updateStatus: false)
+    }
+
+    private func pushSuggestionToFrame() {
+        guard isFrameConnected else { return }
+        guard APIConfig.isSuggestionFeatureEnabled, suggestionEnabled else { return }
+
+        let suggestion = FrameSuggestionDisplay(
+            text: suggestionManager.suggestionEnglish,
+            phonetic: suggestionManager.suggestionPhonetic
+        )
+        if suggestion.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            frameManager.sendSuggestions([])
+        } else {
+            frameManager.sendSuggestions([suggestion])
+        }
     }
 
     private var targetLanguageLabel: String {
@@ -336,9 +400,9 @@ struct HUDLiveView: View {
 
     /// Saves the current HUD translation when a listening session ends (stop button or leaving Live while mic is on).
     private func persistConversationSnapshotIfNonEmpty() {
-        let translated = transcriptionManager.renderedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let translated = activeRenderedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !translated.isEmpty else { return }
-        let source = transcriptionManager.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = activeTranscriptText.trimmingCharacters(in: .whitespacesAndNewlines)
         let entry = HUDConversationHistoryEntry(
             id: UUID(),
             createdAt: Date(),
@@ -354,7 +418,7 @@ struct HUDLiveView: View {
 #Preview {
     NavigationStack {
         HUDLiveView()
-            .environmentObject(BluetoothDemoManager())
+            .environmentObject(FrameBluetoothManager())
             .environmentObject(HUDConversationHistoryStore())
     }
 }

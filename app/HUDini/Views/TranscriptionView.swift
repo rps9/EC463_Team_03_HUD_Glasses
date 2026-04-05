@@ -3,13 +3,13 @@ import SwiftUI
 struct TranscriptionView: View {
     private enum AudioSource: String, CaseIterable, Identifiable {
         case iphoneMicrophone = "iPhone Microphone"
-        case bluetooth = "Bluetooth Mic"
+        case bluetooth = "Frame Glasses"
 
         var id: String { rawValue }
     }
 
     @StateObject private var mgr = TranscriptionManager()
-    @StateObject private var bluetoothManager = BluetoothDemoManager()
+    @StateObject private var frameManager = FrameBluetoothManager()
     @State private var selectedListeningCode: String = "en"
     @State private var selectedTargetCode: String = "en"
     @State private var selectedAudioSource: AudioSource = .iphoneMicrophone
@@ -48,7 +48,7 @@ struct TranscriptionView: View {
                 .pickerStyle(.menu)
                 .onChange(of: selectedListeningCode, initial: false) { _, newValue in
                     mgr.setListeningLanguage(newValue)
-                    bluetoothManager.setRecognitionLanguage(newValue)
+                    frameManager.setRecognitionLanguage(newValue)
                 }
             }
 
@@ -65,7 +65,7 @@ struct TranscriptionView: View {
                 .pickerStyle(.menu)
                 .onChange(of: selectedTargetCode, initial: false) { _, newValue in
                     mgr.setTargetLanguage(newValue)
-                    bluetoothManager.setTargetLanguage(newValue)
+                    frameManager.setTargetLanguage(newValue)
                 }
             }
 
@@ -130,7 +130,7 @@ struct TranscriptionView: View {
         case .iphoneMicrophone:
             return mgr.transcript
         case .bluetooth:
-            return bluetoothManager.liveTranscript
+            return frameManager.liveTranscript
         }
     }
 
@@ -139,7 +139,7 @@ struct TranscriptionView: View {
         case .iphoneMicrophone:
             return mgr.renderedText
         case .bluetooth:
-            return bluetoothManager.renderedText
+            return frameManager.renderedText
         }
     }
 
@@ -148,7 +148,7 @@ struct TranscriptionView: View {
         case .iphoneMicrophone:
             return mgr.statusMessage
         case .bluetooth:
-            return bluetoothManager.statusMessage
+            return frameManager.statusMessage
         }
     }
 
@@ -157,12 +157,12 @@ struct TranscriptionView: View {
         case .iphoneMicrophone:
             return mgr.isTranscribing
         case .bluetooth:
-            return bluetoothManager.isStreaming
+            return frameManager.isStreaming
         }
     }
 
     private var isBluetoothConnected: Bool {
-        if case .connected = bluetoothManager.state {
+        if case .connected = frameManager.state {
             return true
         }
         return false
@@ -180,10 +180,10 @@ struct TranscriptionView: View {
                 )
             }
         case .bluetooth:
-            if bluetoothManager.isStreaming {
-                bluetoothManager.stopAudioStream()
+            if frameManager.isStreaming {
+                frameManager.stopAudioStream()
             } else {
-                bluetoothManager.startTranscribing(
+                frameManager.startTranscribing(
                     listeningLanguage: selectedListeningCode,
                     translatingTo: selectedTargetCode
                 )
@@ -195,8 +195,8 @@ struct TranscriptionView: View {
         if mgr.isTranscribing {
             mgr.stop()
         }
-        if bluetoothManager.isStreaming {
-            bluetoothManager.stopAudioStream()
+        if frameManager.isStreaming {
+            frameManager.stopAudioStream()
         }
     }
 
@@ -205,23 +205,23 @@ struct TranscriptionView: View {
         case .iphoneMicrophone:
             mgr.resetTranscript()
         case .bluetooth:
-            bluetoothManager.clearTranscript()
+            frameManager.clearTranscript()
         }
     }
 
     private var bluetoothConnectionSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Bluetooth connection")
+            Text("Frame connection")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            if bluetoothManager.discoveredDevices.isEmpty {
-                Text("Tap Scan to find the HUDini MDBT42Q BLE mic.")
+            if frameManager.discoveredDevices.isEmpty {
+                Text("Tap Scan to find the Frame glasses.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(bluetoothManager.discoveredDevices) { device in
+                    ForEach(frameManager.discoveredDevices) { device in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(device.name)
@@ -232,7 +232,7 @@ struct TranscriptionView: View {
                             }
                             Spacer()
                             Button("Connect") {
-                                bluetoothManager.connect(to: device)
+                                frameManager.connect(to: device)
                             }
                             .buttonStyle(.bordered)
                         }
@@ -242,18 +242,18 @@ struct TranscriptionView: View {
 
             HStack(spacing: 10) {
                 Button("Scan") {
-                    bluetoothManager.beginScanning()
+                    frameManager.beginScanning()
                 }
                 .buttonStyle(.bordered)
 
                 Button("Stop Scan") {
-                    bluetoothManager.stopScanning()
+                    frameManager.stopScanning()
                 }
                 .buttonStyle(.bordered)
 
                 if isBluetoothConnected {
                     Button("Disconnect") {
-                        bluetoothManager.disconnect()
+                        frameManager.disconnect()
                     }
                     .buttonStyle(.bordered)
                 }

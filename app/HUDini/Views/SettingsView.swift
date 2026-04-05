@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject private var bluetoothManager: BluetoothDemoManager
+    @EnvironmentObject private var frameManager: FrameBluetoothManager
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -19,7 +19,7 @@ struct SettingsView: View {
 
                 NavigationLink {
                     BluetoothDemoView()
-                        .environmentObject(bluetoothManager)
+                        .environmentObject(frameManager)
                         .navigationTitle("Bluetooth")
                         .navigationBarTitleDisplayMode(.inline)
                 } label: {
@@ -96,7 +96,7 @@ struct SettingsView: View {
 #Preview {
     NavigationStack {
         SettingsView()
-            .environmentObject(BluetoothDemoManager())
+            .environmentObject(FrameBluetoothManager())
             .environmentObject(AuthenticationManager())
             .environmentObject(HUDConversationHistoryStore())
             .environmentObject(SuggestionProfileStore())
