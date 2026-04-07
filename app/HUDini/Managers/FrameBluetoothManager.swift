@@ -174,6 +174,8 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var replTextBuffer: String = ""
     private var micStateGeneration: UInt64 = 0
     private var micTransitionInFlight = false
+    private var pendingFrameMicState: Bool?
+    private var frameMicSyncTask: Task<Void, Never>?
     private lazy var streamFormat: AVAudioFormat = {
         AVAudioFormat(
             commonFormat: .pcmFormatInt16,
@@ -345,7 +347,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             guard authorization == .authorized else {
                 self.micTransitionInFlight = false
                 self.setStreamingState(false)
-                self.syncFrameMicState(false)
+                self.syncFrameRuntimeState(micEnabled: false)
                 statusMessage = "Allow Speech Recognition in Settings"
                 return
             }
@@ -353,27 +355,27 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             guard startRecognition() else {
                 self.micTransitionInFlight = false
                 self.setStreamingState(false)
-                self.syncFrameMicState(false)
+                self.syncFrameRuntimeState(micEnabled: false)
                 return
             }
             guard generation == self.micStateGeneration else { return }
 
-            syncFrameMicState(true)
-            sendRawCommand(["MIC_START"], preferredType: .withResponse)
-            sendRawCommand(["SET_STATE", "listening"], preferredType: .withResponse)
             setStreamingState(true)
-            micTransitionInFlight = false
+            syncFrameRuntimeState(micEnabled: true, status: "listening")
             statusMessage = "Streaming audio from Frame…"
         }
     }
 
     func stopAudioStream(sendCommand: Bool = true) {
         micStateGeneration &+= 1
-        micTransitionInFlight = false
         if sendCommand {
-            syncFrameMicState(false)
-            sendRawCommand(["MIC_STOP"], preferredType: .withResponse)
-            sendRawCommand(["SET_STATE", "idle"], preferredType: .withResponse)
+            micTransitionInFlight = true
+            syncFrameRuntimeState(micEnabled: false)
+        } else {
+            micTransitionInFlight = false
+            pendingFrameMicState = nil
+            frameMicSyncTask?.cancel()
+            frameMicSyncTask = nil
         }
         stopRecognition()
         setStreamingState(false)
@@ -402,8 +404,29 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         isStreaming = enabled
     }
 
-    private func syncFrameMicState(_ enabled: Bool) {
-        sendRawCommand(["SET_MIC", enabled ? "1" : "0"], preferredType: .withResponse)
+    private func syncFrameRuntimeState(micEnabled: Bool, status: String? = nil) {
+        let resolvedStatus = status ?? (micEnabled ? "listening" : "idle")
+        pendingFrameMicState = micEnabled
+        frameMicSyncTask?.cancel()
+        let generation = micStateGeneration
+        frameMicSyncTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard let self else { return }
+            guard generation == self.micStateGeneration else { return }
+            guard self.pendingFrameMicState == micEnabled else { return }
+
+            self.pendingFrameMicState = nil
+            self.micTransitionInFlight = false
+            self.peripheralStatus = "Frame mic sync timeout"
+            if micEnabled {
+                self.stopRecognition()
+                self.setStreamingState(false)
+                self.sendRawCommand(["SYNC_STATE", "0", "idle"], preferredType: .withResponse)
+                self.statusMessage = "Frame mic failed to start"
+            }
+        }
+
+        sendRawCommand(["SYNC_STATE", micEnabled ? "1" : "0", resolvedStatus], preferredType: .withResponse)
     }
 
     func sendHUDTextToFrame(_ text: String, isPartial: Bool = false, updateStatus: Bool = false) {
@@ -740,6 +763,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
     private func resetConnectionState(message: String) {
         micStateGeneration &+= 1
+        micTransitionInFlight = false
+        pendingFrameMicState = nil
+        frameMicSyncTask?.cancel()
+        frameMicSyncTask = nil
         txChar = nil
         rxChar = nil
         connectedPeripheral = nil
@@ -980,30 +1007,68 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             connectionDebugStage = "Frame app responded"
             peripheralStatus = "\(event == "BOOT" ? "Booted" : "Ready") on \(frameFirmwareVersion)"
             statusMessage = "Connected to Frame"
-            syncFrameMicState(isStreaming)
-            sendRawCommand(["SET_STATE", "idle"])
+            syncFrameRuntimeState(micEnabled: isStreaming)
+            sendRawCommand(["SET_MODE", selectedMode.rawValue], preferredType: .withResponse)
+            sendRawCommand(["SET_PREFS", preferences.commandPayload()], preferredType: .withResponse)
         case "STATUS":
             if parts.count >= 3 {
                 peripheralStatus = parts[2]
+            }
+        case "MIC_STATE":
+            let micActive = parts.count >= 3 ? parts[2] == "1" : false
+            let status = parts.count >= 6 ? parts[5] : (micActive ? "listening" : "idle")
+            let reason = parts.count >= 7 ? parts[6] : ""
+
+            peripheralStatus = "Frame mic \(micActive ? "on" : "off")"
+            if !reason.isEmpty {
+                peripheralStatus += " (\(reason))"
+            }
+
+            if pendingFrameMicState == micActive {
+                pendingFrameMicState = nil
+                frameMicSyncTask?.cancel()
+                frameMicSyncTask = nil
+                micTransitionInFlight = false
+            }
+
+            if !micActive && isStreaming && pendingFrameMicState == nil {
+                stopRecognition()
+                setStreamingState(false)
+                statusMessage = "Frame mic stopped unexpectedly"
+            } else if micActive && isStreaming {
+                statusMessage = "Streaming audio from Frame…"
+            }
+
+            if status == "error" && !micActive {
+                stopRecognition()
+                setStreamingState(false)
+                micTransitionInFlight = false
             }
         case "MODE":
             if parts.count >= 3, let mode = FrameConversationMode(rawValue: parts[2]) {
                 selectedMode = mode
             }
+        case "MIC_ERROR":
+            let detail = parts.count >= 3 ? parts[2] : "Unknown mic error"
+            pendingFrameMicState = nil
+            frameMicSyncTask?.cancel()
+            frameMicSyncTask = nil
+            micTransitionInFlight = false
+            stopRecognition()
+            setStreamingState(false)
+            peripheralStatus = detail
+            statusMessage = "Frame mic error"
         case "PREFS_SAVED":
             statusMessage = "Saved preferences on Frame"
         case "SUGGESTION_INDEX":
             if parts.count >= 3 {
                 peripheralStatus = "Showing suggestion \(parts[2])"
             }
-        case "TAP":
+        case "MIC_REQUEST":
             if parts.count >= 3 {
-                let action = parts[2]
-                peripheralStatus = "Tap gesture: \(action)"
-                if action == "toggle_listening" {
-                    let desiredEnabled = parts.count >= 4 ? parts[3] == "1" : !isStreaming
-                    handleTapToggleListening(desiredEnabled: desiredEnabled)
-                }
+                let desiredEnabled = parts[2] == "1"
+                peripheralStatus = "Tap requested mic \(desiredEnabled ? "on" : "off")"
+                handleTapToggleListening(desiredEnabled: desiredEnabled)
             }
         default:
             peripheralStatus = text

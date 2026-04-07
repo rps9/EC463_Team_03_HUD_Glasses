@@ -55,6 +55,7 @@ local state = {
   muted = false,
   mic_display_on = false,
   mic_active = false,
+  desired_mic_on = false,
   prefs = nil,
   needs_render = true,
   suggestion_index = 1,
@@ -210,6 +211,18 @@ local function set_status(status)
   state.status = status
   state.needs_render = true
   send_event({ "EVT", "STATUS", status })
+end
+
+local function emit_mic_state(reason)
+  send_event({
+    "EVT",
+    "MIC_STATE",
+    state.mic_active and "1" or "0",
+    state.mic_display_on and "1" or "0",
+    state.desired_mic_on and "1" or "0",
+    state.status,
+    reason or "",
+  })
 end
 
 local function caption_y()
@@ -496,25 +509,35 @@ local function set_mic_display(value)
   end
 end
 
+local function update_mic_visual_state(active)
+  set_mic_active(active)
+  set_mic_display(active)
+end
+
 local function safe_mic_start()
   local ok, err = pcall(frame.microphone.start, { sample_rate = 8000, bit_depth = 16 })
   if ok then
     state.audio_sequence = 0
-    set_mic_active(true)
-    set_mic_display(true)
+    state.desired_mic_on = true
+    update_mic_visual_state(true)
     set_status("listening")
+    emit_mic_state("start_ok")
     return true
   end
 
   local message = tostring(err or "")
   if string.find(message, "already started", 1, true) ~= nil then
-    set_mic_active(true)
-    set_mic_display(true)
+    update_mic_visual_state(true)
+    state.desired_mic_on = true
     set_status("listening")
+    emit_mic_state("already_started")
     return true
   end
 
+  state.desired_mic_on = false
+  update_mic_visual_state(false)
   set_status("error")
+  emit_mic_state("start_failed")
   send_event({ "EVT", "MIC_ERROR", message })
   return false
 end
@@ -522,23 +545,48 @@ end
 local function safe_mic_stop()
   local ok, err = pcall(frame.microphone.stop)
   if ok then
-    set_mic_active(false)
-    set_mic_display(false)
+    state.desired_mic_on = false
+    update_mic_visual_state(false)
     set_status("idle")
+    emit_mic_state("stop_ok")
     return true
   end
 
   local message = tostring(err or "")
   if string.find(message, "not started", 1, true) ~= nil then
-    set_mic_active(false)
-    set_mic_display(false)
+    update_mic_visual_state(false)
+    state.desired_mic_on = false
     set_status("idle")
+    emit_mic_state("already_stopped")
     return true
   end
 
+  state.desired_mic_on = state.mic_active
   set_status("error")
+  emit_mic_state("stop_failed")
   send_event({ "EVT", "MIC_ERROR", message })
   return false
+end
+
+local function sync_runtime_state(mic_enabled, status)
+  state.desired_mic_on = mic_enabled
+
+  if mic_enabled then
+    if not safe_mic_start() then
+      return false
+    end
+  else
+    if not safe_mic_stop() then
+      return false
+    end
+  end
+
+  if status ~= nil and status ~= "" then
+    set_status(status)
+  end
+
+  emit_mic_state("sync")
+  return true
 end
 
 local function handle_command(payload)
@@ -556,11 +604,17 @@ local function handle_command(payload)
 
   if command == "SET_STATE" then
     set_status(parts[2] or "idle")
+    emit_mic_state("status_only")
     return
   end
 
   if command == "SET_MIC" then
-    set_mic_display(parts[2] == "1")
+    sync_runtime_state(parts[2] == "1", parts[2] == "1" and "listening" or "idle")
+    return
+  end
+
+  if command == "SYNC_STATE" then
+    sync_runtime_state(parts[2] == "1", parts[3] or (parts[2] == "1" and "listening" or "idle"))
     return
   end
 
@@ -640,11 +694,13 @@ local function handle_command(payload)
   end
 
   if command == "MIC_START" then
+    state.desired_mic_on = true
     safe_mic_start()
     return
   end
 
   if command == "MIC_STOP" then
+    state.desired_mic_on = false
     safe_mic_stop()
     return
   end
@@ -655,13 +711,9 @@ local function bluetooth_receive(data)
 end
 
 local function on_tap()
-  local next_mic_state = not state.mic_active
-  if next_mic_state then
-    safe_mic_start()
-  else
-    safe_mic_stop()
-  end
-  send_event({ "EVT", "TAP", "toggle_listening", next_mic_state and "1" or "0" })
+  local next_mic_state = not state.desired_mic_on
+  state.desired_mic_on = next_mic_state
+  send_event({ "EVT", "MIC_REQUEST", next_mic_state and "1" or "0" })
 end
 
 local function send_audio_chunk(data)
@@ -687,10 +739,11 @@ local function run_app()
   frame.imu.tap_callback(on_tap)
   frame.display.set_brightness(state.prefs.brightness)
   set_connected(false)
-  set_mic_display(false)
-  set_mic_active(false)
+  state.desired_mic_on = false
+  update_mic_visual_state(false)
   set_status("disconnected")
   send_event({ "EVT", "BOOT", frame.FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()) })
+  emit_mic_state("boot")
 
   local max_audio_bytes = frame.bluetooth.max_length() - 3
   if max_audio_bytes % 2 == 1 then
@@ -709,9 +762,10 @@ local function run_app()
       for _ = 1, 8 do
         local audio = frame.microphone.read(max_audio_bytes)
         if audio == nil then
-          set_mic_display(false)
-          set_mic_active(false)
+          state.desired_mic_on = false
+          update_mic_visual_state(false)
           set_status("idle")
+          emit_mic_state("read_nil")
           break
         elseif audio ~= "" then
           send_audio_chunk(audio)
