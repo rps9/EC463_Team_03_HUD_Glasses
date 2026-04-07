@@ -3,6 +3,7 @@ import Foundation
 enum FrameEmbeddedApp {
     static let mainLua = #"""
 local APP_DIR = "/hudini"
+local APP_VERSION = "2026.04.07.2"
 local PREFS_PATH = APP_DIR .. "/prefs.txt"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
@@ -65,6 +66,7 @@ local state = {
     { text = "", phonetic = "" },
   },
   audio_sequence = 0,
+  tap_sequence = 0,
 }
 
 frame.display.text("HUDini", 220, 116, { color = "WHITE", spacing = 4 })
@@ -92,12 +94,23 @@ local function save_crash(err)
   end
 end
 
-local function show_crash(err)
-  local text = crash_text(err)
-  frame.display.text("HUDini crash", 24, 56, { color = "RED", spacing = 4 })
-  frame.display.text("Check /hudini/crash.txt", 24, 88, { color = "YELLOW", spacing = 4 })
-  frame.display.text(text, 24, 140, { color = "WHITE", spacing = 4 })
-  frame.display.show()
+local function emit_crash(err)
+  pcall(frame.bluetooth.send, "EVT\tCRASH\t" .. crash_text(err))
+end
+
+local function load_saved_crash()
+  local ok, f = pcall(frame.file.open, CRASH_PATH, "read")
+  if not ok or f == nil then
+    return nil
+  end
+
+  local line = f:read()
+  f:close()
+  return line
+end
+
+local function clear_saved_crash()
+  pcall(frame.file.remove, CRASH_PATH)
 end
 
 local function split_text(text, separator)
@@ -340,17 +353,15 @@ local function active_suggestion()
 end
 
 local function render_ui()
-  local mic_on = state.mic_display_on
-  local mic_color = mic_on and "GREEN" or "RED"
-
-  frame.display.set_brightness(state.prefs.brightness)
-
   if not state.connected then
-    frame.display.text("HUDini", 220, 116, { color = "WHITE", spacing = 4 })
-    frame.display.text("Awaiting connection", 150, 132, { color = "SKYBLUE", spacing = 4 })
-    frame.display.text("Open HUDini on iPhone", 145, 178, { color = "WHITE", spacing = 4 })
-    frame.display.text("Scan and Connect", 172, 224, { color = "LIGHTGREEN", spacing = 4 })
+    frame.display.power_save(true)
+    state.needs_render = false
+    return
   else
+    frame.display.power_save(false)
+    frame.display.set_brightness(state.prefs.brightness)
+    local mic_on = state.mic_display_on
+    local mic_color = mic_on and "GREEN" or "RED"
     frame.display.text("Mic:", 24, 52, { color = "WHITE", spacing = 4 })
     frame.display.text(mic_on and "ON" or "OFF", 98, 52, { color = mic_color, spacing = 4 })
 
@@ -598,7 +609,7 @@ local function handle_command(payload)
   end
 
   if command == "PING" then
-    send_event({ "EVT", "READY", frame.FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()) })
+    send_event({ "EVT", "READY", frame.FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP_VERSION })
     return
   end
 
@@ -711,9 +722,18 @@ local function bluetooth_receive(data)
 end
 
 local function on_tap()
-  local next_mic_state = not state.desired_mic_on
+  state.tap_sequence = state.tap_sequence + 1
+
+  local current_mic_state = state.mic_active
+  local next_mic_state = not current_mic_state
   state.desired_mic_on = next_mic_state
-  send_event({ "EVT", "MIC_REQUEST", next_mic_state and "1" or "0" })
+  send_event({
+    "EVT",
+    "MIC_REQUEST",
+    current_mic_state and "1" or "0",
+    next_mic_state and "1" or "0",
+    tostring(state.tap_sequence),
+  })
 end
 
 local function send_audio_chunk(data)
@@ -742,7 +762,12 @@ local function run_app()
   state.desired_mic_on = false
   update_mic_visual_state(false)
   set_status("disconnected")
-  send_event({ "EVT", "BOOT", frame.FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()) })
+  send_event({ "EVT", "BOOT", frame.FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP_VERSION })
+  local saved_crash = load_saved_crash()
+  if saved_crash ~= nil and saved_crash ~= "" then
+    send_event({ "EVT", "CRASH", crash_text(saved_crash) })
+    clear_saved_crash()
+  end
   emit_mic_state("boot")
 
   local max_audio_bytes = frame.bluetooth.max_length() - 3
@@ -781,7 +806,8 @@ end
 local ok, err = xpcall(run_app, debug.traceback)
 if not ok then
   save_crash(err)
-  show_crash(err)
+  emit_crash(err)
+  pcall(frame.display.power_save, true)
   while true do
     frame.sleep(1)
   end

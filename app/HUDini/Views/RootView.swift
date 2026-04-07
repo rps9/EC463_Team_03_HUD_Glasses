@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var authManager = AuthenticationManager()
     @StateObject private var frameManager = FrameBluetoothManager()
     @StateObject private var conversationHistoryStore = HUDConversationHistoryStore()
@@ -29,6 +30,9 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.light)
+        .onChange(of: scenePhase, initial: true) { _, newPhase in
+            frameManager.handleScenePhaseChange(newPhase)
+        }
     }
 
     private var mainContentView: some View {

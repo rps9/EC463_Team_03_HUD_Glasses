@@ -3,6 +3,7 @@ import Combine
 import CoreBluetooth
 import AVFoundation
 import Speech
+import SwiftUI
 
 struct FrameDisplayPreferences: Equatable {
     var brightness: Int = 0
@@ -133,6 +134,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let streamSampleRate: Double = 8_000
     private static let streamBitDepth: Int = 16
     private static let recognitionSampleRate: Double = 16_000
+    private static let embeddedAppVersion = "2026.04.07.2"
+    private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
+    private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
 
     @Published private(set) var state: ConnectionState = .idle
     @Published private(set) var discoveredDevices: [DiscoveredDevice] = []
@@ -142,6 +146,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     @Published private(set) var renderedText: String = ""
     @Published private(set) var isStreaming: Bool = false
     @Published private(set) var frameFirmwareVersion: String = ""
+    @Published private(set) var frameAppVersion: String = ""
     @Published private(set) var framePayloadLimit: Int = 0
     @Published private(set) var selectedLanguageCode: String = "en"
     @Published private(set) var targetLanguageCode: String = "en"
@@ -157,6 +162,12 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var txChar: CBCharacteristic?
     private var rxChar: CBCharacteristic?
     private var shouldScanWhenReady = false
+    private var shouldAttemptReconnect = false
+    private var explicitDisconnectRequested = false
+    private var lastConnectedPeripheralID: UUID?
+    private var isAppActive = true
+    private var hasReceivedFrameAppHeartbeat = false
+    private var frameAppIsCompatible = false
 
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
@@ -166,6 +177,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var latestTranslationRequestID = UUID()
     private var lastPartialTranslationAt: Date = .distantPast
     private let partialTranslationInterval: TimeInterval = 0.6
+    private var latestTranscriptSnapshot: String = ""
     private var expectedPacketSeq: UInt16?
     private var lastSentFinalCaption: String = ""
     private var lastSentPartialCaption: String = ""
@@ -175,7 +187,11 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var micStateGeneration: UInt64 = 0
     private var micTransitionInFlight = false
     private var pendingFrameMicState: Bool?
+    private var desiredStreamingState = false
+    private var queuedMicStateAfterTransition: Bool?
     private var frameMicSyncTask: Task<Void, Never>?
+    private var audioDCEstimate: Float = 0
+    private var audioSmoothedGain: Float = 1
     private lazy var streamFormat: AVAudioFormat = {
         AVAudioFormat(
             commonFormat: .pcmFormatInt16,
@@ -196,6 +212,11 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        if let storedIdentifier = UserDefaults.standard.string(forKey: Self.savedPeripheralIDKey),
+           let uuid = UUID(uuidString: storedIdentifier) {
+            lastConnectedPeripheralID = uuid
+            shouldAttemptReconnect = true
+        }
         let preferred = Locale.current.language.languageCode?.identifier ?? "en"
         if TranslationLanguages.supported.contains(where: { $0.code == preferred }) {
             selectedLanguageCode = preferred
@@ -223,6 +244,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
     func connect(to device: DiscoveredDevice) {
         stopScanning()
+        explicitDisconnectRequested = false
+        shouldAttemptReconnect = true
+        queuedMicStateAfterTransition = nil
         state = .connecting(device.name)
         connectionDebugStage = "Connect requested"
         statusMessage = "Connecting to \(device.name)…"
@@ -230,10 +254,33 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     func disconnect() {
+        explicitDisconnectRequested = true
+        shouldAttemptReconnect = false
         stopAudioStream(sendCommand: true)
         guard let peripheral = connectedPeripheral else { return }
         central.cancelPeripheralConnection(peripheral)
         resetConnectionState(message: "Disconnected")
+    }
+
+    func handleScenePhaseChange(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            isAppActive = true
+            if connectedPeripheral != nil, txChar != nil, hasReceivedFrameAppHeartbeat {
+                bootstrapFrameSession(reason: "App active")
+            } else if shouldAttemptReconnect {
+                attemptReconnectIfNeeded()
+            }
+        case .inactive:
+            break
+        case .background:
+            isAppActive = false
+            if isStreaming || desiredStreamingState {
+                stopAudioStream(sendCommand: true)
+            }
+        @unknown default:
+            break
+        }
     }
 
     func ping() {
@@ -328,15 +375,26 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     func startAudioStream(triggeredByTap: Bool = false) {
+        desiredStreamingState = true
         guard connectedPeripheral != nil, txChar != nil else {
             statusMessage = "Connect to Frame first"
             return
         }
-        guard !isStreaming, !micTransitionInFlight else { return }
+        if micTransitionInFlight {
+            queuedMicStateAfterTransition = true
+            statusMessage = "Applying latest mic request…"
+            return
+        }
+        if isStreaming {
+            syncFrameRuntimeState(micEnabled: true, status: "listening")
+            statusMessage = triggeredByTap ? "Started from Frame tap" : "Streaming audio from Frame…"
+            return
+        }
 
         statusMessage = "Requesting speech permission…"
         lastPartialTranslationAt = .distantPast
         expectedPacketSeq = nil
+        resetAudioConditioning()
         micStateGeneration &+= 1
         micTransitionInFlight = true
         let generation = micStateGeneration
@@ -367,6 +425,13 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     func stopAudioStream(sendCommand: Bool = true) {
+        desiredStreamingState = false
+        queuedMicStateAfterTransition = nil
+        if micTransitionInFlight, sendCommand {
+            queuedMicStateAfterTransition = false
+            statusMessage = "Applying latest mic request…"
+            return
+        }
         micStateGeneration &+= 1
         if sendCommand {
             micTransitionInFlight = true
@@ -416,7 +481,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             guard self.pendingFrameMicState == micEnabled else { return }
 
             self.pendingFrameMicState = nil
-            self.micTransitionInFlight = false
             self.peripheralStatus = "Frame mic sync timeout"
             if micEnabled {
                 self.stopRecognition()
@@ -424,9 +488,84 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                 self.sendRawCommand(["SYNC_STATE", "0", "idle"], preferredType: .withResponse)
                 self.statusMessage = "Frame mic failed to start"
             }
+            self.finishMicTransition()
         }
 
         sendRawCommand(["SYNC_STATE", micEnabled ? "1" : "0", resolvedStatus], preferredType: .withResponse)
+    }
+
+    private func finishMicTransition() {
+        micTransitionInFlight = false
+        guard let queued = queuedMicStateAfterTransition else { return }
+        queuedMicStateAfterTransition = nil
+        if queued == desiredStreamingState {
+            if queued {
+                startAudioStream(triggeredByTap: true)
+            } else {
+                stopAudioStream(sendCommand: true)
+            }
+        }
+    }
+
+    private func bootstrapFrameSession(reason: String) {
+        guard connectedPeripheral != nil, txChar != nil else { return }
+        guard hasReceivedFrameAppHeartbeat else {
+            ping()
+            return
+        }
+        guard frameAppIsCompatible else {
+            connectionDebugStage = "Frame app update required"
+            statusMessage = "Connected to Frame. Install or update HUDini on Frame."
+            return
+        }
+        connectionDebugStage = "Bootstrapping session"
+        statusMessage = reason
+        applyPreferences()
+        setMode(selectedMode)
+        syncFrameRuntimeState(micEnabled: desiredStreamingState && isAppActive)
+        if !lastSentTranscript.isEmpty {
+            sendRawCommand(["SHOW_TRANSCRIPT", lastSentTranscript])
+        }
+        if !lastSentFinalCaption.isEmpty {
+            sendRawCommand(["SHOW_CAPTION", "final", lastSentFinalCaption])
+        } else if !lastSentPartialCaption.isEmpty {
+            sendRawCommand(["SHOW_CAPTION", "partial", lastSentPartialCaption])
+        }
+        if !lastSentSuggestions.isEmpty {
+            sendSuggestions(lastSentSuggestions)
+        }
+    }
+
+    private func attemptReconnectIfNeeded() {
+        guard central.state == .poweredOn else { return }
+        guard connectedPeripheral == nil else { return }
+        guard shouldAttemptReconnect, let lastConnectedPeripheralID else { return }
+
+        let knownPeripherals = central.retrievePeripherals(withIdentifiers: [lastConnectedPeripheralID])
+        if let peripheral = knownPeripherals.first {
+            connectionDebugStage = "Reconnecting to known Frame"
+            statusMessage = "Reconnecting to Frame…"
+            explicitDisconnectRequested = false
+            state = .connecting(peripheral.name ?? "Frame")
+            central.connect(peripheral, options: nil)
+            return
+        }
+
+        if case .scanning = state {
+            return
+        }
+        shouldScanWhenReady = false
+        startScan()
+    }
+
+    private func rememberConnectedPeripheral(_ peripheral: CBPeripheral) {
+        lastConnectedPeripheralID = peripheral.identifier
+        UserDefaults.standard.set(peripheral.identifier.uuidString, forKey: Self.savedPeripheralIDKey)
+    }
+
+    private func clearRememberedPeripheral() {
+        lastConnectedPeripheralID = nil
+        UserDefaults.standard.removeObject(forKey: Self.savedPeripheralIDKey)
     }
 
     func sendHUDTextToFrame(_ text: String, isPartial: Bool = false, updateStatus: Bool = false) {
@@ -555,6 +694,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         recognitionRequest = nil
         expectedPacketSeq = nil
         lastPartialTranslationAt = .distantPast
+        resetAudioConditioning()
         cancelTranslation()
     }
 
@@ -571,6 +711,8 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             return
         }
 
+        latestTranscriptSnapshot = trimmed
+
         sendTranscriptToFrame(trimmed)
 
         if shouldBypassTranslation(source: selectedLanguageCode, target: targetLanguageCode) {
@@ -581,6 +723,13 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
 
         if !isFinal {
+            // As soon as a newer partial arrives, invalidate any older partial translation
+            // so we do not render text that belongs to a previous transcript snapshot.
+            latestTranslationRequestID = UUID()
+            translationTask?.cancel()
+            translationTask = nil
+
+            guard trimmed.count >= 4 else { return }
             let now = Date()
             guard now.timeIntervalSince(lastPartialTranslationAt) >= partialTranslationInterval else {
                 return
@@ -591,17 +740,19 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         sendRawCommand(["SET_STATE", "translating"])
         let requestID = UUID()
         latestTranslationRequestID = requestID
+        let transcriptSnapshot = trimmed
         translationTask?.cancel()
         translationTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let translated = try await translationClient.translate(
-                    text: trimmed,
+                    text: transcriptSnapshot,
                     source: selectedLanguageCode,
                     target: targetLanguageCode
                 )
                 guard !Task.isCancelled else { return }
                 guard latestTranslationRequestID == requestID else { return }
+                if !isFinal, latestTranscriptSnapshot != transcriptSnapshot { return }
 
                 renderedText = translated
                 sendHUDTextToFrame(translated, isPartial: !isFinal)
@@ -666,7 +817,8 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private func appendPCM16(_ payload: Data) {
         let sampleCount = payload.count / MemoryLayout<Int16>.size
         guard sampleCount > 0 else { return }
-        let recognitionPayload = upsampleForRecognitionIfNeeded(payload)
+        let conditionedPayload = preprocessPCM16(payload)
+        let recognitionPayload = upsampleForRecognitionIfNeeded(conditionedPayload)
         let recognitionSampleCount = recognitionPayload.count / MemoryLayout<Int16>.size
         if let request = recognitionRequest,
            let buffer = AVAudioPCMBuffer(pcmFormat: recognitionFormat, frameCapacity: AVAudioFrameCount(recognitionSampleCount)),
@@ -714,6 +866,40 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         request.append(buffer)
     }
 
+    private func preprocessPCM16(_ payload: Data) -> Data {
+        let sampleCount = payload.count / MemoryLayout<Int16>.size
+        guard sampleCount > 0 else { return payload }
+
+        var conditioned = Data(count: payload.count)
+        conditioned.withUnsafeMutableBytes { dstRaw in
+            guard let dst = dstRaw.bindMemory(to: Int16.self).baseAddress else { return }
+            payload.withUnsafeBytes { srcRaw in
+                guard let src = srcRaw.bindMemory(to: Int16.self).baseAddress else { return }
+
+                var sumAbs: Float = 0
+                for index in 0 ..< sampleCount {
+                    let sample = Float(src[index])
+                    audioDCEstimate += 0.01 * (sample - audioDCEstimate)
+                    let highPassed = max(-32768, min(32767, sample - audioDCEstimate))
+                    let value = Int16(highPassed.rounded())
+                    dst[index] = value
+                    sumAbs += abs(Float(value))
+                }
+
+                let avgAbs = sumAbs / max(Float(sampleCount), 1)
+                var desiredGain = Float(2500) / max(avgAbs, 250)
+                desiredGain = min(max(desiredGain, 1), 6)
+                audioSmoothedGain = (0.85 * audioSmoothedGain) + (0.15 * desiredGain)
+
+                for index in 0 ..< sampleCount {
+                    let amplified = Int32((Float(dst[index]) * audioSmoothedGain).rounded())
+                    dst[index] = Int16(max(-30000, min(30000, amplified)))
+                }
+            }
+        }
+        return conditioned
+    }
+
     private func upsampleForRecognitionIfNeeded(_ payload: Data) -> Data {
         guard Self.streamSampleRate < Self.recognitionSampleRate else { return payload }
 
@@ -749,6 +935,11 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
     }
 
+    private func resetAudioConditioning() {
+        audioDCEstimate = 0
+        audioSmoothedGain = 1
+    }
+
     private func startScan() {
         shouldScanWhenReady = false
         discoveredDevices = []
@@ -765,6 +956,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         micStateGeneration &+= 1
         micTransitionInFlight = false
         pendingFrameMicState = nil
+        queuedMicStateAfterTransition = nil
         frameMicSyncTask?.cancel()
         frameMicSyncTask = nil
         txChar = nil
@@ -776,12 +968,12 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         statusMessage = message
         peripheralStatus = ""
         frameFirmwareVersion = ""
+        frameAppVersion = ""
         framePayloadLimit = 0
+        hasReceivedFrameAppHeartbeat = false
+        frameAppIsCompatible = false
         stopRecognition()
         isStreaming = false
-        lastSentFinalCaption = ""
-        lastSentPartialCaption = ""
-        lastSentSuggestions = []
     }
 
     private func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
@@ -861,11 +1053,11 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
             installStatus = "Verifying file…"
             let verifyResponse = try await sendLuaAndAwaitMarker(
-                "local vf=assert(frame.file.open('main.lua','read')); local line=vf:read() or ''; vf:close(); print('HUDINI_VERIFY:'..line)",
+                "local vf=assert(frame.file.open('main.lua','read')); local line1=vf:read() or ''; local line2=vf:read() or ''; vf:close(); print('HUDINI_VERIFY:'..line1..'|'..line2)",
                 marker: "HUDINI_VERIFY:",
                 timeout: 4
             )
-            guard verifyResponse.contains("HUDINI_VERIFY:local APP_DIR = \"/hudini\"") else {
+            guard verifyResponse.contains("HUDINI_VERIFY:local APP_DIR = \"/hudini\"|local APP_VERSION = \"\(Self.embeddedAppVersion)\"") else {
                 throw InstallFailure.verification(verifyResponse)
             }
 
@@ -873,7 +1065,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             sendControlByte(Self.resetSignal)
             connectionDebugStage = "Install complete, waiting for reboot"
             statusMessage = "Verified upload. Waiting for Frame reboot…"
-            installStatus = "Verified and reset sent. Reconnect after reboot."
+            installStatus = "Installed HUDini app \(Self.embeddedAppVersion). Reconnect after reboot."
         } catch {
             let message = failMessage(error)
             connectionDebugStage = "Install failed"
@@ -911,6 +1103,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private func resetInstallerBuffer() {
         replTextBuffer = ""
     }
+
 
     private func appendInstallerOutput(_ text: String) {
         replTextBuffer += text
@@ -1000,16 +1193,32 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         let event = parts.dropFirst().first ?? ""
         switch event {
         case "BOOT", "READY":
+            hasReceivedFrameAppHeartbeat = true
             if parts.count >= 4 {
                 frameFirmwareVersion = parts[2]
                 framePayloadLimit = Int(parts[3]) ?? framePayloadLimit
             }
-            connectionDebugStage = "Frame app responded"
+            if parts.count >= 5 {
+                frameAppVersion = parts[4]
+                frameAppIsCompatible = Self.supportedFrameAppVersions.contains(frameAppVersion)
+                if frameAppVersion == Self.embeddedAppVersion {
+                    installStatus = "Installed HUDini app \(frameAppVersion)"
+                } else {
+                    installStatus = "Frame app version \(frameAppVersion) does not match expected \(Self.embeddedAppVersion)"
+                }
+            } else {
+                frameAppVersion = ""
+                frameAppIsCompatible = false
+                installStatus = "Unknown Frame app version. Reinstall HUDini on Frame."
+            }
+            connectionDebugStage = frameAppIsCompatible ? "Frame app responded" : "Frame app update required"
             peripheralStatus = "\(event == "BOOT" ? "Booted" : "Ready") on \(frameFirmwareVersion)"
-            statusMessage = "Connected to Frame"
-            syncFrameRuntimeState(micEnabled: isStreaming)
-            sendRawCommand(["SET_MODE", selectedMode.rawValue], preferredType: .withResponse)
-            sendRawCommand(["SET_PREFS", preferences.commandPayload()], preferredType: .withResponse)
+            statusMessage = frameAppIsCompatible
+                ? "Connected to Frame"
+                : "Connected, but the installed Frame app is outdated"
+            if frameAppIsCompatible {
+                bootstrapFrameSession(reason: "Connected to Frame")
+            }
         case "STATUS":
             if parts.count >= 3 {
                 peripheralStatus = parts[2]
@@ -1028,7 +1237,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                 pendingFrameMicState = nil
                 frameMicSyncTask?.cancel()
                 frameMicSyncTask = nil
-                micTransitionInFlight = false
+                finishMicTransition()
             }
 
             if !micActive && isStreaming && pendingFrameMicState == nil {
@@ -1042,7 +1251,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             if status == "error" && !micActive {
                 stopRecognition()
                 setStreamingState(false)
-                micTransitionInFlight = false
+                finishMicTransition()
             }
         case "MODE":
             if parts.count >= 3, let mode = FrameConversationMode(rawValue: parts[2]) {
@@ -1053,11 +1262,16 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             pendingFrameMicState = nil
             frameMicSyncTask?.cancel()
             frameMicSyncTask = nil
-            micTransitionInFlight = false
             stopRecognition()
             setStreamingState(false)
             peripheralStatus = detail
             statusMessage = "Frame mic error"
+            finishMicTransition()
+        case "CRASH":
+            let detail = parts.count >= 3 ? parts[2] : "Unknown Frame crash"
+            peripheralStatus = detail
+            statusMessage = "Frame app crashed"
+            installStatus = "Frame crash: \(detail)"
         case "PREFS_SAVED":
             statusMessage = "Saved preferences on Frame"
         case "SUGGESTION_INDEX":
@@ -1065,7 +1279,11 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                 peripheralStatus = "Showing suggestion \(parts[2])"
             }
         case "MIC_REQUEST":
-            if parts.count >= 3 {
+            if parts.count >= 4 {
+                let desiredEnabled = parts[3] == "1"
+                peripheralStatus = "Tap requested mic \(desiredEnabled ? "on" : "off")"
+                handleTapToggleListening(desiredEnabled: desiredEnabled)
+            } else if parts.count >= 3 {
                 let desiredEnabled = parts[2] == "1"
                 peripheralStatus = "Tap requested mic \(desiredEnabled ? "on" : "off")"
                 handleTapToggleListening(desiredEnabled: desiredEnabled)
@@ -1076,8 +1294,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     private func handleTapToggleListening(desiredEnabled: Bool) {
-        guard !micTransitionInFlight else { return }
-        if desiredEnabled == isStreaming { return }
+        if desiredEnabled == desiredStreamingState && desiredEnabled == isStreaming && !micTransitionInFlight { return }
         if desiredEnabled {
             startTranscribing(
                 listeningLanguage: selectedLanguageCode,
@@ -1114,11 +1331,23 @@ extension FrameBluetoothManager: CBCentralManagerDelegate {
             }
 
             discoveredDevices.sort { $0.rssi.intValue > $1.rssi.intValue }
+
+            if shouldAttemptReconnect, peripheral.identifier == lastConnectedPeripheralID, connectedPeripheral == nil {
+                stopScanning()
+                explicitDisconnectRequested = false
+                state = .connecting(deviceName)
+                connectionDebugStage = "Reconnecting to known Frame"
+                statusMessage = "Reconnecting to \(deviceName)…"
+                central.connect(peripheral, options: nil)
+            }
         }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         Task { @MainActor in
+            explicitDisconnectRequested = false
+            shouldAttemptReconnect = true
+            rememberConnectedPeripheral(peripheral)
             connectedPeripheral = peripheral
             peripheral.delegate = self
             state = .connected(peripheral.name ?? "Frame")
@@ -1138,12 +1367,18 @@ extension FrameBluetoothManager: CBCentralManagerDelegate {
 
     nonisolated func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         Task { @MainActor in
+            let reconnect = !explicitDisconnectRequested
             if let error {
                 connectionDebugStage = "Disconnected with error"
                 resetConnectionState(message: "Disconnected: \(error.localizedDescription)")
             } else {
                 connectionDebugStage = "Disconnected"
                 resetConnectionState(message: "Disconnected")
+            }
+            explicitDisconnectRequested = false
+            if reconnect {
+                shouldAttemptReconnect = true
+                attemptReconnectIfNeeded()
             }
         }
     }
@@ -1168,6 +1403,8 @@ extension FrameBluetoothManager: CBCentralManagerDelegate {
             statusMessage = "Bluetooth ready"
             if shouldScanWhenReady {
                 startScan()
+            } else {
+                attemptReconnectIfNeeded()
             }
         case .poweredOff:
             resetConnectionState(message: "Turn on Bluetooth to connect to Frame")
@@ -1242,10 +1479,8 @@ extension FrameBluetoothManager: CBPeripheralDelegate {
 
             if txChar != nil && rxChar != nil {
                 connectionDebugStage = "Waiting for Frame event"
-                statusMessage = "Frame connected. Waiting for app heartbeat…"
+                statusMessage = "Frame connected. Waiting for HUDini app heartbeat…"
                 ping()
-                applyPreferences()
-                setMode(selectedMode)
             } else {
                 connectionDebugStage = "Characteristics missing"
                 statusMessage = "Frame characteristics missing"
