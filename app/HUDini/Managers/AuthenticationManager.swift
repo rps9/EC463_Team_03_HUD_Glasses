@@ -17,6 +17,7 @@ class AuthenticationManager: ObservableObject {
     @Published var errorMessage: String = ""
     @Published var statusMessage: String = ""
     @Published var pendingVerificationEmail: String?
+    @Published private(set) var currentRole: String = "user"
     /// Held only in memory for re-attempting sign-in after email verification; not persisted.
     private var pendingVerificationPassword: String?
     @Published var isCheckingVerification: Bool = false
@@ -25,6 +26,7 @@ class AuthenticationManager: ObservableObject {
     private let authProviderKey = "hudini.auth.provider"
     private let userEmailKey = "hudini.auth.email"
     private let userPictureURLKey = "hudini.auth.pictureURL"
+    private let userRoleKey = "hudini.auth.role"
 
     private enum AuthProvider: String {
         case password
@@ -58,9 +60,20 @@ class AuthenticationManager: ObservableObject {
             let role: String?
         }
     }
+
+    private struct CurrentUserResponse: Decodable {
+        let email: String
+        let role: String
+    }
     
     init() {
         isAuthenticated = KeychainHelper.loadToken() != nil
+        currentRole = UserDefaults.standard.string(forKey: userRoleKey) ?? "user"
+        if isAuthenticated {
+            Task { @MainActor [weak self] in
+                await self?.refreshCurrentUserRole()
+            }
+        }
     }
 
     /// Email last reported by the backend or sign-in flow (may be empty for some sessions).
@@ -87,6 +100,10 @@ class AuthenticationManager: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard let raw, !raw.isEmpty else { return nil }
         return URL(string: raw)
+    }
+
+    var isAdmin: Bool {
+        currentRole == "admin" || currentRole == "owner"
     }
     
     @MainActor
@@ -289,6 +306,9 @@ class AuthenticationManager: ObservableObject {
         } else {
             UserDefaults.standard.removeObject(forKey: userPictureURLKey)
         }
+        let resolvedRole = response.user?.role ?? response.role ?? "user"
+        currentRole = resolvedRole
+        UserDefaults.standard.set(resolvedRole, forKey: userRoleKey)
 
         isAuthenticated = true
         pendingVerificationEmail = nil
@@ -417,16 +437,40 @@ class AuthenticationManager: ObservableObject {
     }
     
     @MainActor
+    func refreshCurrentUserRole() async {
+        guard let token = KeychainHelper.loadToken(),
+              let url = APIConfig.authMeURL else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        do {
+            let response: CurrentUserResponse = try await perform(request)
+            currentRole = response.role
+            UserDefaults.standard.set(response.role, forKey: userRoleKey)
+            if !response.email.isEmpty {
+                UserDefaults.standard.set(response.email, forKey: userEmailKey)
+            }
+        } catch {
+            // Keep the last known role; admin tools are additive and should fail closed.
+        }
+    }
+
+    @MainActor
     func signOut() {
         KeychainHelper.deleteToken()
         UserDefaults.standard.removeObject(forKey: userEmailKey)
         UserDefaults.standard.removeObject(forKey: userPictureURLKey)
+        UserDefaults.standard.removeObject(forKey: userRoleKey)
 
         if UserDefaults.standard.string(forKey: authProviderKey) == AuthProvider.google.rawValue {
             GIDSignIn.sharedInstance.signOut()
         }
         UserDefaults.standard.removeObject(forKey: authProviderKey)
         isAuthenticated = false
+        currentRole = "user"
         pendingVerificationEmail = nil
         pendingVerificationPassword = nil
         isCheckingVerification = false

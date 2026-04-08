@@ -110,6 +110,13 @@ enum FrameConversationMode: String, CaseIterable, Identifiable {
 
 @MainActor
 final class FrameBluetoothManager: NSObject, ObservableObject {
+    struct DevLogEntry: Identifiable {
+        let id = UUID()
+        let timestamp: Date
+        let direction: String
+        let message: String
+    }
+
     struct DiscoveredDevice: Identifiable {
         let id = UUID()
         let name: String
@@ -154,6 +161,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     @Published private(set) var isInstallingApp: Bool = false
     @Published private(set) var installStatus: String = "Not installed from phone yet"
     @Published private(set) var installerOutput: String = ""
+    @Published private(set) var devLogEntries: [DevLogEntry] = []
     @Published var preferences: FrameDisplayPreferences = .init()
     @Published var selectedMode: FrameConversationMode = .translation
 
@@ -176,12 +184,12 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var translationTask: Task<Void, Never>?
     private var latestTranslationRequestID = UUID()
     private var lastPartialTranslationAt: Date = .distantPast
-    private let partialTranslationInterval: TimeInterval = 0.6
+    private let partialTranslationInterval: TimeInterval = 0.35
     private var latestTranscriptSnapshot: String = ""
+    private var lastPartialTranslationWordCount: Int = 0
     private var expectedPacketSeq: UInt16?
     private var lastSentFinalCaption: String = ""
     private var lastSentPartialCaption: String = ""
-    private var lastSentTranscript: String = ""
     private var lastSentSuggestions: [FrameSuggestionDisplay] = []
     private var replTextBuffer: String = ""
     private var micStateGeneration: UInt64 = 0
@@ -452,7 +460,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         renderedText = ""
         lastSentFinalCaption = ""
         lastSentPartialCaption = ""
-        lastSentTranscript = ""
         cancelTranslation()
         clearFrameDisplay()
     }
@@ -460,8 +467,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     func clearFrameDisplay() {
         lastSentFinalCaption = ""
         lastSentPartialCaption = ""
-        lastSentTranscript = ""
-        sendRawCommand(["SHOW_TRANSCRIPT", ""])
         sendRawCommand(["CLEAR_CAPTION"])
     }
 
@@ -523,9 +528,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         applyPreferences()
         setMode(selectedMode)
         syncFrameRuntimeState(micEnabled: desiredStreamingState && isAppActive)
-        if !lastSentTranscript.isEmpty {
-            sendRawCommand(["SHOW_TRANSCRIPT", lastSentTranscript])
-        }
         if !lastSentFinalCaption.isEmpty {
             sendRawCommand(["SHOW_CAPTION", "final", lastSentFinalCaption])
         } else if !lastSentPartialCaption.isEmpty {
@@ -610,14 +612,28 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         sendRawCommand(["CYCLE_SUGGESTIONS"])
     }
 
+    func clearDevLog() {
+        devLogEntries = []
+    }
+
+    private func appendDevLog(direction: String, message: String) {
+        let normalized = message.replacingOccurrences(of: "\r", with: " ").replacingOccurrences(of: "\n", with: " ")
+        devLogEntries.append(DevLogEntry(timestamp: Date(), direction: direction, message: normalized))
+        if devLogEntries.count > 400 {
+            devLogEntries.removeFirst(devLogEntries.count - 400)
+        }
+    }
+
     private func sendControlByte(_ value: UInt8) {
         guard let peripheral = connectedPeripheral, let txChar else { return }
+        appendDevLog(direction: "OUT", message: "CONTROL 0x" + String(format: "%02X", value))
         peripheral.writeValue(Data([value]), for: txChar, type: txWriteType)
     }
 
     private func sendLuaLine(_ statement: String) {
         guard let peripheral = connectedPeripheral, let txChar else { return }
         guard let data = "\(statement)\n".data(using: .utf8) else { return }
+        appendDevLog(direction: "OUT", message: "LUA " + statement)
         peripheral.writeValue(data, for: txChar, type: txWriteType)
     }
 
@@ -628,6 +644,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             .joined(separator: "\t")
 
         guard let textData = payload.data(using: .utf8) else { return }
+        appendDevLog(direction: "OUT", message: payload)
         var data = Data([Self.rawPrefix])
         data.append(textData)
         let writeType = supportedWriteType(preferred: preferredType, characteristic: txChar)
@@ -694,15 +711,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         recognitionRequest = nil
         expectedPacketSeq = nil
         lastPartialTranslationAt = .distantPast
+        lastPartialTranslationWordCount = 0
         resetAudioConditioning()
         cancelTranslation()
-    }
-
-    private func sendTranscriptToFrame(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed != lastSentTranscript else { return }
-        lastSentTranscript = trimmed
-        sendRawCommand(["SHOW_TRANSCRIPT", trimmed])
     }
 
     private func handleTranscriptUpdate(text: String, isFinal: Bool) {
@@ -713,12 +724,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
         latestTranscriptSnapshot = trimmed
 
-        sendTranscriptToFrame(trimmed)
-
         if shouldBypassTranslation(source: selectedLanguageCode, target: targetLanguageCode) {
             renderedText = trimmed
             sendHUDTextToFrame(trimmed, isPartial: !isFinal)
-            sendRawCommand(["SET_STATE", isFinal ? "listening" : "translating"])
             return
         }
 
@@ -730,14 +738,18 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             translationTask = nil
 
             guard trimmed.count >= 4 else { return }
+            let partialWordCount = wordCount(in: trimmed)
+            guard partialWordCount > lastPartialTranslationWordCount else { return }
             let now = Date()
             guard now.timeIntervalSince(lastPartialTranslationAt) >= partialTranslationInterval else {
                 return
             }
             lastPartialTranslationAt = now
+            lastPartialTranslationWordCount = partialWordCount
+        } else {
+            lastPartialTranslationWordCount = wordCount(in: trimmed)
         }
 
-        sendRawCommand(["SET_STATE", "translating"])
         let requestID = UUID()
         latestTranslationRequestID = requestID
         let transcriptSnapshot = trimmed
@@ -756,14 +768,12 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
                 renderedText = translated
                 sendHUDTextToFrame(translated, isPartial: !isFinal)
-                sendRawCommand(["SET_STATE", isFinal ? "listening" : "translating"])
             } catch is CancellationError {
                 return
             } catch {
                 guard !Task.isCancelled else { return }
                 guard latestTranslationRequestID == requestID else { return }
                 statusMessage = "Translation error: \(error.localizedDescription)"
-                sendRawCommand(["SET_STATE", "error"])
             }
         }
     }
@@ -772,6 +782,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         latestTranslationRequestID = UUID()
         translationTask?.cancel()
         translationTask = nil
+    }
+
+    private func wordCount(in text: String) -> Int {
+        text.split(whereSeparator: \.isWhitespace).count
     }
 
     private func shouldBypassTranslation(source: String, target: String) -> Bool {
@@ -1185,6 +1199,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
     private func handleEvent(_ text: String) {
         let parts = text.components(separatedBy: "\t")
+        appendDevLog(direction: "IN", message: text)
         guard parts.first == "EVT" else {
             peripheralStatus = text
             return

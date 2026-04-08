@@ -365,17 +365,11 @@ local function render_ui()
     frame.display.text("Mic:", 24, 52, { color = "WHITE", spacing = 4 })
     frame.display.text(mic_on and "ON" or "OFF", 98, 52, { color = mic_color, spacing = 4 })
 
-    local transcript_bottom = draw_multiline(state.transcript_text, 24, 92, state.prefs.transcription_color, 28, 3)
-    local translation_y = 92
-    if transcript_bottom > 92 then
-      translation_y = transcript_bottom + 14
-    end
-
     local translated = state.final_caption
     if translated == "" and state.prefs.partials then
       translated = state.partial_caption
     end
-    draw_multiline(translated, 24, translation_y, state.prefs.translation_color, 28, 5)
+    draw_multiline(translated, 24, 98, state.prefs.translation_color, 30, 6)
   end
 
   frame.display.show()

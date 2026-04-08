@@ -153,6 +153,10 @@ def sign_in(body: SignInCreds):
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="signin failed")
 
+@app.get("/hudini/auth/me", status_code=status.HTTP_200_OK)
+def auth_me(user = Depends(current_user)):
+    return {"email": user["email"], "role": user["role"]}
+
 def _verify_redirect_or_json(url: str | None, status_code: int, payload: dict):
     if url:
         return RedirectResponse(url=url, status_code=302)

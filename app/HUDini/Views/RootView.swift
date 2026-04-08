@@ -33,6 +33,11 @@ struct RootView: View {
         .onChange(of: scenePhase, initial: true) { _, newPhase in
             frameManager.handleScenePhaseChange(newPhase)
         }
+        .task {
+            if authManager.isAuthenticated {
+                await authManager.refreshCurrentUserRole()
+            }
+        }
     }
 
     private var mainContentView: some View {
@@ -108,6 +113,20 @@ struct RootView: View {
                     showAppMenu = false
                 }
             })
+
+            if authManager.isAdmin {
+                NavigationLink {
+                    AdminFrameLogView()
+                        .environmentObject(frameManager)
+                } label: {
+                    menuRow(title: "Admin", icon: "terminal")
+                }
+                .simultaneousGesture(TapGesture().onEnded {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                        showAppMenu = false
+                    }
+                })
+            }
 
             Button {
                 withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {

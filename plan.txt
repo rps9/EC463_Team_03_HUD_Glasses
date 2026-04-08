@@ -1,0 +1,145 @@
+HUDini Frame Fix Plan
+
+Scope
+- Target file: app/HUDini/Managers/FrameEmbeddedApp.swift
+- Related files that will likely need changes:
+  - app/HUDini/Managers/FrameBluetoothManager.swift
+  - app/HUDini/Views/RootView.swift
+  - app/HUDini/Views/HUDLiveView.swift
+  - app/HUDini/Services/HUDTranslationClient.swift
+  - app/HUDini/Services/AppleTranslationService.swift
+
+Primary problems to solve
+1. If the app closes, backgrounds, or the glasses disconnect/reboot, the session does not recover cleanly and often requires reflashing or manually restarting one side.
+2. Translation quality is worse than the older ESP32 mic path.
+3. Tap-to-start/stop is inconsistent.
+
+Working diagnosis
+- The Frame Lua app and the iPhone manager are using a fragile runtime sync model. The phone expects a short-lived ACK-like mic confirmation via `MIC_STATE`, but reconnect/background/reboot cases are not treated as a full session re-handshake.
+- `FrameEmbeddedApp.swift` is the only real source of truth for the installed Lua app, so reliability work needs to focus on the install/verification path around that file rather than any external Lua artifact.
+- The current Frame tap flow is edge-triggered and host-mediated: tap sends `MIC_REQUEST`, the phone decides what to do, then sends `SYNC_STATE` back. That is vulnerable to race conditions, duplicate taps, delayed BLE writes, and stale `desired_mic_on`.
+- The old ESP32 mic path did two useful things before streaming: DC removal and light AGC. The current Frame path streams raw audio. Even if Frame’s mic is physically better, raw low-level / biased audio can reduce speech recognition quality.
+- Translation quality is also probably being hurt by the service choice. `HUDTranslationClient` falls back to `LibreTranslateService`, which is much weaker than Apple Translation when that is available.
+
+Plan of attack
+
+Phase 1: Harden the install path around the real Lua source
+- Treat `FrameEmbeddedApp.mainLua` as the only canonical Frame app source.
+- Audit the installer in `FrameBluetoothManager.performHUDiniInstall()` to confirm the exact embedded Lua string is what gets written to `main.lua` on the glasses.
+- Add a lightweight app version marker or hash inside the embedded Lua so the phone can verify whether the installed script matches the current app bundle.
+- On connect, compare the installed version/hash to the expected one and report mismatch clearly in the UI instead of leaving the user to infer that a reinstall is needed.
+- Goal: eliminate “works only after reflashing” situations caused by stale installed code or an unverified install.
+
+Phase 2: Add a real reconnect / rebootstrap state machine
+- Treat every new BLE connection, app foreground, and Frame `BOOT`/`READY` event as a fresh session bootstrap.
+- On bootstrap, the phone should always resend, in order:
+  1. mode
+  2. preferences
+  3. desired mic state
+  4. any active display content that should survive reconnect
+- Add explicit app lifecycle handling on iOS using scene phase notifications.
+- On app background / termination:
+  - decide whether the mic should be forcibly stopped or intentionally resumed on foreground
+  - clear any in-flight sync timers/tasks so they do not poison the next session
+- On Frame disconnect:
+  - reset transient transport state only
+  - keep durable desired state in memory so reconnect can restore it
+- Add an automatic reconnect path for the last connected peripheral instead of falling back to a dead idle state.
+- Goal: closing the app, backgrounding it, or power-cycling the glasses should require at most reconnecting, not reinstalling firmware.
+
+Phase 3: Replace the current mic sync with a single source of truth
+- Right now both sides try to track `desired_mic_on`, `mic_active`, and transition state. That is too easy to desynchronize.
+- Refactor the protocol so the phone owns the desired streaming state and the Frame only reports actual hardware state.
+- Replace the loose `MIC_REQUEST` toggle flow with an idempotent command model:
+  - tap on Frame sends “user requested toggle” event with a monotonic event id
+  - phone computes the next desired state once
+  - phone sends `SYNC_STATE(desiredState, sessionId/requestId)`
+  - Frame applies it and replies with `MIC_STATE(actualState, requestId, reason)`
+- Ignore stale ACKs and stale taps using request/session ids.
+- Debounce taps on the Frame side so accidental double-taps do not flip state twice.
+- Prevent new transitions while one is in flight, but do not silently drop them; queue the latest desired state and reconcile after the current transition completes.
+- Goal: tap behavior becomes deterministic instead of timing-sensitive.
+
+Phase 4: Harden the Frame Lua runtime against disconnects and app restarts
+- Audit `run_app()` loop and callbacks in `FrameEmbeddedApp.swift`.
+- Add explicit recovery for:
+  - Bluetooth receive callback being idle for too long
+  - microphone read returning `nil`
+  - mic already-started / already-stopped edge cases
+  - Frame app rebooting into a disconnected but recoverable state
+- Add a heartbeat or watchdog:
+  - phone sends `PING` periodically while connected
+  - Frame can mark host connectivity stale if heartbeats stop
+- On lost host connectivity, Frame should stop the mic cleanly and return to a known idle UI state rather than getting stuck half-on.
+- Goal: the glasses app should fail safe into a recoverable idle state, not a wedged one.
+
+Phase 5: Improve speech recognition quality before translation
+- Reuse the proven parts of the ESP32 audio path conceptually:
+  - DC offset removal / high-pass filtering
+  - light AGC / normalization
+  - packet-loss concealment that inserts silence for missing sequence numbers
+- Evaluate where to apply this for Frame:
+  - preferred: on the iPhone after receiving PCM, before feeding `SFSpeechAudioBufferRecognitionRequest`
+  - only consider changing Frame-side capture parameters if the Frame API supports it cleanly
+- Keep the stream at a BLE-safe rate, but validate whether the current 8 kHz source is the main bottleneck.
+- If Frame supports a higher reliable sample rate, test 16 kHz directly; if not, keep 8 kHz and improve preprocessing before recognition.
+- Add instrumentation for average audio level, clipping rate, packet loss, and recognizer error rate so quality work is measurable.
+- Goal: improve transcript quality first, because bad transcripts automatically produce bad translations.
+
+Phase 6: Improve translation quality separately from mic quality
+- Stop treating bad translation as only an audio problem.
+- Prefer Apple Translation whenever the platform supports it and the required language packs are installed.
+- Make the service selection explicit and visible in logs/status so it is obvious whether the app is using Apple Translation or LibreTranslate.
+- If Apple Translation is unavailable, improve the fallback path:
+  - validate source language selection
+  - avoid overly aggressive partial translation churn
+  - only translate stable partials or finals when confidence is better
+- Revisit the partial-translation cadence. Rapidly retranslating unstable partial speech often looks like “bad translation” even when the final result is fine.
+- Goal: better final translations and less noisy intermediate output.
+
+Phase 7: Preserve good UX across reconnects
+- Keep user preferences and selected languages intact without requiring reinstall.
+- Show precise connection/mic states in the UI:
+  - disconnected
+  - reconnecting
+  - connected_idle
+  - starting_mic
+  - streaming
+  - stopping_mic
+  - error_recoverable
+- Surface whether the installed Frame app version matches the app-bundled version.
+- If a mismatch is detected, prompt for reinstall instead of leaving the user to infer that reflashing is required.
+
+Phase 8: Test matrix before shipping changes
+- Manual scenarios:
+  - Connect, start streaming, stop streaming, repeat 20 times from phone UI
+  - Connect, start/stop 20 times from Frame tap
+  - Start streaming, background the iPhone app, foreground it, verify recovery
+  - Start streaming, force-close the iPhone app, relaunch, reconnect, verify no reinstall needed
+  - Reboot/power-cycle Frame while app stays open, verify rebootstrap
+  - Disconnect BLE mid-stream, reconnect, verify mic and captions recover correctly
+  - Compare transcript quality between current branch and filtered/AGC branch with the same spoken samples
+  - Compare Apple Translation vs LibreTranslate on the same transcripts
+- Add logging around:
+  - session ids
+  - request ids
+  - tap events
+  - mic transition start/finish
+  - BOOT/READY reception
+  - reconnect attempts
+  - recognizer errors
+
+Expected implementation order
+1. Unify the Lua source and protocol.
+2. Fix reconnect/bootstrap behavior.
+3. Redesign tap/mic state synchronization.
+4. Add audio conditioning and metrics.
+5. Improve translation service selection and partial-translation behavior.
+6. Run the test matrix and tune based on logs.
+
+Success criteria
+- Closing or backgrounding the app does not require reflashing the glasses.
+- Rebooting or disconnecting the glasses does not require reflashing the glasses.
+- Tap-to-start/stop behaves consistently across repeated trials.
+- Transcript quality is measurably better on the same speech samples.
+- Final translation quality improves, with fewer noisy partial updates.

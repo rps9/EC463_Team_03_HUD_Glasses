@@ -29,6 +29,7 @@ final class HUDTranscriptionTranslationPipeline {
     private var translationTask: Task<Void, Never>?
     private var latestRequestID = UUID()
     private var latestTranscriptSnapshot: String = ""
+    private var lastPartialTranslationWordCount: Int = 0
 
     init(
         transcriptionService: HUDTranscriptionService? = nil,
@@ -111,6 +112,14 @@ final class HUDTranscriptionTranslationPipeline {
             return
         }
 
+        if !update.isFinal {
+            let partialWordCount = wordCount(in: trimmed)
+            guard partialWordCount > lastPartialTranslationWordCount else { return }
+            lastPartialTranslationWordCount = partialWordCount
+        } else {
+            lastPartialTranslationWordCount = wordCount(in: trimmed)
+        }
+
         let requestID = UUID()
         latestRequestID = requestID
         translationTask?.cancel()
@@ -141,6 +150,7 @@ final class HUDTranscriptionTranslationPipeline {
         latestRequestID = UUID()
         translationTask?.cancel()
         translationTask = nil
+        lastPartialTranslationWordCount = 0
     }
 
     private func shouldBypassTranslation(source: String, target: String) -> Bool {
@@ -160,5 +170,9 @@ final class HUDTranscriptionTranslationPipeline {
         }
 
         return cleaned
+    }
+
+    private func wordCount(in text: String) -> Int {
+        text.split(whereSeparator: \.isWhitespace).count
     }
 }
