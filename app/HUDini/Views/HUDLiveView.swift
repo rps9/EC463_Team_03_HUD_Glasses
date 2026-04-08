@@ -9,7 +9,7 @@ struct HUDLiveView: View {
     @StateObject private var suggestionManager = HUDSuggestionManager()
     @State private var targetLanguage: String = "en"
     @State private var listeningLanguageCode: String = TranslationLanguages.defaultListeningLanguageCode
-    @State private var installedLanguages: [TranslationLanguageOption] = TranslationLanguages.supported
+    @State private var listeningLanguageOptions: [TranslationLanguageOption] = TranslationLanguages.supported
     @State private var renderedTextDebounceTask: Task<Void, Never>?
     @State private var lastSentBLEText: String = ""
 
@@ -45,7 +45,7 @@ struct HUDLiveView: View {
         }
         .task {
             await transcriptionManager.requestPermissions()
-            await loadInstalledLanguages()
+            loadListeningLanguages()
             applyInitialLanguageConfiguration()
         }
         .onChange(of: listeningLanguageCode, initial: false) { _, newValue in
@@ -58,12 +58,12 @@ struct HUDLiveView: View {
         }
         .onChange(of: transcriptionManager.renderedText, initial: false) { _, newValue in
             if !shouldUseFrameMic {
-                scheduleDebouncedHUDSideEffects(for: newValue)
+                scheduleDebouncedHUDSideEffects(for: newValue, mirrorToFrame: true)
             }
         }
         .onChange(of: frameManager.renderedText, initial: false) { _, newValue in
             if shouldUseFrameMic {
-                scheduleDebouncedHUDSideEffects(for: newValue)
+                scheduleDebouncedHUDSideEffects(for: newValue, mirrorToFrame: false)
             }
         }
         .onChange(of: frameManager.state, initial: false) { _, newState in
@@ -71,19 +71,12 @@ struct HUDLiveView: View {
                 lastSentBLEText = ""
             }
         }
-        .onChange(of: suggestionManager.suggestionEnglish, initial: false) { _, _ in
-            pushSuggestionToFrame()
-        }
-        .onChange(of: suggestionManager.suggestionPhonetic, initial: false) { _, _ in
-            pushSuggestionToFrame()
-        }
         .onChange(of: suggestionEnabled, initial: false) { _, enabled in
             guard APIConfig.isSuggestionFeatureEnabled else { return }
             if !enabled {
                 renderedTextDebounceTask?.cancel()
                 renderedTextDebounceTask = nil
                 suggestionManager.clearSuggestion()
-                frameManager.sendSuggestions([])
             }
         }
         .onDisappear {
@@ -98,7 +91,6 @@ struct HUDLiveView: View {
             }
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
-                frameManager.sendSuggestions([])
             }
         }
     }
@@ -183,7 +175,7 @@ struct HUDLiveView: View {
                         value: listeningLanguageLabel(for: listeningLanguageCode),
                         icon: "globe.badge.chevron.backward",
                         selection: $listeningLanguageCode,
-                        options: installedLanguages
+                        options: listeningLanguageOptions
                     )
 
                     languagePickerCard(
@@ -319,7 +311,6 @@ struct HUDLiveView: View {
             renderedTextDebounceTask = nil
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
-                frameManager.sendSuggestions([])
             }
         } else {
             if shouldUseFrameMic {
@@ -345,7 +336,7 @@ struct HUDLiveView: View {
         return false
     }
 
-    private func scheduleDebouncedHUDSideEffects(for text: String) {
+    private func scheduleDebouncedHUDSideEffects(for text: String, mirrorToFrame: Bool) {
         renderedTextDebounceTask?.cancel()
         let delay = Self.renderedTextDebounceNanoseconds
         renderedTextDebounceTask = Task { @MainActor in
@@ -354,7 +345,9 @@ struct HUDLiveView: View {
             if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
                 suggestionManager.refreshSuggestion(for: text, languageCode: Self.hudTargetLanguageCode)
             }
-            pushTranslatedTextToFrameIfNeeded(text)
+            if mirrorToFrame {
+                pushTranslatedTextToFrameIfNeeded(text)
+            }
         }
     }
 
@@ -367,42 +360,26 @@ struct HUDLiveView: View {
         frameManager.sendHUDTextToFrame(trimmed, isPartial: false, updateStatus: false)
     }
 
-    private func pushSuggestionToFrame() {
-        guard isFrameConnected else { return }
-        guard APIConfig.isSuggestionFeatureEnabled, suggestionEnabled else { return }
-
-        let suggestion = FrameSuggestionDisplay(
-            text: suggestionManager.suggestionEnglish,
-            phonetic: suggestionManager.suggestionPhonetic
-        )
-        if suggestion.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            frameManager.sendSuggestions([])
-        } else {
-            frameManager.sendSuggestions([suggestion])
-        }
-    }
-
     private var targetLanguageLabel: String {
         Self.hudTargetLanguageOptions.first?.name
             ?? TranslationLanguages.displayName(for: Self.hudTargetLanguageCode)
     }
 
     private func listeningLanguageLabel(for code: String) -> String {
-        installedLanguages.first(where: { $0.code == code })?.name ?? TranslationLanguages.displayName(for: code)
+        listeningLanguageOptions.first(where: { $0.code == code })?.name ?? TranslationLanguages.displayName(for: code)
     }
 
-    private func loadInstalledLanguages() async {
-        let installed = await TranslationLanguages.installedTargetOptions()
-        installedLanguages = installed
-        if !installed.contains(where: { $0.code == listeningLanguageCode }) {
-            listeningLanguageCode = installed.first?.code ?? Self.hudTargetLanguageCode
+    private func loadListeningLanguages() {
+        listeningLanguageOptions = TranslationLanguages.supported
+        if !listeningLanguageOptions.contains(where: { $0.code == listeningLanguageCode }) {
+            listeningLanguageCode = TranslationLanguages.defaultListeningLanguageCode
         }
         targetLanguage = Self.hudTargetLanguageCode
     }
 
     private func applyInitialLanguageConfiguration() {
         let resolvedListeningCode: String
-        if installedLanguages.contains(where: { $0.code == storedListeningLanguageCode }) {
+        if listeningLanguageOptions.contains(where: { $0.code == storedListeningLanguageCode }) {
             resolvedListeningCode = storedListeningLanguageCode
         } else {
             resolvedListeningCode = listeningLanguageCode

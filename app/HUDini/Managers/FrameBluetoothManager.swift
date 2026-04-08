@@ -4,107 +4,14 @@ import CoreBluetooth
 import AVFoundation
 import Speech
 import SwiftUI
+import NaturalLanguage
 
 struct FrameDisplayPreferences: Equatable {
     var brightness: Int = 0
     var showsLivePartials: Bool = true
-    var captionPosition: CaptionPosition = .bottom
-    var layoutMode: LayoutMode = .focus
-    var transcriptionColor: PaletteColor = .grey
-    var translationColor: PaletteColor = .skyBlue
-
-    enum CaptionPosition: String, CaseIterable, Identifiable {
-        case top
-        case middle
-        case bottom
-
-        var id: String { rawValue }
-        var title: String { rawValue.capitalized }
-    }
-
-    enum LayoutMode: String, CaseIterable, Identifiable {
-        case focus
-        case split
-        case compact
-
-        var id: String { rawValue }
-        var title: String { rawValue.capitalized }
-    }
-
-    enum PaletteColor: String, CaseIterable, Identifiable {
-        case white = "WHITE"
-        case grey = "GREY"
-        case red = "RED"
-        case pink = "PINK"
-        case brown = "BROWN"
-        case orange = "ORANGE"
-        case yellow = "YELLOW"
-        case green = "GREEN"
-        case lightGreen = "LIGHTGREEN"
-        case nightBlue = "NIGHTBLUE"
-        case seaBlue = "SEABLUE"
-        case skyBlue = "SKYBLUE"
-        case cloudBlue = "CLOUDBLUE"
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .white: return "White"
-            case .grey: return "Grey"
-            case .red: return "Red"
-            case .pink: return "Pink"
-            case .brown: return "Brown"
-            case .orange: return "Orange"
-            case .yellow: return "Yellow"
-            case .green: return "Green"
-            case .lightGreen: return "Light Green"
-            case .nightBlue: return "Night Blue"
-            case .seaBlue: return "Sea Blue"
-            case .skyBlue: return "Sky Blue"
-            case .cloudBlue: return "Cloud Blue"
-            }
-        }
-    }
 
     func commandPayload() -> String {
-        [
-            "brightness=\(brightness)",
-            "partials=\(showsLivePartials ? 1 : 0)",
-            "position=\(captionPosition.rawValue)",
-            "layout=\(layoutMode.rawValue)",
-            "transcription_color=\(transcriptionColor.rawValue)",
-            "translation_color=\(translationColor.rawValue)"
-        ].joined(separator: ";")
-    }
-}
-
-struct FrameSuggestionDisplay: Equatable {
-    var text: String
-    var phonetic: String = ""
-
-    var commandField: String {
-        let left = text.replacingOccurrences(of: "\t", with: " ").replacingOccurrences(of: "~", with: "-")
-        let right = phonetic.replacingOccurrences(of: "\t", with: " ").replacingOccurrences(of: "~", with: "-")
-        return "\(left)~\(right)"
-    }
-}
-
-enum FrameConversationMode: String, CaseIterable, Identifiable {
-    case translation
-    case transcription
-    case meeting
-    case pronunciation
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .translation: return "Translation"
-        case .transcription: return "Transcription"
-        case .meeting: return "Meeting"
-        case .pronunciation: return "Pronunciation"
-        }
+        "brightness=\(brightness);partials=\(showsLivePartials ? 1 : 0)"
     }
 }
 
@@ -141,29 +48,73 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let streamSampleRate: Double = 8_000
     private static let streamBitDepth: Int = 16
     private static let recognitionSampleRate: Double = 16_000
-    private static let embeddedAppVersion = "2026.04.07.2"
+    private static let embeddedAppVersion = "2026.04.08.1"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
 
-    @Published private(set) var state: ConnectionState = .idle
+    @Published private(set) var state: ConnectionState = .idle {
+        didSet {
+            guard oldValue != state else { return }
+            appendDevLog(direction: "APP", message: "state \(String(describing: oldValue)) -> \(String(describing: state))")
+        }
+    }
     @Published private(set) var discoveredDevices: [DiscoveredDevice] = []
-    @Published private(set) var statusMessage: String = "Checking Bluetooth…"
-    @Published private(set) var peripheralStatus: String = ""
-    @Published private(set) var liveTranscript: String = ""
-    @Published private(set) var renderedText: String = ""
-    @Published private(set) var isStreaming: Bool = false
+    @Published private(set) var statusMessage: String = "Checking Bluetooth…" {
+        didSet {
+            guard oldValue != statusMessage else { return }
+            appendDevLog(direction: "APP", message: "statusMessage = \(statusMessage)")
+        }
+    }
+    @Published private(set) var peripheralStatus: String = "" {
+        didSet {
+            guard oldValue != peripheralStatus else { return }
+            appendDevLog(direction: "APP", message: "peripheralStatus = \(peripheralStatus)")
+        }
+    }
+    @Published private(set) var liveTranscript: String = "" {
+        didSet {
+            guard oldValue != liveTranscript else { return }
+            appendDevLog(direction: "APP", message: "liveTranscript = \(liveTranscript)")
+        }
+    }
+    @Published private(set) var renderedText: String = "" {
+        didSet {
+            guard oldValue != renderedText else { return }
+            appendDevLog(direction: "APP", message: "renderedText = \(renderedText)")
+        }
+    }
+    @Published private(set) var isStreaming: Bool = false {
+        didSet {
+            guard oldValue != isStreaming else { return }
+            appendDevLog(direction: "APP", message: "isStreaming = \(isStreaming)")
+        }
+    }
     @Published private(set) var frameFirmwareVersion: String = ""
     @Published private(set) var frameAppVersion: String = ""
     @Published private(set) var framePayloadLimit: Int = 0
-    @Published private(set) var selectedLanguageCode: String = TranslationLanguages.defaultListeningLanguageCode
-    @Published private(set) var targetLanguageCode: String = "en"
-    @Published private(set) var connectionDebugStage: String = "Idle"
+    @Published private(set) var selectedLanguageCode: String = TranslationLanguages.defaultListeningLanguageCode {
+        didSet {
+            guard oldValue != selectedLanguageCode else { return }
+            appendDevLog(direction: "APP", message: "selectedLanguageCode = \(selectedLanguageCode)")
+        }
+    }
+    @Published private(set) var targetLanguageCode: String = "en" {
+        didSet {
+            guard oldValue != targetLanguageCode else { return }
+            appendDevLog(direction: "APP", message: "targetLanguageCode = \(targetLanguageCode)")
+        }
+    }
+    @Published private(set) var connectionDebugStage: String = "Idle" {
+        didSet {
+            guard oldValue != connectionDebugStage else { return }
+            appendDevLog(direction: "APP", message: "connectionDebugStage = \(connectionDebugStage)")
+        }
+    }
     @Published private(set) var isInstallingApp: Bool = false
     @Published private(set) var installStatus: String = "Not installed from phone yet"
     @Published private(set) var installerOutput: String = ""
     @Published private(set) var devLogEntries: [DevLogEntry] = []
     @Published var preferences: FrameDisplayPreferences = .init()
-    @Published var selectedMode: FrameConversationMode = .translation
 
     private var central: CBCentralManager!
     private var connectedPeripheral: CBPeripheral?
@@ -184,19 +135,22 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var translationTask: Task<Void, Never>?
     private var latestTranslationRequestID = UUID()
     private var lastPartialTranslationAt: Date = .distantPast
-    private let partialTranslationInterval: TimeInterval = 0.35
+    private let partialTranslationInterval: TimeInterval = 0.10
+    private let frameMicSyncTimeout: TimeInterval = 2.5
     private var latestTranscriptSnapshot: String = ""
-    private var lastPartialTranslationWordCount: Int = 0
+    private var lastPartialTranslationText: String = ""
     private var expectedPacketSeq: UInt16?
     private var lastSentFinalCaption: String = ""
     private var lastSentPartialCaption: String = ""
-    private var lastSentSuggestions: [FrameSuggestionDisplay] = []
+    private var lastTapSequenceHandled: Int = -1
     private var replTextBuffer: String = ""
     private var micStateGeneration: UInt64 = 0
     private var micTransitionInFlight = false
     private var pendingFrameMicState: Bool?
     private var desiredStreamingState = false
     private var queuedMicStateAfterTransition: Bool?
+    private var pendingRecognitionStart = false
+    private var hasReceivedAudioSinceStreamStart = false
     private var frameMicSyncTask: Task<Void, Never>?
     private var audioDCEstimate: Float = 0
     private var audioSmoothedGain: Float = 1
@@ -248,6 +202,14 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     func connect(to device: DiscoveredDevice) {
+        if connectedPeripheral == device.peripheral {
+            logDecision("connect(to:) ignored because peripheral is already connected")
+            return
+        }
+        if case .connecting(let name) = state, name == device.name {
+            logDecision("connect(to:) ignored because connection is already in progress")
+            return
+        }
         stopScanning()
         explicitDisconnectRequested = false
         shouldAttemptReconnect = true
@@ -331,11 +293,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         sendRawCommand(["SET_PREFS", preferences.commandPayload()], preferredType: .withResponse)
     }
 
-    func setMode(_ mode: FrameConversationMode) {
-        selectedMode = mode
-        sendRawCommand(["SET_MODE", mode.rawValue], preferredType: .withResponse)
-    }
-
     func setRecognitionLanguage(_ code: String) {
         guard TranslationLanguages.supported.contains(where: { $0.code == code }) else {
             statusMessage = "Unsupported language: \(code)"
@@ -352,7 +309,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
         if isStreaming {
             stopRecognition()
-            if startRecognition() {
+            if !startRecognition() {
+                statusMessage = "Speech recognizer unavailable for \(TranslationLanguages.displayName(for: code))"
+            } else {
                 statusMessage = "Listening language set to \(TranslationLanguages.displayName(for: code))"
             }
         } else {
@@ -376,7 +335,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     ) {
         setRecognitionLanguage(listeningLanguage)
         setTargetLanguage(targetLanguage)
-        setMode(.translation)
         startAudioStream(triggeredByTap: triggeredByTap)
     }
 
@@ -401,6 +359,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         lastPartialTranslationAt = .distantPast
         expectedPacketSeq = nil
         resetAudioConditioning()
+        hasReceivedAudioSinceStreamStart = false
         micStateGeneration &+= 1
         micTransitionInFlight = true
         let generation = micStateGeneration
@@ -411,22 +370,26 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             guard authorization == .authorized else {
                 self.micTransitionInFlight = false
                 self.setStreamingState(false)
+                self.pendingRecognitionStart = false
                 self.syncFrameRuntimeState(micEnabled: false)
                 statusMessage = "Allow Speech Recognition in Settings"
                 return
             }
 
-            guard startRecognition() else {
-                self.micTransitionInFlight = false
-                self.setStreamingState(false)
-                self.syncFrameRuntimeState(micEnabled: false)
-                return
-            }
             guard generation == self.micStateGeneration else { return }
 
+            self.pendingRecognitionStart = true
+            if !self.startRecognition() {
+                self.micTransitionInFlight = false
+                self.setStreamingState(false)
+                self.pendingRecognitionStart = false
+                self.syncFrameRuntimeState(micEnabled: false)
+                statusMessage = "Speech recognizer unavailable"
+                return
+            }
             setStreamingState(true)
             syncFrameRuntimeState(micEnabled: true, status: "listening")
-            statusMessage = "Streaming audio from Frame…"
+            statusMessage = "Waiting for Frame mic…"
         }
     }
 
@@ -469,27 +432,36 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     private func setStreamingState(_ enabled: Bool) {
+        logDecision("setStreamingState(\(enabled))")
         isStreaming = enabled
     }
 
     private func syncFrameRuntimeState(micEnabled: Bool, status: String? = nil) {
         let resolvedStatus = status ?? (micEnabled ? "listening" : "idle")
+        logDecision("syncFrameRuntimeState requested micEnabled=\(micEnabled) status=\(resolvedStatus) desiredStreamingState=\(desiredStreamingState) isStreaming=\(isStreaming) micTransitionInFlight=\(micTransitionInFlight)")
         pendingFrameMicState = micEnabled
         frameMicSyncTask?.cancel()
         let generation = micStateGeneration
         frameMicSyncTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(frameMicSyncTimeout * 1_000_000_000))
             guard let self else { return }
             guard generation == self.micStateGeneration else { return }
             guard self.pendingFrameMicState == micEnabled else { return }
 
             self.pendingFrameMicState = nil
-            self.peripheralStatus = "Frame mic sync timeout"
+            self.logDecision("syncFrameRuntimeState timeout micEnabled=\(micEnabled) generation=\(generation)")
             if micEnabled {
-                self.stopRecognition()
-                self.setStreamingState(false)
-                self.sendRawCommand(["SYNC_STATE", "0", "idle"], preferredType: .withResponse)
-                self.statusMessage = "Frame mic failed to start"
+                if self.hasReceivedAudioSinceStreamStart {
+                    self.logDecision("syncFrameRuntimeState timeout but audio is flowing; treating as success")
+                    self.pendingRecognitionStart = false
+                    self.statusMessage = "Streaming audio from Frame…"
+                } else {
+                    self.peripheralStatus = "Frame mic sync timeout"
+                    self.stopRecognition()
+                    self.setStreamingState(false)
+                    self.sendRawCommand(["SYNC_STATE", "0", "idle"], preferredType: .withResponse)
+                    self.statusMessage = "Frame mic failed to start"
+                }
             }
             self.finishMicTransition()
         }
@@ -524,15 +496,17 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         connectionDebugStage = "Bootstrapping session"
         statusMessage = reason
         applyPreferences()
-        setMode(selectedMode)
         syncFrameRuntimeState(micEnabled: desiredStreamingState && isAppActive)
+        if desiredStreamingState && isAppActive && recognitionRequest == nil {
+            pendingRecognitionStart = true
+            if startRecognition() {
+                setStreamingState(true)
+            }
+        }
         if !lastSentFinalCaption.isEmpty {
             sendRawCommand(["SHOW_CAPTION", "final", lastSentFinalCaption])
         } else if !lastSentPartialCaption.isEmpty {
             sendRawCommand(["SHOW_CAPTION", "partial", lastSentPartialCaption])
-        }
-        if !lastSentSuggestions.isEmpty {
-            sendSuggestions(lastSentSuggestions)
         }
     }
 
@@ -571,13 +545,20 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     func sendHUDTextToFrame(_ text: String, isPartial: Bool = false, updateStatus: Bool = false) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        logDecision("sendHUDTextToFrame isPartial=\(isPartial) text=\(trimmed)")
 
         if isPartial {
-            guard trimmed != lastSentPartialCaption else { return }
+            guard trimmed != lastSentPartialCaption else {
+                logDecision("sendHUDTextToFrame skipped duplicate partial")
+                return
+            }
             lastSentPartialCaption = trimmed
             sendRawCommand(["SHOW_CAPTION", "partial", trimmed])
         } else {
-            guard trimmed != lastSentFinalCaption else { return }
+            guard trimmed != lastSentFinalCaption else {
+                logDecision("sendHUDTextToFrame skipped duplicate final")
+                return
+            }
             lastSentFinalCaption = trimmed
             lastSentPartialCaption = ""
             sendRawCommand(["SHOW_CAPTION", "final", trimmed])
@@ -588,28 +569,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
     }
 
-    func sendSuggestions(_ suggestions: [FrameSuggestionDisplay]) {
-        let cleaned = suggestions
-            .map { FrameSuggestionDisplay(text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines), phonetic: $0.phonetic.trimmingCharacters(in: .whitespacesAndNewlines)) }
-            .filter { !$0.text.isEmpty }
-
-        guard cleaned != lastSentSuggestions else { return }
-        lastSentSuggestions = cleaned
-
-        guard !cleaned.isEmpty else {
-            sendRawCommand(["CLEAR_SUGGESTIONS"])
-            return
-        }
-
-        var fields = ["SHOW_SUGGESTIONS"]
-        fields.append(contentsOf: cleaned.prefix(3).map(\.commandField))
-        sendRawCommand(fields)
-    }
-
-    func cycleSuggestions() {
-        sendRawCommand(["CYCLE_SUGGESTIONS"])
-    }
-
     func clearDevLog() {
         devLogEntries = []
     }
@@ -617,9 +576,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private func appendDevLog(direction: String, message: String) {
         let normalized = message.replacingOccurrences(of: "\r", with: " ").replacingOccurrences(of: "\n", with: " ")
         devLogEntries.append(DevLogEntry(timestamp: Date(), direction: direction, message: normalized))
-        if devLogEntries.count > 400 {
-            devLogEntries.removeFirst(devLogEntries.count - 400)
-        }
+    }
+
+    private func logDecision(_ message: String) {
+        appendDevLog(direction: "APP", message: message)
     }
 
     private func sendControlByte(_ value: UInt8) {
@@ -671,8 +631,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     private func startRecognition() -> Bool {
+        logDecision("startRecognition invoked locale=\(selectedLanguageCode)")
         guard let recognizer, recognizer.isAvailable else {
             statusMessage = "Speech recognizer unavailable"
+            logDecision("startRecognition failed recognizer unavailable")
             return false
         }
 
@@ -683,18 +645,33 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
         recognitionRequest = request
+        logDecision("recognitionRequest created shouldReportPartialResults=true taskHint=dictation")
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             if let result {
-                self.liveTranscript = result.bestTranscription.formattedString
-                self.handleTranscriptUpdate(text: result.bestTranscription.formattedString, isFinal: result.isFinal)
-                if result.isFinal {
+                let transcript = result.bestTranscription.formattedString
+                self.logDecision("recognitionTask result isFinal=\(result.isFinal) transcript=\(transcript)")
+                if !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.liveTranscript = transcript
+                    self.handleTranscriptUpdate(text: transcript, isFinal: result.isFinal)
+                } else {
+                    self.logDecision("recognitionTask ignored empty transcript result")
+                }
+                if result.isFinal && !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     self.statusMessage = "Finalized segment"
                 }
             }
 
             if let error {
+                let nsError = error as NSError
+                if error is CancellationError
+                    || nsError.domain == "kAFAssistantErrorDomain"
+                    || error.localizedDescription.localizedCaseInsensitiveContains("canceled") {
+                    self.logDecision("recognitionTask ignored cancellation error \(error.localizedDescription)")
+                    return
+                }
+                self.logDecision("recognitionTask error \(error.localizedDescription)")
                 self.statusMessage = "Recognition error: \(error.localizedDescription)"
                 self.stopAudioStream(sendCommand: true)
             }
@@ -703,55 +680,73 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     private func stopRecognition() {
+        logDecision("stopRecognition invoked")
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
+        pendingRecognitionStart = false
         expectedPacketSeq = nil
         lastPartialTranslationAt = .distantPast
-        lastPartialTranslationWordCount = 0
+        lastPartialTranslationText = ""
         resetAudioConditioning()
         cancelTranslation()
     }
 
     private func handleTranscriptUpdate(text: String, isFinal: Bool) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        logDecision("handleTranscriptUpdate isFinal=\(isFinal) raw=\(text) trimmed=\(trimmed)")
         guard !trimmed.isEmpty else {
+            logDecision("handleTranscriptUpdate ignored empty transcript")
             return
         }
 
         latestTranscriptSnapshot = trimmed
 
         if shouldBypassTranslation(source: selectedLanguageCode, target: targetLanguageCode) {
+            logDecision("handleTranscriptUpdate bypassing translation source=\(selectedLanguageCode) target=\(targetLanguageCode)")
             renderedText = trimmed
             sendHUDTextToFrame(trimmed, isPartial: !isFinal)
             return
         }
 
-        if !isFinal {
-            // As soon as a newer partial arrives, invalidate any older partial translation
-            // so we do not render text that belongs to a previous transcript snapshot.
-            latestTranslationRequestID = UUID()
-            translationTask?.cancel()
-            translationTask = nil
+        if !isFinal, trimmed.count >= 10, let detected = detectLanguage(trimmed),
+           detected == normalizedLanguageCode(targetLanguageCode),
+           detected != normalizedLanguageCode(selectedLanguageCode) {
+            logDecision("handleTranscriptUpdate detected target language (\(detected)), showing directly")
+            renderedText = trimmed
+            sendHUDTextToFrame(trimmed, isPartial: true)
+            return
+        }
 
-            guard trimmed.count >= 4 else { return }
-            let partialWordCount = wordCount(in: trimmed)
-            guard partialWordCount > lastPartialTranslationWordCount else { return }
+        if !isFinal {
+            guard trimmed.count >= 2 else {
+                logDecision("partial translation skipped text too short count=\(trimmed.count)")
+                return
+            }
+            guard trimmed != lastPartialTranslationText else {
+                logDecision("partial translation skipped duplicate text")
+                return
+            }
             let now = Date()
-            guard now.timeIntervalSince(lastPartialTranslationAt) >= partialTranslationInterval else {
+            let delta = now.timeIntervalSince(lastPartialTranslationAt)
+            guard delta >= partialTranslationInterval else {
+                logDecision("partial translation throttled delta=\(delta)s threshold=\(partialTranslationInterval)s")
                 return
             }
             lastPartialTranslationAt = now
-            lastPartialTranslationWordCount = partialWordCount
+            lastPartialTranslationText = trimmed
+            logDecision("partial translation accepted text=\(trimmed)")
         } else {
-            lastPartialTranslationWordCount = wordCount(in: trimmed)
+            lastPartialTranslationText = trimmed
+            logDecision("final translation accepted text=\(trimmed)")
         }
 
         let requestID = UUID()
         latestTranslationRequestID = requestID
         let transcriptSnapshot = trimmed
         translationTask?.cancel()
+        logDecision("translationTask start requestID=\(requestID) isFinal=\(isFinal) source=\(selectedLanguageCode) target=\(targetLanguageCode) transcript=\(transcriptSnapshot)")
         translationTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -761,33 +756,50 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                     target: targetLanguageCode
                 )
                 guard !Task.isCancelled else { return }
-                guard latestTranslationRequestID == requestID else { return }
-                if !isFinal, latestTranscriptSnapshot != transcriptSnapshot { return }
+                guard latestTranslationRequestID == requestID else {
+                    self.logDecision("translationTask dropped stale requestID=\(requestID)")
+                    return
+                }
+                if !isFinal, latestTranscriptSnapshot != transcriptSnapshot {
+                    self.logDecision("translationTask dropped partial snapshot mismatch requestID=\(requestID) latest=\(self.latestTranscriptSnapshot) snapshot=\(transcriptSnapshot)")
+                    return
+                }
 
+                self.logDecision("translationTask success requestID=\(requestID) translated=\(translated)")
                 renderedText = translated
                 sendHUDTextToFrame(translated, isPartial: !isFinal)
             } catch is CancellationError {
+                self.logDecision("translationTask cancelled requestID=\(requestID)")
                 return
             } catch {
                 guard !Task.isCancelled else { return }
-                guard latestTranslationRequestID == requestID else { return }
+                guard latestTranslationRequestID == requestID else {
+                    self.logDecision("translationTask error ignored stale requestID=\(requestID) error=\(error.localizedDescription)")
+                    return
+                }
+                self.logDecision("translationTask failed requestID=\(requestID) error=\(error.localizedDescription)")
                 statusMessage = "Translation error: \(error.localizedDescription)"
             }
         }
     }
 
     private func cancelTranslation() {
+        logDecision("cancelTranslation invoked")
         latestTranslationRequestID = UUID()
         translationTask?.cancel()
         translationTask = nil
-    }
-
-    private func wordCount(in text: String) -> Int {
-        text.split(whereSeparator: \.isWhitespace).count
+        lastPartialTranslationText = ""
     }
 
     private func shouldBypassTranslation(source: String, target: String) -> Bool {
         normalizedLanguageCode(source) == normalizedLanguageCode(target)
+    }
+
+    private func detectLanguage(_ text: String) -> String? {
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        guard let lang = recognizer.dominantLanguage else { return nil }
+        return normalizedLanguageCode(lang.rawValue)
     }
 
     private func normalizedLanguageCode(_ code: String) -> String {
@@ -804,17 +816,24 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
     private func appendAudioPacket(_ payload: Data) {
         guard payload.count >= 3 else { return }
+        guard isStreaming, recognitionRequest != nil else {
+            logDecision("audioPacket ignored while recognition inactive")
+            return
+        }
         let type = payload[0]
         guard type == Self.audioPacketType else { return }
+        hasReceivedAudioSinceStreamStart = true
 
         let packetSeq = UInt16(payload[1]) | (UInt16(payload[2]) << 8)
         let audioPayload = payload.subdata(in: 3 ..< payload.count)
+        logDecision("audioPacket seq=\(packetSeq) bytes=\(audioPayload.count) expected=\(expectedPacketSeq.map(String.init) ?? "nil")")
 
         if let expected = expectedPacketSeq {
             let missing = Int(packetSeq &- expected)
             if missing > 0 && missing < 64 {
                 let bytesPerSample = max(1, Self.streamBitDepth / 8)
                 let silenceSamples = (audioPayload.count / bytesPerSample) * missing
+                logDecision("audioPacket gap detected expected=\(expected) actual=\(packetSeq) missing=\(missing) silenceSamples=\(silenceSamples)")
                 appendSilence(samples: silenceSamples)
             }
         }
@@ -969,6 +988,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         micTransitionInFlight = false
         pendingFrameMicState = nil
         queuedMicStateAfterTransition = nil
+        lastTapSequenceHandled = -1
         frameMicSyncTask?.cancel()
         frameMicSyncTask = nil
         txChar = nil
@@ -1047,7 +1067,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             )
 
             let script = FrameEmbeddedApp.mainLua
-            let chunks = chunkLuaSource(script, chunkSize: 48)
+            let chunks = chunkLuaSource(script, chunkSize: 60)
             for (index, chunk) in chunks.enumerated() {
                 installStatus = "Uploading \(index + 1)/\(chunks.count)…"
                 try await sendLuaAndAwaitMarker(
@@ -1250,6 +1270,11 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                 pendingFrameMicState = nil
                 frameMicSyncTask?.cancel()
                 frameMicSyncTask = nil
+                if micActive && pendingRecognitionStart {
+                    logDecision("MIC_STATE confirmed mic on; recognition already active")
+                    pendingRecognitionStart = false
+                    statusMessage = "Streaming audio from Frame…"
+                }
                 finishMicTransition()
             }
 
@@ -1265,10 +1290,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                 stopRecognition()
                 setStreamingState(false)
                 finishMicTransition()
-            }
-        case "MODE":
-            if parts.count >= 3, let mode = FrameConversationMode(rawValue: parts[2]) {
-                selectedMode = mode
             }
         case "MIC_ERROR":
             let detail = parts.count >= 3 ? parts[2] : "Unknown mic error"
@@ -1287,13 +1308,17 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             installStatus = "Frame crash: \(detail)"
         case "PREFS_SAVED":
             statusMessage = "Saved preferences on Frame"
-        case "SUGGESTION_INDEX":
-            if parts.count >= 3 {
-                peripheralStatus = "Showing suggestion \(parts[2])"
-            }
         case "MIC_REQUEST":
             if parts.count >= 4 {
                 let desiredEnabled = parts[3] == "1"
+                let tapSequence = parts.count >= 5 ? Int(parts[4]) ?? -1 : -1
+                if tapSequence >= 0 {
+                    guard tapSequence > lastTapSequenceHandled else {
+                        logDecision("MIC_REQUEST ignored duplicate tapSequence=\(tapSequence)")
+                        return
+                    }
+                    lastTapSequenceHandled = tapSequence
+                }
                 peripheralStatus = "Tap requested mic \(desiredEnabled ? "on" : "off")"
                 handleTapToggleListening(desiredEnabled: desiredEnabled)
             } else if parts.count >= 3 {
@@ -1307,6 +1332,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     private func handleTapToggleListening(desiredEnabled: Bool) {
+        logDecision("handleTapToggleListening desiredEnabled=\(desiredEnabled) desiredStreamingState=\(desiredStreamingState) isStreaming=\(isStreaming) micTransitionInFlight=\(micTransitionInFlight)")
         if desiredEnabled == desiredStreamingState && desiredEnabled == isStreaming && !micTransitionInFlight { return }
         if desiredEnabled {
             startTranscribing(

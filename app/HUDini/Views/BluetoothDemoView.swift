@@ -22,7 +22,7 @@ struct BluetoothDemoView: View {
                 HUDSectionHeader(
                     eyebrow: "Bluetooth",
                     title: "Connect the Frame glasses.",
-                    detail: "This path uses Frame’s BLE service and raw-message protocol instead of the old custom HUD peripheral. Install `hardware/frame/main.lua` on Frame once before using it."
+                    detail: "This path uses Frame's BLE service and raw-message protocol instead of the old custom HUD peripheral. Install `hardware/frame/main.lua` on Frame once before using it."
                 )
 
                 HStack(spacing: 12) {
@@ -99,18 +99,6 @@ struct BluetoothDemoView: View {
                                 .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                             }
                         }
-                    }
-                }
-
-                if case .connected = manager.state {
-                    Picker("Mode", selection: $manager.selectedMode) {
-                        ForEach(FrameConversationMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: manager.selectedMode, initial: false) { _, newValue in
-                        manager.setMode(newValue)
                     }
                 }
 
@@ -198,25 +186,6 @@ struct BluetoothDemoView: View {
                     .font(.system(.body, design: .rounded))
                     .tint(HUDTheme.accent)
 
-                Picker("Caption Position", selection: $manager.preferences.captionPosition) {
-                    ForEach(FrameDisplayPreferences.CaptionPosition.allCases) { position in
-                        Text(position.title).tag(position)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Picker("Layout", selection: $manager.preferences.layoutMode) {
-                    ForEach(FrameDisplayPreferences.LayoutMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                HStack(spacing: 12) {
-                    colorMenu(title: "Transcript", selection: $manager.preferences.transcriptionColor)
-                    colorMenu(title: "Translation", selection: $manager.preferences.translationColor)
-                }
-
                 Button("Save Preferences To Frame") {
                     manager.applyPreferences()
                 }
@@ -265,43 +234,6 @@ struct BluetoothDemoView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    private func colorMenu(
-        title: String,
-        selection: Binding<FrameDisplayPreferences.PaletteColor>
-    ) -> some View {
-        Menu {
-            Picker(title, selection: selection) {
-                ForEach(FrameDisplayPreferences.PaletteColor.allCases) { color in
-                    Text(color.title).tag(color)
-                }
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(title)
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
-                    .foregroundStyle(HUDTheme.inkMuted)
-
-                HStack {
-                    Text(selection.wrappedValue.title)
-                        .font(.system(.body, design: .rounded, weight: .semibold))
-                        .foregroundStyle(HUDTheme.ink)
-                    Spacer()
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(HUDTheme.inkMuted)
-                }
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(HUDTheme.strokeStrong, lineWidth: 1)
-            }
-        }
-        .buttonStyle(.plain)
     }
 }
 
