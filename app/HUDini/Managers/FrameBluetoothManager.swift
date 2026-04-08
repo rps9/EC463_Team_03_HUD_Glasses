@@ -155,7 +155,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     @Published private(set) var frameFirmwareVersion: String = ""
     @Published private(set) var frameAppVersion: String = ""
     @Published private(set) var framePayloadLimit: Int = 0
-    @Published private(set) var selectedLanguageCode: String = "en"
+    @Published private(set) var selectedLanguageCode: String = TranslationLanguages.defaultListeningLanguageCode
     @Published private(set) var targetLanguageCode: String = "en"
     @Published private(set) var connectionDebugStage: String = "Idle"
     @Published private(set) var isInstallingApp: Bool = false
@@ -225,10 +225,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             lastConnectedPeripheralID = uuid
             shouldAttemptReconnect = true
         }
-        let preferred = Locale.current.language.languageCode?.identifier ?? "en"
-        if TranslationLanguages.supported.contains(where: { $0.code == preferred }) {
-            selectedLanguageCode = preferred
-        }
+        selectedLanguageCode = TranslationLanguages.preferredListeningLanguageCode()
         recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguageCode))
         central = CBCentralManager(delegate: self, queue: nil)
         handleState(central.state)
@@ -350,6 +347,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
 
         selectedLanguageCode = code
+        UserDefaults.standard.set(code, forKey: APIConfig.AppStorageKey.hudListeningLanguageCode)
         recognizer = newRecognizer
 
         if isStreaming {

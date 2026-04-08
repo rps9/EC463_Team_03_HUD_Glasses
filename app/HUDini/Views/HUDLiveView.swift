@@ -4,10 +4,11 @@ struct HUDLiveView: View {
     @EnvironmentObject private var frameManager: FrameBluetoothManager
     @EnvironmentObject private var conversationHistoryStore: HUDConversationHistoryStore
     @AppStorage(wrappedValue: true, APIConfig.AppStorageKey.hudSuggestionEnabled) private var suggestionEnabled: Bool
+    @AppStorage(wrappedValue: TranslationLanguages.defaultListeningLanguageCode, APIConfig.AppStorageKey.hudListeningLanguageCode) private var storedListeningLanguageCode: String
     @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
     @State private var targetLanguage: String = "en"
-    @State private var listeningLanguageCode: String = HUDLiveView.defaultListeningLanguageCode
+    @State private var listeningLanguageCode: String = TranslationLanguages.defaultListeningLanguageCode
     @State private var installedLanguages: [TranslationLanguageOption] = TranslationLanguages.supported
     @State private var renderedTextDebounceTask: Task<Void, Never>?
     @State private var lastSentBLEText: String = ""
@@ -45,6 +46,7 @@ struct HUDLiveView: View {
         .task {
             await transcriptionManager.requestPermissions()
             await loadInstalledLanguages()
+            applyInitialLanguageConfiguration()
         }
         .onChange(of: listeningLanguageCode, initial: false) { _, newValue in
             transcriptionManager.setListeningLanguage(newValue)
@@ -398,6 +400,22 @@ struct HUDLiveView: View {
         targetLanguage = Self.hudTargetLanguageCode
     }
 
+    private func applyInitialLanguageConfiguration() {
+        let resolvedListeningCode: String
+        if installedLanguages.contains(where: { $0.code == storedListeningLanguageCode }) {
+            resolvedListeningCode = storedListeningLanguageCode
+        } else {
+            resolvedListeningCode = listeningLanguageCode
+        }
+
+        listeningLanguageCode = resolvedListeningCode
+        storedListeningLanguageCode = resolvedListeningCode
+        transcriptionManager.setListeningLanguage(resolvedListeningCode)
+        frameManager.setRecognitionLanguage(resolvedListeningCode)
+        transcriptionManager.setTargetLanguage(targetLanguage)
+        frameManager.setTargetLanguage(targetLanguage)
+    }
+
     /// Saves the current HUD translation when a listening session ends (stop button or leaving Live while mic is on).
     private func persistConversationSnapshotIfNonEmpty() {
         let translated = activeRenderedText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -420,24 +438,5 @@ struct HUDLiveView: View {
         HUDLiveView()
             .environmentObject(FrameBluetoothManager())
             .environmentObject(HUDConversationHistoryStore())
-    }
-}
-
-private extension HUDLiveView {
-    static var defaultListeningLanguageCode: String {
-        if #available(iOS 16.0, *) {
-            if let current = Locale.current.language.languageCode?.identifier,
-               TranslationLanguages.supported.contains(where: { $0.code == current }) {
-                return current
-            }
-        }
-
-        let identifier = Locale.current.identifier
-        if let prefix = identifier.split(separator: "_").first,
-           TranslationLanguages.supported.contains(where: { $0.code == String(prefix) }) {
-            return String(prefix)
-        }
-
-        return "en"
     }
 }

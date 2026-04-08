@@ -42,6 +42,32 @@ enum TranslationLanguages {
         return supported.first(where: { $0.code == normalized })?.name ?? normalized.uppercased()
     }
 
+    static var defaultListeningLanguageCode: String {
+        preferredListeningLanguageCode()
+    }
+
+    static func preferredListeningLanguageCode(userDefaults: UserDefaults = .standard) -> String {
+        if let saved = userDefaults.string(forKey: APIConfig.AppStorageKey.hudListeningLanguageCode),
+           supported.contains(where: { $0.code == saved }) {
+            return saved
+        }
+
+        if #available(iOS 16.0, *) {
+            if let current = Locale.current.language.languageCode?.identifier,
+               supported.contains(where: { $0.code == current }) {
+                return current
+            }
+        }
+
+        let identifier = Locale.current.identifier
+        if let prefix = identifier.split(separator: "_").first,
+           supported.contains(where: { $0.code == String(prefix) }) {
+            return String(prefix)
+        }
+
+        return "en"
+    }
+
     /// Returns only languages that are installed (downloaded) for Apple Translate. Use for Translation and HUDini pickers.
     /// When Translation framework is unavailable (e.g. simulator), returns full supported list.
     static func installedTargetOptions() async -> [TranslationLanguageOption] {
@@ -83,4 +109,3 @@ private func _installedTargetOptionsFromAvailability() async -> [TranslationLang
     return result.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 }
 #endif
-

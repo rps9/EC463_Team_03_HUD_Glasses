@@ -51,5 +51,6 @@ enum APIConfig {
     /// `AppStorage` / `UserDefaults` keys (avoid scattering string literals).
     enum AppStorageKey {
         static let hudSuggestionEnabled = "hudSuggestionEnabled"
+        static let hudListeningLanguageCode = "hudListeningLanguageCode"
     }
 }
