@@ -47,7 +47,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let streamSampleRate: Double = 8_000
     private static let streamBitDepth: Int = 16
     private static let recognitionSampleRate: Double = 16_000
-    private static let embeddedAppVersion = "2026.04.08.3"
+    private static let embeddedAppVersion = "2026.04.08.7"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
 
@@ -773,11 +773,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         var converted = Data(count: sampleCount * MemoryLayout<Int16>.size)
         converted.withUnsafeMutableBytes { dstRaw in
             guard let dst = dstRaw.bindMemory(to: Int16.self).baseAddress else { return }
-            payload.withUnsafeBytes { srcRaw in
-                guard let src = srcRaw.bindMemory(to: Int8.self).baseAddress else { return }
-                for index in 0 ..< sampleCount {
-                    dst[index] = Int16(src[index]) << 8
-                }
+            for index in 0 ..< sampleCount {
+                // Frame mic outputs unsigned 8-bit PCM (0-255, silence at 128)
+                // Convert to signed 16-bit PCM (silence at 0)
+                dst[index] = Int16(Int(payload[index]) - 128) << 8
             }
         }
 

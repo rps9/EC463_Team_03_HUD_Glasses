@@ -3,7 +3,7 @@ import Foundation
 enum FrameEmbeddedApp {
     static let mainLua = #"""
 local APP_DIR = "/hudini"
-local APP_VERSION = "2026.04.08.3"
+local APP_VERSION = "2026.04.08.7"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
 local state = {
@@ -273,6 +273,7 @@ local function handle_command(payload)
     state.final_caption = ""
     state.listening = false
     state.audio_sequence = 0
+    send_buffer = ""
     state.needs_render = true
     frame.sleep(0.05)
     start_mic()
@@ -340,6 +341,7 @@ local function run_app()
   end
 
   start_mic()
+  send_buffer = ""
 
   while true do
     if state.needs_render then
@@ -348,12 +350,23 @@ local function run_app()
 
     local audio = frame.microphone.read(max_audio_bytes)
     if audio == nil then
+      if send_buffer ~= "" then
+        send_audio_chunk(send_buffer)
+        send_buffer = ""
+      end
       frame.sleep(0.1)
       start_mic()
     elseif audio ~= "" then
-      send_audio_chunk(audio)
-      frame.sleep(string.len(audio) / 2 / 8000)
+      send_buffer = send_buffer .. audio
+      if string.len(send_buffer) >= max_audio_bytes then
+        send_audio_chunk(string.sub(send_buffer, 1, max_audio_bytes))
+        send_buffer = string.sub(send_buffer, max_audio_bytes + 1)
+      end
     else
+      if send_buffer ~= "" then
+        send_audio_chunk(send_buffer)
+        send_buffer = ""
+      end
       frame.sleep(0.004)
     end
   end
