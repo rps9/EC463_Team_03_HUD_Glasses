@@ -48,7 +48,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let streamSampleRate: Double = 8_000
     private static let streamBitDepth: Int = 16
     private static let recognitionSampleRate: Double = 16_000
-    private static let embeddedAppVersion = "2026.04.08.1"
+    private static let embeddedAppVersion = "2026.04.08.2"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
 
@@ -136,7 +136,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var latestTranslationRequestID = UUID()
     private var lastPartialTranslationAt: Date = .distantPast
     private let partialTranslationInterval: TimeInterval = 0.10
-    private let frameMicSyncTimeout: TimeInterval = 2.5
     private var latestTranscriptSnapshot: String = ""
     private var lastPartialTranslationText: String = ""
     private var expectedPacketSeq: UInt16?
@@ -144,14 +143,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var lastSentPartialCaption: String = ""
     private var lastTapSequenceHandled: Int = -1
     private var replTextBuffer: String = ""
-    private var micStateGeneration: UInt64 = 0
-    private var micTransitionInFlight = false
-    private var pendingFrameMicState: Bool?
-    private var desiredStreamingState = false
-    private var queuedMicStateAfterTransition: Bool?
-    private var pendingRecognitionStart = false
-    private var hasReceivedAudioSinceStreamStart = false
-    private var frameMicSyncTask: Task<Void, Never>?
     private var audioDCEstimate: Float = 0
     private var audioSmoothedGain: Float = 1
     private lazy var streamFormat: AVAudioFormat = {
@@ -213,7 +204,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         stopScanning()
         explicitDisconnectRequested = false
         shouldAttemptReconnect = true
-        queuedMicStateAfterTransition = nil
         state = .connecting(device.name)
         connectionDebugStage = "Connect requested"
         statusMessage = "Connecting to \(device.name)…"
@@ -223,7 +213,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     func disconnect() {
         explicitDisconnectRequested = true
         shouldAttemptReconnect = false
-        stopAudioStream(sendCommand: true)
+        stopListening()
         guard let peripheral = connectedPeripheral else { return }
         central.cancelPeripheralConnection(peripheral)
         resetConnectionState(message: "Disconnected")
@@ -242,8 +232,8 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             break
         case .background:
             isAppActive = false
-            if isStreaming || desiredStreamingState {
-                stopAudioStream(sendCommand: true)
+            if isStreaming {
+                stopListening()
             }
         @unknown default:
             break
@@ -335,85 +325,45 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     ) {
         setRecognitionLanguage(listeningLanguage)
         setTargetLanguage(targetLanguage)
-        startAudioStream(triggeredByTap: triggeredByTap)
+        startListening(triggeredByTap: triggeredByTap)
     }
 
-    func startAudioStream(triggeredByTap: Bool = false) {
-        desiredStreamingState = true
+    func startListening(triggeredByTap: Bool = false) {
         guard connectedPeripheral != nil, txChar != nil else {
             statusMessage = "Connect to Frame first"
             return
         }
-        if micTransitionInFlight {
-            queuedMicStateAfterTransition = true
-            statusMessage = "Applying latest mic request…"
-            return
-        }
-        if isStreaming {
-            syncFrameRuntimeState(micEnabled: true, status: "listening")
-            statusMessage = triggeredByTap ? "Started from Frame tap" : "Streaming audio from Frame…"
+        guard !isStreaming else {
+            statusMessage = triggeredByTap ? "Started from Frame tap" : "Listening…"
             return
         }
 
-        statusMessage = "Requesting speech permission…"
         lastPartialTranslationAt = .distantPast
         expectedPacketSeq = nil
         resetAudioConditioning()
-        hasReceivedAudioSinceStreamStart = false
-        micStateGeneration &+= 1
-        micTransitionInFlight = true
-        let generation = micStateGeneration
 
         Task { @MainActor in
             let authorization = await requestSpeechAuthorization()
-            guard generation == self.micStateGeneration else { return }
             guard authorization == .authorized else {
-                self.micTransitionInFlight = false
-                self.setStreamingState(false)
-                self.pendingRecognitionStart = false
-                self.syncFrameRuntimeState(micEnabled: false)
                 statusMessage = "Allow Speech Recognition in Settings"
                 return
             }
 
-            guard generation == self.micStateGeneration else { return }
-
-            self.pendingRecognitionStart = true
             if !self.startRecognition() {
-                self.micTransitionInFlight = false
-                self.setStreamingState(false)
-                self.pendingRecognitionStart = false
-                self.syncFrameRuntimeState(micEnabled: false)
                 statusMessage = "Speech recognizer unavailable"
                 return
             }
             setStreamingState(true)
-            syncFrameRuntimeState(micEnabled: true, status: "listening")
-            statusMessage = "Waiting for Frame mic…"
+            sendRawCommand(["SYNC_STATE", "1", "listening"], preferredType: .withResponse)
+            statusMessage = triggeredByTap ? "Started from Frame tap" : "Listening…"
         }
     }
 
-    func stopAudioStream(sendCommand: Bool = true) {
-        desiredStreamingState = false
-        queuedMicStateAfterTransition = nil
-        if micTransitionInFlight, sendCommand {
-            queuedMicStateAfterTransition = false
-            statusMessage = "Applying latest mic request…"
-            return
-        }
-        micStateGeneration &+= 1
-        if sendCommand {
-            micTransitionInFlight = true
-            syncFrameRuntimeState(micEnabled: false)
-        } else {
-            micTransitionInFlight = false
-            pendingFrameMicState = nil
-            frameMicSyncTask?.cancel()
-            frameMicSyncTask = nil
-        }
+    func stopListening() {
         stopRecognition()
         setStreamingState(false)
-        statusMessage = "Stream stopped"
+        sendRawCommand(["SYNC_STATE", "0", "idle"], preferredType: .withResponse)
+        statusMessage = "Stopped"
     }
 
     func clearTranscript() {
@@ -436,52 +386,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         isStreaming = enabled
     }
 
-    private func syncFrameRuntimeState(micEnabled: Bool, status: String? = nil) {
-        let resolvedStatus = status ?? (micEnabled ? "listening" : "idle")
-        logDecision("syncFrameRuntimeState requested micEnabled=\(micEnabled) status=\(resolvedStatus) desiredStreamingState=\(desiredStreamingState) isStreaming=\(isStreaming) micTransitionInFlight=\(micTransitionInFlight)")
-        pendingFrameMicState = micEnabled
-        frameMicSyncTask?.cancel()
-        let generation = micStateGeneration
-        frameMicSyncTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(frameMicSyncTimeout * 1_000_000_000))
-            guard let self else { return }
-            guard generation == self.micStateGeneration else { return }
-            guard self.pendingFrameMicState == micEnabled else { return }
-
-            self.pendingFrameMicState = nil
-            self.logDecision("syncFrameRuntimeState timeout micEnabled=\(micEnabled) generation=\(generation)")
-            if micEnabled {
-                if self.hasReceivedAudioSinceStreamStart {
-                    self.logDecision("syncFrameRuntimeState timeout but audio is flowing; treating as success")
-                    self.pendingRecognitionStart = false
-                    self.statusMessage = "Streaming audio from Frame…"
-                } else {
-                    self.peripheralStatus = "Frame mic sync timeout"
-                    self.stopRecognition()
-                    self.setStreamingState(false)
-                    self.sendRawCommand(["SYNC_STATE", "0", "idle"], preferredType: .withResponse)
-                    self.statusMessage = "Frame mic failed to start"
-                }
-            }
-            self.finishMicTransition()
-        }
-
-        sendRawCommand(["SYNC_STATE", micEnabled ? "1" : "0", resolvedStatus], preferredType: .withResponse)
-    }
-
-    private func finishMicTransition() {
-        micTransitionInFlight = false
-        guard let queued = queuedMicStateAfterTransition else { return }
-        queuedMicStateAfterTransition = nil
-        if queued == desiredStreamingState {
-            if queued {
-                startAudioStream(triggeredByTap: true)
-            } else {
-                stopAudioStream(sendCommand: true)
-            }
-        }
-    }
-
     private func bootstrapFrameSession(reason: String) {
         guard connectedPeripheral != nil, txChar != nil else { return }
         guard hasReceivedFrameAppHeartbeat else {
@@ -496,13 +400,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         connectionDebugStage = "Bootstrapping session"
         statusMessage = reason
         applyPreferences()
-        syncFrameRuntimeState(micEnabled: desiredStreamingState && isAppActive)
-        if desiredStreamingState && isAppActive && recognitionRequest == nil {
-            pendingRecognitionStart = true
-            if startRecognition() {
-                setStreamingState(true)
-            }
-        }
+        sendRawCommand(["SYNC_STATE", isStreaming ? "1" : "0", isStreaming ? "listening" : "idle"], preferredType: .withResponse)
         if !lastSentFinalCaption.isEmpty {
             sendRawCommand(["SHOW_CAPTION", "final", lastSentFinalCaption])
         } else if !lastSentPartialCaption.isEmpty {
@@ -673,7 +571,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                 }
                 self.logDecision("recognitionTask error \(error.localizedDescription)")
                 self.statusMessage = "Recognition error: \(error.localizedDescription)"
-                self.stopAudioStream(sendCommand: true)
+                self.stopListening()
             }
         }
         return true
@@ -685,7 +583,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
-        pendingRecognitionStart = false
         expectedPacketSeq = nil
         lastPartialTranslationAt = .distantPast
         lastPartialTranslationText = ""
@@ -816,13 +713,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
     private func appendAudioPacket(_ payload: Data) {
         guard payload.count >= 3 else { return }
-        guard isStreaming, recognitionRequest != nil else {
-            logDecision("audioPacket ignored while recognition inactive")
-            return
-        }
+        guard recognitionRequest != nil else { return }
         let type = payload[0]
         guard type == Self.audioPacketType else { return }
-        hasReceivedAudioSinceStreamStart = true
 
         let packetSeq = UInt16(payload[1]) | (UInt16(payload[2]) << 8)
         let audioPayload = payload.subdata(in: 3 ..< payload.count)
@@ -984,13 +877,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     private func resetConnectionState(message: String) {
-        micStateGeneration &+= 1
-        micTransitionInFlight = false
-        pendingFrameMicState = nil
-        queuedMicStateAfterTransition = nil
         lastTapSequenceHandled = -1
-        frameMicSyncTask?.cancel()
-        frameMicSyncTask = nil
         txChar = nil
         rxChar = nil
         connectedPeripheral = nil
@@ -1256,51 +1143,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             if parts.count >= 3 {
                 peripheralStatus = parts[2]
             }
-        case "MIC_STATE":
-            let micActive = parts.count >= 3 ? parts[2] == "1" : false
-            let status = parts.count >= 6 ? parts[5] : (micActive ? "listening" : "idle")
-            let reason = parts.count >= 7 ? parts[6] : ""
-
-            peripheralStatus = "Frame mic \(micActive ? "on" : "off")"
-            if !reason.isEmpty {
-                peripheralStatus += " (\(reason))"
-            }
-
-            if pendingFrameMicState == micActive {
-                pendingFrameMicState = nil
-                frameMicSyncTask?.cancel()
-                frameMicSyncTask = nil
-                if micActive && pendingRecognitionStart {
-                    logDecision("MIC_STATE confirmed mic on; recognition already active")
-                    pendingRecognitionStart = false
-                    statusMessage = "Streaming audio from Frame…"
-                }
-                finishMicTransition()
-            }
-
-            if !micActive && isStreaming && pendingFrameMicState == nil {
-                stopRecognition()
-                setStreamingState(false)
-                statusMessage = "Frame mic stopped unexpectedly"
-            } else if micActive && isStreaming {
-                statusMessage = "Streaming audio from Frame…"
-            }
-
-            if status == "error" && !micActive {
-                stopRecognition()
-                setStreamingState(false)
-                finishMicTransition()
-            }
         case "MIC_ERROR":
             let detail = parts.count >= 3 ? parts[2] : "Unknown mic error"
-            pendingFrameMicState = nil
-            frameMicSyncTask?.cancel()
-            frameMicSyncTask = nil
-            stopRecognition()
-            setStreamingState(false)
             peripheralStatus = detail
             statusMessage = "Frame mic error"
-            finishMicTransition()
         case "CRASH":
             let detail = parts.count >= 3 ? parts[2] : "Unknown Frame crash"
             peripheralStatus = detail
@@ -1332,17 +1178,16 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     private func handleTapToggleListening(desiredEnabled: Bool) {
-        logDecision("handleTapToggleListening desiredEnabled=\(desiredEnabled) desiredStreamingState=\(desiredStreamingState) isStreaming=\(isStreaming) micTransitionInFlight=\(micTransitionInFlight)")
-        if desiredEnabled == desiredStreamingState && desiredEnabled == isStreaming && !micTransitionInFlight { return }
+        logDecision("handleTapToggleListening desiredEnabled=\(desiredEnabled) isStreaming=\(isStreaming)")
+        if desiredEnabled == isStreaming { return }
         if desiredEnabled {
             startTranscribing(
                 listeningLanguage: selectedLanguageCode,
                 translatingTo: targetLanguageCode,
                 triggeredByTap: true
             )
-            statusMessage = "Started from Frame tap"
         } else {
-            stopAudioStream()
+            stopListening()
             statusMessage = "Stopped from Frame tap"
         }
     }

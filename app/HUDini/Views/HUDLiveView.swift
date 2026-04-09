@@ -87,7 +87,7 @@ struct HUDLiveView: View {
             }
             transcriptionManager.stop()
             if frameManager.isStreaming {
-                frameManager.stopAudioStream()
+                frameManager.stopListening()
             }
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
@@ -303,7 +303,7 @@ struct HUDLiveView: View {
         if isListening {
             persistConversationSnapshotIfNonEmpty()
             if shouldUseFrameMic {
-                frameManager.stopAudioStream()
+                frameManager.stopListening()
             } else {
                 transcriptionManager.stop()
             }

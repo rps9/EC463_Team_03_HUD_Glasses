@@ -3,17 +3,15 @@ import Foundation
 enum FrameEmbeddedApp {
     static let mainLua = #"""
 local APP_DIR = "/hudini"
-local APP_VERSION = "2026.04.08.1"
+local APP_VERSION = "2026.04.08.2"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
 local state = {
   connected = false,
-  status = "disconnected",
+  status = "idle",
+  listening = false,
   partial_caption = "",
   final_caption = "",
-  mic_display_on = false,
-  mic_active = false,
-  desired_mic_on = false,
   brightness = 0,
   partials = true,
   needs_render = true,
@@ -92,37 +90,9 @@ local function normalize_display_text(text)
   return trim(normalized)
 end
 
-local function bool_string(value)
-  if value then
-    return "1"
-  end
-  return "0"
-end
-
 local function send_event(parts)
   local payload = table.concat(parts, "\t")
   pcall(frame.bluetooth.send, payload)
-end
-
-local function set_status(status)
-  local changed = state.status ~= status
-  state.status = status
-  state.needs_render = true
-  if changed then
-    send_event({ "EVT", "STATUS", status })
-  end
-end
-
-local function emit_mic_state(reason)
-  send_event({
-    "EVT",
-    "MIC_STATE",
-    state.mic_active and "1" or "0",
-    state.mic_display_on and "1" or "0",
-    state.desired_mic_on and "1" or "0",
-    state.status,
-    reason or "",
-  })
 end
 
 local function wrap_lines(text, limit, max_lines)
@@ -220,9 +190,8 @@ local function render_ui()
   frame.display.power_save(false)
   frame.display.set_brightness(state.brightness)
 
-  local mic_on = state.mic_display_on
   frame.display.text("Mic:", 24, 52, { color = "WHITE", spacing = 4 })
-  frame.display.text(mic_on and "ON" or "OFF", 98, 52, { color = mic_on and "GREEN" or "RED", spacing = 4 })
+  frame.display.text(state.listening and "ON" or "OFF", 98, 52, { color = state.listening and "GREEN" or "RED", spacing = 4 })
 
   local text = state.final_caption
   if text == "" and state.partials then
@@ -232,99 +201,6 @@ local function render_ui()
 
   frame.display.show()
   state.needs_render = false
-end
-
-local function set_mic_active(value)
-  if state.mic_active ~= value then
-    state.mic_active = value
-    state.needs_render = true
-  end
-end
-
-local function set_mic_display(value)
-  if state.mic_display_on ~= value then
-    state.mic_display_on = value
-    state.needs_render = true
-  end
-end
-
-local function update_mic_visual_state(active)
-  set_mic_active(active)
-  set_mic_display(active)
-end
-
-local function safe_mic_start()
-  local ok, err = pcall(frame.microphone.start, { sample_rate = 8000, bit_depth = 16 })
-  if ok then
-    state.audio_sequence = 0
-    state.desired_mic_on = true
-    update_mic_visual_state(true)
-    return true
-  end
-
-  local message = tostring(err or "")
-  if string.find(message, "already started", 1, true) ~= nil then
-    update_mic_visual_state(true)
-    state.desired_mic_on = true
-    return true
-  end
-
-  state.desired_mic_on = false
-  update_mic_visual_state(false)
-  set_status("error")
-  emit_mic_state("start_failed")
-  send_event({ "EVT", "MIC_ERROR", message })
-  return false
-end
-
-local function safe_mic_stop()
-  local ok, err = pcall(frame.microphone.stop)
-  if ok then
-    state.desired_mic_on = false
-    update_mic_visual_state(false)
-    return true
-  end
-
-  local message = tostring(err or "")
-  if string.find(message, "not started", 1, true) ~= nil then
-    update_mic_visual_state(false)
-    state.desired_mic_on = false
-    return true
-  end
-
-  state.desired_mic_on = state.mic_active
-  set_status("error")
-  emit_mic_state("stop_failed")
-  send_event({ "EVT", "MIC_ERROR", message })
-  return false
-end
-
-local function sync_runtime_state(mic_enabled, status)
-  local resolved_status = status
-  if resolved_status == nil or resolved_status == "" then
-    resolved_status = mic_enabled and "listening" or "idle"
-  end
-
-  if state.mic_active == mic_enabled and state.status == resolved_status and state.desired_mic_on == mic_enabled then
-    emit_mic_state("sync_noop")
-    return true
-  end
-
-  state.desired_mic_on = mic_enabled
-
-  if mic_enabled then
-    if not safe_mic_start() then
-      return false
-    end
-  else
-    if not safe_mic_stop() then
-      return false
-    end
-  end
-
-  set_status(resolved_status)
-  emit_mic_state("sync")
-  return true
 end
 
 local function handle_command(payload)
@@ -342,7 +218,10 @@ local function handle_command(payload)
   end
 
   if command == "SYNC_STATE" then
-    sync_runtime_state(parts[2] == "1", parts[3] or (parts[2] == "1" and "listening" or "idle"))
+    state.listening = parts[2] == "1"
+    state.status = parts[3] or (state.listening and "listening" or "idle")
+    state.needs_render = true
+    send_event({ "EVT", "STATUS", state.status })
     return
   end
 
@@ -391,14 +270,11 @@ end
 
 local function on_tap()
   state.tap_sequence = state.tap_sequence + 1
-  local current_mic_state = state.mic_active
-  local next_mic_state = not current_mic_state
-  state.desired_mic_on = next_mic_state
   send_event({
     "EVT",
     "MIC_REQUEST",
-    current_mic_state and "1" or "0",
-    next_mic_state and "1" or "0",
+    state.listening and "1" or "0",
+    state.listening and "0" or "1",
     tostring(state.tap_sequence),
   })
 end
@@ -414,14 +290,25 @@ local function send_audio_chunk(data)
   state.audio_sequence = (sequence + 1) % 65536
 end
 
+local function start_mic()
+  local ok, err = pcall(frame.microphone.start, { sample_rate = 8000, bit_depth = 16 })
+  if ok then
+    state.audio_sequence = 0
+    return true
+  end
+  local message = tostring(err or "")
+  if string.find(message, "already started", 1, true) ~= nil then
+    return true
+  end
+  send_event({ "EVT", "MIC_ERROR", message })
+  return false
+end
+
 local function run_app()
   frame.bluetooth.receive_callback(function(data) handle_command(data) end)
   frame.imu.tap_callback(on_tap)
   frame.display.set_brightness(state.brightness)
   state.connected = false
-  state.desired_mic_on = false
-  update_mic_visual_state(false)
-  set_status("disconnected")
   send_event({ "EVT", "BOOT", frame.FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP_VERSION })
 
   local saved_crash = load_saved_crash()
@@ -429,7 +316,6 @@ local function run_app()
     send_event({ "EVT", "CRASH", crash_text(saved_crash) })
     clear_saved_crash()
   end
-  emit_mic_state("boot")
 
   local max_audio_bytes = frame.bluetooth.max_length() - 3
   if max_audio_bytes % 2 == 1 then
@@ -439,27 +325,22 @@ local function run_app()
     max_audio_bytes = 64
   end
 
+  start_mic()
+
   while true do
     if state.needs_render then
       render_ui()
     end
 
-    if state.mic_active then
-      local audio = frame.microphone.read(max_audio_bytes)
-      if audio == nil then
-        state.desired_mic_on = false
-        update_mic_visual_state(false)
-        set_status("idle")
-        emit_mic_state("read_nil")
-      elseif audio ~= "" then
-        send_audio_chunk(audio)
-        local samples = string.len(audio) / 2
-        frame.sleep(samples / 8000)
-      else
-        frame.sleep(0.004)
-      end
+    local audio = frame.microphone.read(max_audio_bytes)
+    if audio == nil then
+      frame.sleep(0.1)
+      start_mic()
+    elseif audio ~= "" then
+      send_audio_chunk(audio)
+      frame.sleep(string.len(audio) / 2 / 8000)
     else
-      frame.sleep(0.02)
+      frame.sleep(0.004)
     end
   end
 end

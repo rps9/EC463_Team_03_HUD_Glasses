@@ -4,6 +4,7 @@ import UIKit
 struct AdminFrameLogView: View {
     @EnvironmentObject private var frameManager: FrameBluetoothManager
     @State private var copyStatusMessage: String = ""
+    @State private var manualMessage: String = ""
 
     private static let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -47,6 +48,40 @@ struct AdminFrameLogView: View {
                 }
 
                 HUDCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Send to Glasses")
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(HUDTheme.ink)
+
+                        TextField("Type a message…", text: $manualMessage, axis: .vertical)
+                            .font(.system(.body, design: .rounded))
+                            .lineLimit(1...4)
+                            .padding(12)
+                            .background(.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(HUDTheme.strokeStrong, lineWidth: 1)
+                            }
+
+                        HStack(spacing: 12) {
+                            Button("Send") {
+                                let text = manualMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !text.isEmpty else { return }
+                                frameManager.sendHUDTextToFrame(text, isPartial: false, updateStatus: true)
+                            }
+                            .buttonStyle(HUDPrimaryButtonStyle(tint: HUDTheme.accent))
+                            .disabled(manualMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !isFrameConnected)
+
+                            Button("Clear Display") {
+                                frameManager.clearFrameDisplay()
+                            }
+                            .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.rose))
+                            .disabled(!isFrameConnected)
+                        }
+                    }
+                }
+
+                HUDCard {
                     if frameManager.devLogEntries.isEmpty {
                         Text("No Frame events logged yet.")
                             .font(.system(.body, design: .rounded))
@@ -77,6 +112,11 @@ struct AdminFrameLogView: View {
         .hudScreen()
         .navigationTitle("Admin")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var isFrameConnected: Bool {
+        if case .connected = frameManager.state { return true }
+        return false
     }
 
     private var exportedLogText: String {
