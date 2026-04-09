@@ -43,11 +43,12 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let rawPrefix: UInt8 = 0x01
     private static let breakSignal: UInt8 = 0x03
     private static let resetSignal: UInt8 = 0x04
-    private static let audioPacketType: UInt8 = 0x20
+    private static let audioDataNonFinal: UInt8 = 0x05
+    private static let audioDataFinal: UInt8 = 0x06
+    private static let tapEvent: UInt8 = 0x10
     private static let streamSampleRate: Double = 16_000
     private static let streamBitDepth: Int = 8
-    private static let recognitionSampleRate: Double = 16_000
-    private static let embeddedAppVersion = "2026.04.09.3"
+    private static let embeddedAppVersion = "2026.04.09.8"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
 
@@ -140,14 +141,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var lastRecognitionResultAt: Date = .distantPast
     private var lastAudioPacketAt: Date = .distantPast
     private var audioPacketCount: Int = 0
-    private var expectedPacketSeq: UInt16?
     private var lastSentFinalCaption: String = ""
     private var lastSentPartialCaption: String = ""
     private var lastSentSuggestion: String = ""
-    private var lastTapSequenceHandled: Int = -1
     private var replTextBuffer: String = ""
-    private var audioDCEstimate: Float = 0
-    private var audioSmoothedGain: Float = 1
     private var audioEnergyAccumulator: Float = 0
     private var audioEnergySampleCount: Int = 0
     private var debugAudioFileHandle: FileHandle?
@@ -158,15 +155,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         AVAudioFormat(
             commonFormat: .pcmFormatInt16,
             sampleRate: Self.streamSampleRate,
-            channels: 1,
-            interleaved: false
-        )!
-    }()
-
-    private lazy var recognitionFormat: AVAudioFormat = {
-        AVAudioFormat(
-            commonFormat: .pcmFormatInt16,
-            sampleRate: Self.recognitionSampleRate,
             channels: 1,
             interleaved: false
         )!
@@ -359,7 +347,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
 
         lastPartialTranslationAt = .distantPast
-        expectedPacketSeq = nil
+
         resetAudioConditioning()
 
         Task { @MainActor in
@@ -620,7 +608,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
-        expectedPacketSeq = nil
+
         lastPartialTranslationAt = .distantPast
         lastPartialTranslationText = ""
         resetAudioConditioning()
@@ -735,28 +723,16 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     private func appendAudioPacket(_ payload: Data) {
-        guard payload.count >= 3 else { return }
+        guard payload.count >= 2 else { return }
         guard recognitionRequest != nil else { return }
-        let type = payload[0]
-        guard type == Self.audioPacketType else { return }
 
-        let packetSeq = UInt16(payload[1]) | (UInt16(payload[2]) << 8)
-        let audioPayload = payload.subdata(in: 3 ..< payload.count)
+        // Strip 1-byte header (0x05 non-final or 0x06 final)
+        let audioPayload = payload.subdata(in: 1 ..< payload.count)
         lastAudioPacketAt = Date()
         audioPacketCount += 1
         if audioPacketCount % 100 == 0 {
-            logDecision("audioPacket milestone count=\(audioPacketCount) seq=\(packetSeq)")
+            logDecision("audioPacket milestone count=\(audioPacketCount) packets=\(audioPacketCount)")
         }
-
-        if let expected = expectedPacketSeq {
-            let missing = Int(packetSeq &- expected)
-            if missing > 0 && missing < 64 {
-                let bytesPerSample = max(1, Self.streamBitDepth / 8)
-                let silenceSamples = (audioPayload.count / bytesPerSample) * missing
-                appendSilence(samples: silenceSamples)
-            }
-        }
-        expectedPacketSeq = packetSeq &+ 1
         if Self.streamBitDepth == 8 {
             appendPCM8(audioPayload)
         } else {
@@ -768,21 +744,30 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private func appendPCM16(_ payload: Data) {
         let sampleCount = payload.count / MemoryLayout<Int16>.size
         guard sampleCount > 0 else { return }
-        let conditionedPayload = preprocessPCM16(payload)
-        let recognitionPayload = upsampleForRecognitionIfNeeded(conditionedPayload)
-        debugAudioFileHandle?.write(recognitionPayload)
-        let recognitionSampleCount = recognitionPayload.count / MemoryLayout<Int16>.size
-        if let request = recognitionRequest,
-           let buffer = AVAudioPCMBuffer(pcmFormat: recognitionFormat, frameCapacity: AVAudioFrameCount(recognitionSampleCount)),
-           let dst = buffer.int16ChannelData?[0] {
-            recognitionPayload.withUnsafeBytes { srcRaw in
-                guard let src = srcRaw.baseAddress else { return }
-                memcpy(dst, src, recognitionPayload.count)
-            }
 
-            buffer.frameLength = AVAudioFrameCount(recognitionSampleCount)
-            request.append(buffer)
+        // Log energy and capture debug audio (16kHz/16-bit after conversion)
+        payload.withUnsafeBytes { raw in
+            guard let src = raw.bindMemory(to: Int16.self).baseAddress else { return }
+            var sumAbs: Float = 0
+            for i in 0 ..< sampleCount {
+                sumAbs += abs(Float(src[i]))
+            }
+            audioEnergyAccumulator += sumAbs / Float(sampleCount)
+            audioEnergySampleCount += 1
         }
+        debugAudioFileHandle?.write(payload)
+
+        guard let request = recognitionRequest else { return }
+
+        // Feed 16kHz PCM directly to recognizer — no upsampling needed
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: streamFormat, frameCapacity: AVAudioFrameCount(sampleCount)),
+              let dst = buffer.int16ChannelData?[0] else { return }
+        payload.withUnsafeBytes { srcRaw in
+            guard let src = srcRaw.baseAddress else { return }
+            memcpy(dst, src, payload.count)
+        }
+        buffer.frameLength = AVAudioFrameCount(sampleCount)
+        request.append(buffer)
     }
 
     private func appendPCM8(_ payload: Data) {
@@ -793,8 +778,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         converted.withUnsafeMutableBytes { dstRaw in
             guard let dst = dstRaw.bindMemory(to: Int16.self).baseAddress else { return }
             for index in 0 ..< sampleCount {
-                // Frame mic outputs signed 8-bit PCM (-128 to 127, silence at 0)
-                // Convert to signed 16-bit PCM by shifting left 8 bits
                 let signedByte = Int8(bitPattern: payload[index])
                 dst[index] = Int16(signedByte) << 8
             }
@@ -803,62 +786,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         appendPCM16(converted)
     }
 
-    private func appendSilence(samples: Int) {
-        guard samples > 0 else { return }
-        guard let request = recognitionRequest else { return }
-        let recognitionSamples = max(samples, Int(Double(samples) * (Self.recognitionSampleRate / Self.streamSampleRate)))
-        guard let buffer = AVAudioPCMBuffer(
-            pcmFormat: recognitionFormat,
-            frameCapacity: AVAudioFrameCount(recognitionSamples)
-        ) else { return }
-        guard let dst = buffer.int16ChannelData?[0] else { return }
-
-        memset(dst, 0, recognitionSamples * MemoryLayout<Int16>.size)
-        buffer.frameLength = AVAudioFrameCount(recognitionSamples)
-        request.append(buffer)
-    }
-
-    private func preprocessPCM16(_ payload: Data) -> Data {
-        let sampleCount = payload.count / MemoryLayout<Int16>.size
-        guard sampleCount > 0 else { return payload }
-
-        var conditioned = Data(count: payload.count)
-        conditioned.withUnsafeMutableBytes { dstRaw in
-            guard let dst = dstRaw.bindMemory(to: Int16.self).baseAddress else { return }
-            payload.withUnsafeBytes { srcRaw in
-                guard let src = srcRaw.bindMemory(to: Int16.self).baseAddress else { return }
-
-                var sumAbs: Float = 0
-                for index in 0 ..< sampleCount {
-                    let sample = Float(src[index])
-                    audioDCEstimate += 0.01 * (sample - audioDCEstimate)
-                    let highPassed = max(-32768, min(32767, sample - audioDCEstimate))
-                    let value = Int16(highPassed.rounded())
-                    dst[index] = value
-                    sumAbs += abs(Float(value))
-                }
-
-                let avgAbs = sumAbs / max(Float(sampleCount), 1)
-                var desiredGain = Float(2500) / max(avgAbs, 250)
-                desiredGain = min(max(desiredGain, 1), 6)
-                audioSmoothedGain = (0.85 * audioSmoothedGain) + (0.15 * desiredGain)
-
-                for index in 0 ..< sampleCount {
-                    let amplified = Int32((Float(dst[index]) * audioSmoothedGain).rounded())
-                    dst[index] = Int16(max(-30000, min(30000, amplified)))
-                }
-
-                audioEnergyAccumulator += avgAbs
-                audioEnergySampleCount += 1
-            }
-        }
-        return conditioned
-    }
-
     private func logAudioEnergyIfNeeded() {
         guard audioEnergySampleCount > 0, audioPacketCount % 500 == 0 else { return }
         let avgEnergy = audioEnergyAccumulator / Float(audioEnergySampleCount)
-        logDecision("[AUDIO] energy=\(Int(avgEnergy)) gain=\(String(format: "%.2f", audioSmoothedGain)) dc=\(Int(audioDCEstimate)) packets=\(audioPacketCount)")
+        logDecision("[AUDIO] energy=\(Int(avgEnergy)) packets=\(audioPacketCount)")
         audioEnergyAccumulator = 0
         audioEnergySampleCount = 0
     }
@@ -878,7 +809,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         debugAudioFileHandle = nil
         if let path = debugAudioFilePath {
             let size = (try? FileManager.default.attributesOfItem(atPath: path.path)[.size] as? Int) ?? 0
-            let duration = Double(size) / (Self.recognitionSampleRate * 2.0)
+            let duration = Double(size) / (Self.streamSampleRate * 2.0)
             logDecision("[AUDIO] debug capture saved: \(path.lastPathComponent) size=\(size) bytes (~\(String(format: "%.1f", duration))s)")
             if size > 0 {
                 debugAudioRecordings.append(path)
@@ -902,44 +833,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         debugAudioFilePath = nil
     }
 
-    private func upsampleForRecognitionIfNeeded(_ payload: Data) -> Data {
-        guard Self.streamSampleRate < Self.recognitionSampleRate else { return payload }
-
-        let inputSampleCount = payload.count / 2
-        guard inputSampleCount > 0 else { return payload }
-        if inputSampleCount == 1 {
-            return payload + payload
-        }
-
-        var output = Data(capacity: inputSampleCount * 4)
-        for index in 0 ..< inputSampleCount {
-            let current = sampleAt(index, in: payload)
-            appendLittleEndian(current, to: &output)
-
-            let next = index + 1 < inputSampleCount ? sampleAt(index + 1, in: payload) : current
-            let midpoint = Int16((Int32(current) + Int32(next)) / 2)
-            appendLittleEndian(midpoint, to: &output)
-        }
-        return output
-    }
-
-    private func sampleAt(_ index: Int, in payload: Data) -> Int16 {
-        let offset = index * 2
-        let low = UInt16(payload[offset])
-        let high = UInt16(payload[offset + 1]) << 8
-        return Int16(bitPattern: low | high)
-    }
-
-    private func appendLittleEndian(_ value: Int16, to data: inout Data) {
-        var littleEndian = value.littleEndian
-        withUnsafeBytes(of: &littleEndian) { bytes in
-            data.append(contentsOf: bytes)
-        }
-    }
-
     private func resetAudioConditioning() {
-        audioDCEstimate = 0
-        audioSmoothedGain = 1
     }
 
     private func startScan() {
@@ -955,7 +849,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     private func resetConnectionState(message: String) {
-        lastTapSequenceHandled = -1
+
         txChar = nil
         rxChar = nil
         connectedPeripheral = nil
@@ -1172,8 +1066,14 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private func handleRawPayload(_ payload: Data) {
         guard !payload.isEmpty else { return }
 
-        if payload[0] == Self.audioPacketType {
+        if payload[0] == Self.audioDataNonFinal || payload[0] == Self.audioDataFinal {
             appendAudioPacket(payload)
+            return
+        }
+
+        if payload[0] == Self.tapEvent {
+            appendDevLog(direction: "IN", message: "TAP")
+            handleTapToggleListening(desiredEnabled: !isStreaming)
             return
         }
 
@@ -1233,24 +1133,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             installStatus = "Frame crash: \(detail)"
         case "PREFS_SAVED":
             statusMessage = "Saved preferences on Frame"
-        case "MIC_REQUEST":
-            if parts.count >= 4 {
-                let desiredEnabled = parts[3] == "1"
-                let tapSequence = parts.count >= 5 ? Int(parts[4]) ?? -1 : -1
-                if tapSequence >= 0 {
-                    guard tapSequence > lastTapSequenceHandled else {
-                        logDecision("MIC_REQUEST ignored duplicate tapSequence=\(tapSequence)")
-                        return
-                    }
-                    lastTapSequenceHandled = tapSequence
-                }
-                peripheralStatus = "Tap requested mic \(desiredEnabled ? "on" : "off")"
-                handleTapToggleListening(desiredEnabled: desiredEnabled)
-            } else if parts.count >= 3 {
-                let desiredEnabled = parts[2] == "1"
-                peripheralStatus = "Tap requested mic \(desiredEnabled ? "on" : "off")"
-                handleTapToggleListening(desiredEnabled: desiredEnabled)
-            }
         default:
             peripheralStatus = text
         }
@@ -1486,7 +1368,7 @@ extension FrameBluetoothManager: CBPeripheralDelegate {
                 return
             }
 
-            if let first = data.first, first == Self.audioPacketType {
+            if let first = data.first, (first == Self.audioDataNonFinal || first == Self.audioDataFinal) {
                 handleRawPayload(data)
                 return
             }

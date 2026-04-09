@@ -3,7 +3,7 @@ import Foundation
 enum FrameEmbeddedApp {
     static let mainLua = #"""
 local APP_DIR = "/hudini"
-local APP_VERSION = "2026.04.09.3"
+local APP_VERSION = "2026.04.09.8"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
 local state = {
@@ -15,8 +15,6 @@ local state = {
   brightness = 0,
   partials = true,
   needs_render = true,
-  audio_sequence = 0,
-  tap_sequence = 0,
   suggestion = "",
 }
 
@@ -296,9 +294,7 @@ local function handle_command(payload)
     state.partial_caption = ""
     state.final_caption = ""
     state.listening = false
-    state.audio_sequence = 0
     state.suggestion = ""
-    send_buffer = ""
     state.needs_render = true
     frame.sleep(0.05)
     start_mic()
@@ -308,32 +304,21 @@ local function handle_command(payload)
 end
 
 local function on_tap()
-  state.tap_sequence = state.tap_sequence + 1
-  send_event({
-    "EVT",
-    "MIC_REQUEST",
-    state.listening and "1" or "0",
-    state.listening and "0" or "1",
-    tostring(state.tap_sequence),
-  })
+  pcall(frame.bluetooth.send, string.char(0x10))
 end
 
-local function send_audio_chunk(data)
-  local sequence = state.audio_sequence
-  local packet = string.char(0x20, sequence % 256, math.floor(sequence / 256) % 256) .. data
-  for _ = 1, 3 do
-    if pcall(frame.bluetooth.send, packet) then
-      break
+local function send_data(data)
+  for _ = 1, 100 do
+    if pcall(frame.bluetooth.send, data) then
+      return
     end
     frame.sleep(0.001)
   end
-  state.audio_sequence = (sequence + 1) % 65536
 end
 
 local function start_mic()
   local ok, err = pcall(frame.microphone.start, { sample_rate = 16000, bit_depth = 8 })
   if ok then
-    state.audio_sequence = 0
     return true
   end
   local message = tostring(err or "")
@@ -357,43 +342,29 @@ local function run_app()
     clear_saved_crash()
   end
 
-  local max_audio_bytes = frame.bluetooth.max_length() - 3
-  if max_audio_bytes % 2 == 1 then
-    max_audio_bytes = max_audio_bytes - 1
-  end
-  if max_audio_bytes < 64 then
-    max_audio_bytes = 64
-  end
+  local audio_data_size = math.floor((frame.bluetooth.max_length() - 1) / 2) * 2
 
   start_mic()
-  send_buffer = ""
 
   while true do
     if state.needs_render then
       render_ui()
     end
 
-    local audio = frame.microphone.read(max_audio_bytes)
-    if audio == nil then
-      if send_buffer ~= "" then
-        send_audio_chunk(send_buffer)
-        send_buffer = ""
+    for i = 1, 20 do
+      local audio = frame.microphone.read(audio_data_size)
+      if audio == nil then
+        frame.sleep(0.1)
+        start_mic()
+        break
+      elseif audio ~= "" then
+        pcall(send_data, string.char(0x05) .. audio)
+      else
+        break
       end
-      frame.sleep(0.1)
-      start_mic()
-    elseif audio ~= "" then
-      send_buffer = send_buffer .. audio
-      if string.len(send_buffer) >= max_audio_bytes then
-        send_audio_chunk(string.sub(send_buffer, 1, max_audio_bytes))
-        send_buffer = string.sub(send_buffer, max_audio_bytes + 1)
-      end
-    else
-      if send_buffer ~= "" then
-        send_audio_chunk(send_buffer)
-        send_buffer = ""
-      end
-      frame.sleep(0.004)
     end
+
+    frame.sleep(0.001)
   end
 end
 
