@@ -8,19 +8,7 @@ final class HUDSuggestionManager: ObservableObject {
 
     private var task: Task<Void, Never>?
     private var inFlightSource: (text: String, language: String)?
-    private let openAIService: HUDOpenAISuggestionService?
-
-    init(openAIService: HUDOpenAISuggestionService? = nil) {
-        if let provided = openAIService {
-            self.openAIService = provided
-            return
-        }
-        if let apiKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"], !apiKey.isEmpty {
-            self.openAIService = HUDOpenAISuggestionService(apiKey: apiKey)
-        } else {
-            self.openAIService = nil
-        }
-    }
+    private let service = HUDOpenAISuggestionService()
 
     func refreshSuggestion(for text: String, languageCode: String) {
         task?.cancel()
@@ -44,11 +32,11 @@ final class HUDSuggestionManager: ObservableObject {
     }
 
     func clearSuggestion() {
+        task?.cancel()
         suggestionPhonetic = ""
         suggestionEnglish = ""
+        inFlightSource = nil
     }
-
-    // (factory helper removed)
 
     deinit {
         task?.cancel()
@@ -64,18 +52,16 @@ final class HUDSuggestionManager: ObservableObject {
         }
 
         guard !Task.isCancelled else { return }
-        guard let openAIService else { return }
 
         do {
-            let reply = try await openAIService.suggestion(for: text, languageCode: languageCode)
+            let reply = try await service.suggestion(for: text, languageCode: languageCode)
             guard !Task.isCancelled else { return }
             suggestionPhonetic = reply.phonetic
             suggestionEnglish = reply.english
         } catch {
             guard !Task.isCancelled else { return }
-            suggestionPhonetic = "OpenAI error: \(error.localizedDescription)"
+            suggestionPhonetic = ""
             suggestionEnglish = ""
         }
     }
-
 }

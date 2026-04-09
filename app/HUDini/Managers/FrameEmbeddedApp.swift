@@ -3,7 +3,7 @@ import Foundation
 enum FrameEmbeddedApp {
     static let mainLua = #"""
 local APP_DIR = "/hudini"
-local APP_VERSION = "2026.04.08.7"
+local APP_VERSION = "2026.04.09.1"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
 local state = {
@@ -17,6 +17,7 @@ local state = {
   needs_render = true,
   audio_sequence = 0,
   tap_sequence = 0,
+  suggestion = "",
 }
 
 frame.display.text("HUDini", 220, 116, { color = "WHITE", spacing = 4 })
@@ -197,7 +198,20 @@ local function render_ui()
   if text == "" and state.partials then
     text = state.partial_caption
   end
-  draw_multiline(text, 24, 98, "SKYBLUE", 30, 6)
+
+  local all_lines = wrap_lines(text, 30, 20)
+  local start_idx = math.max(1, #all_lines - 2)
+  local caption_y = 98
+  local lines_drawn = 0
+  for i = start_idx, #all_lines do
+    frame.display.text(all_lines[i], 24, caption_y, { color = "SKYBLUE", spacing = 4 })
+    caption_y = caption_y + 45
+    lines_drawn = lines_drawn + 1
+  end
+
+  if state.suggestion ~= "" then
+    draw_multiline(state.suggestion, 24, caption_y, "YELLOW", 30, 3)
+  end
 
   frame.display.show()
   state.needs_render = false
@@ -220,6 +234,9 @@ local function handle_command(payload)
   if command == "SYNC_STATE" then
     state.listening = parts[2] == "1"
     state.status = parts[3] or (state.listening and "listening" or "idle")
+    if state.listening then
+      state.suggestion = ""
+    end
     state.needs_render = true
     send_event({ "EVT", "STATUS", state.status })
     return
@@ -260,9 +277,16 @@ local function handle_command(payload)
     return
   end
 
+  if command == "SHOW_SUGGESTION" then
+    state.suggestion = trim(parts[2] or "")
+    state.needs_render = true
+    return
+  end
+
   if command == "CLEAR_CAPTION" then
     state.partial_caption = ""
     state.final_caption = ""
+    state.suggestion = ""
     state.needs_render = true
     return
   end
@@ -273,6 +297,7 @@ local function handle_command(payload)
     state.final_caption = ""
     state.listening = false
     state.audio_sequence = 0
+    state.suggestion = ""
     send_buffer = ""
     state.needs_render = true
     frame.sleep(0.05)

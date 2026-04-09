@@ -79,6 +79,15 @@ struct HUDLiveView: View {
                 suggestionManager.clearSuggestion()
             }
         }
+        .onChange(of: suggestionManager.suggestionPhonetic, initial: false) { _, newPhonetic in
+            guard shouldUseFrameMic, isFrameConnected else { return }
+            let trimmed = newPhonetic.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                frameManager.clearSuggestionOnFrame()
+            } else {
+                frameManager.sendSuggestionToFrame(trimmed)
+            }
+        }
         .onDisappear {
             renderedTextDebounceTask?.cancel()
             renderedTextDebounceTask = nil
@@ -313,6 +322,7 @@ struct HUDLiveView: View {
 
     private func toggleListening() {
         if isListening {
+            let finalText = activeRenderedText
             persistConversationSnapshotIfNonEmpty()
             if shouldUseFrameMic {
                 frameManager.stopListening()
@@ -321,11 +331,15 @@ struct HUDLiveView: View {
             }
             renderedTextDebounceTask?.cancel()
             renderedTextDebounceTask = nil
+            if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
+                suggestionManager.refreshSuggestion(for: finalText, languageCode: listeningLanguageCode)
+            }
+        } else {
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
             }
-        } else {
             if shouldUseFrameMic {
+                frameManager.clearSuggestionOnFrame()
                 frameManager.startTranscribing(
                     listeningLanguage: listeningLanguageCode,
                     translatingTo: Self.hudTargetLanguageCode

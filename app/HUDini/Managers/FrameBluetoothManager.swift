@@ -47,7 +47,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let streamSampleRate: Double = 8_000
     private static let streamBitDepth: Int = 16
     private static let recognitionSampleRate: Double = 16_000
-    private static let embeddedAppVersion = "2026.04.08.7"
+    private static let embeddedAppVersion = "2026.04.09.1"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
 
@@ -143,6 +143,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var expectedPacketSeq: UInt16?
     private var lastSentFinalCaption: String = ""
     private var lastSentPartialCaption: String = ""
+    private var lastSentSuggestion: String = ""
     private var lastTapSequenceHandled: Int = -1
     private var replTextBuffer: String = ""
     private var audioDCEstimate: Float = 0
@@ -478,6 +479,20 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         if updateStatus {
             statusMessage = "Updated Frame display"
         }
+    }
+
+    func sendSuggestionToFrame(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard trimmed != lastSentSuggestion else { return }
+        lastSentSuggestion = trimmed
+        logDecision("sendSuggestionToFrame text=\(trimmed)")
+        sendRawCommand(["SHOW_SUGGESTION", trimmed])
+    }
+
+    func clearSuggestionOnFrame() {
+        lastSentSuggestion = ""
+        sendRawCommand(["SHOW_SUGGESTION", ""])
     }
 
     func clearDevLog() {
