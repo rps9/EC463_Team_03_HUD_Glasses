@@ -3,7 +3,7 @@ import Foundation
 enum FrameEmbeddedApp {
     static let mainLua = #"""
 local APP_DIR = "/hudini"
-local APP_VERSION = "2026.04.09.1"
+local APP_VERSION = "2026.04.09.3"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
 local state = {
@@ -331,7 +331,7 @@ local function send_audio_chunk(data)
 end
 
 local function start_mic()
-  local ok, err = pcall(frame.microphone.start, { sample_rate = 8000, bit_depth = 16 })
+  local ok, err = pcall(frame.microphone.start, { sample_rate = 16000, bit_depth = 8 })
   if ok then
     state.audio_sequence = 0
     return true

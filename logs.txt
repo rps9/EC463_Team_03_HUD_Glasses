@@ -1,1376 +1,479 @@
-23:12:43.039 [APP] statusMessage = Waiting for Bluetooth…
-23:12:43.337 [APP] connectionDebugStage = Bluetooth ready
-23:12:43.337 [APP] statusMessage = Bluetooth ready
-23:12:43.338 [APP] connectionDebugStage = Reconnecting to known Frame
-23:12:43.338 [APP] statusMessage = Reconnecting to Frame…
-23:12:43.341 [APP] state idle -> connecting("Frame D7")
-23:12:45.871 [APP] statusMessage = Listening language set to Spanish
-23:12:45.871 [APP] statusMessage = Target language set to English
-23:12:50.791 [APP] connectionDebugStage = Scanning
-23:12:50.807 [APP] state connecting("Frame D7") -> scanning
-23:12:50.807 [APP] statusMessage = Scanning for Frame glasses…
-23:12:55.286 [APP] state scanning -> idle
-23:12:55.286 [APP] state idle -> connecting("Frame D7")
-23:12:55.286 [APP] connectionDebugStage = Reconnecting to known Frame
-23:12:55.286 [APP] statusMessage = Reconnecting to Frame D7…
-23:12:56.025 [APP] connect(to:) ignored because connection is already in progress
-23:12:56.161 [APP] state connecting("Frame D7") -> connected("Frame D7")
-23:12:56.161 [APP] connectionDebugStage = Connected, discovering service
-23:12:56.161 [APP] statusMessage = Connected. Discovering Frame service…
-23:12:56.227 [APP] connectionDebugStage = Service found
-23:12:56.227 [APP] statusMessage = Frame service found. Discovering characteristics…
-23:12:56.237 [APP] connectionDebugStage = Characteristics found
-23:12:56.237 [APP] connectionDebugStage = Enabling notifications
-23:12:56.237 [APP] connectionDebugStage = Waiting for Frame event
-23:12:56.237 [APP] statusMessage = Frame connected. Waiting for HUDini app heartbeat…
-23:12:56.239 [OUT] PING
-23:12:56.270 [APP] connectionDebugStage = Notifications enabled
-23:12:56.270 [APP] statusMessage = Notifications enabled. Waiting for Frame app events…
-23:12:56.300 [IN] EVT	READY	v25.278.1113	243	2026.04.08.4
-23:12:56.301 [APP] connectionDebugStage = Frame app update required
-23:12:56.301 [APP] peripheralStatus = Ready on v25.278.1113
-23:12:56.301 [APP] statusMessage = Connected, but the installed Frame app is outdated
-23:12:58.887 [APP] connectionDebugStage = Installing app
-23:12:58.887 [OUT] CONTROL 0x03
-23:12:59.398 [OUT] LUA print('HUDINI_REPL_READY')
-23:13:03.456 [APP] connectionDebugStage = Install failed
-23:13:03.456 [APP] statusMessage = Timed out: HUDINI_REPL_READY
-23:13:05.587 [APP] connectionDebugStage = Installing app
-23:13:05.587 [OUT] CONTROL 0x03
-23:13:05.631 [APP] peripheralStatus = [string "frame.stay_awake(false); require('main')"]:1: exiting module 'main': [string "main.lua"]:377: break signal
-23:13:05.643 [APP] peripheralStatus = HUDINI_REPL_READY
-23:13:06.105 [OUT] LUA print('HUDINI_REPL_READY')
-23:13:06.188 [OUT] LUA pcall(frame.file.remove,'main.lua'); print('HUDINI_REMOVE_OK')
-23:13:06.244 [APP] peripheralStatus = HUDINI_REMOVE_OK
-23:13:06.272 [OUT] LUA f=assert(frame.file.open('main.lua','write')); print('HUDINI_OPEN_OK')
-23:13:06.349 [APP] peripheralStatus = HUDINI_OPEN_OK
-23:13:06.373 [OUT] LUA local ok,err=pcall(function() f:write('local APP_DIR = "/hudini"\nlocal APP_VERSION = "2026.04.08.6"') end); if ok then print('HUDINI_CHUNK_1_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:06.545 [APP] peripheralStatus = HUDINI_CHUNK_1_OK
-23:13:06.625 [OUT] LUA local ok,err=pcall(function() f:write('\nlocal CRASH_PATH = APP_DIR .. "/crash.txt"\n\nlocal state = {') end); if ok then print('HUDINI_CHUNK_2_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:06.679 [APP] peripheralStatus = HUDINI_CHUNK_2_OK
-23:13:06.711 [OUT] LUA local ok,err=pcall(function() f:write('\n  connected = false,\n  status = "idle",\n  listening = false') end); if ok then print('HUDINI_CHUNK_3_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:06.741 [APP] peripheralStatus = HUDINI_CHUNK_3_OK
-23:13:06.797 [OUT] LUA local ok,err=pcall(function() f:write(',\n  partial_caption = "",\n  final_caption = "",\n  brightness') end); if ok then print('HUDINI_CHUNK_4_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:06.845 [APP] peripheralStatus = HUDINI_CHUNK_4_OK
-23:13:06.879 [OUT] LUA local ok,err=pcall(function() f:write(' = 0,\n  partials = true,\n  needs_render = true,\n  audio_sequ') end); if ok then print('HUDINI_CHUNK_5_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:06.906 [APP] peripheralStatus = HUDINI_CHUNK_5_OK
-23:13:06.960 [OUT] LUA local ok,err=pcall(function() f:write('ence = 0,\n  tap_sequence = 0,\n}\n\nframe.display.text("HUDini"') end); if ok then print('HUDINI_CHUNK_6_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:07.009 [APP] peripheralStatus = HUDINI_CHUNK_6_OK
-23:13:07.044 [OUT] LUA local ok,err=pcall(function() f:write(', 220, 116, { color = "WHITE", spacing = 4 })\nframe.display.') end); if ok then print('HUDINI_CHUNK_7_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:07.085 [APP] peripheralStatus = HUDINI_CHUNK_7_OK
-23:13:07.130 [OUT] LUA local ok,err=pcall(function() f:write('text("Loading...", 210, 154, { color = "LIGHTGREEN", spacing') end); if ok then print('HUDINI_CHUNK_8_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:07.175 [IN] EVT	MIC_REQUEST	0	1	1
-23:13:07.175 [APP] peripheralStatus = Tap requested mic on
-23:13:07.175 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:13:07.177 [APP] statusMessage = Listening language set to Spanish
-23:13:07.178 [APP] statusMessage = Target language set to English
-23:13:07.192 [IN] EVT	MIC_REQUEST	0	1	2
-23:13:07.192 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:13:07.193 [APP] statusMessage = Listening language set to Spanish
-23:13:07.193 [APP] statusMessage = Target language set to English
-23:13:07.193 [IN] EVT	MIC_REQUEST	0	1	2
-23:13:07.193 [APP] MIC_REQUEST ignored duplicate tapSequence=2
-23:13:07.193 [APP] startRecognition invoked locale=es
-23:13:07.194 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:13:07.195 [APP] setStreamingState(true)
-23:13:07.195 [APP] isStreaming = true
-23:13:07.195 [OUT] SYNC_STATE	1	listening
-23:13:07.195 [APP] statusMessage = Started from Frame tap
-23:13:07.202 [APP] startRecognition invoked locale=es
-23:13:07.202 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:13:07.202 [APP] setStreamingState(true)
-23:13:07.202 [OUT] SYNC_STATE	1	listening
-23:13:07.220 [IN] EVT	STATUS	listening
-23:13:07.220 [APP] peripheralStatus = listening
-23:13:07.235 [IN] EVT	MIC_REQUEST	1	0	3
-23:13:07.235 [APP] peripheralStatus = Tap requested mic off
-23:13:07.235 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:13:07.235 [APP] stopRecognition invoked
-23:13:07.235 [APP] cancelTranslation invoked
-23:13:07.235 [APP] setStreamingState(false)
-23:13:07.235 [APP] isStreaming = false
-23:13:07.235 [OUT] SYNC_STATE	0	idle
-23:13:07.235 [APP] statusMessage = Stopped
-23:13:07.235 [APP] statusMessage = Stopped from Frame tap
-23:13:07.250 [IN] EVT	STATUS	listening
-23:13:07.250 [APP] peripheralStatus = listening
-23:13:07.281 [IN] EVT	STATUS	idle
-23:13:07.281 [APP] peripheralStatus = idle
-23:13:07.354 [IN] EVT	MIC_REQUEST	0	1	4
-23:13:07.354 [APP] peripheralStatus = Tap requested mic on
-23:13:07.354 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:13:07.488 [APP] statusMessage = Listening language set to Spanish
-23:13:07.488 [APP] statusMessage = Target language set to English
-23:13:07.494 [APP] startRecognition invoked locale=es
-23:13:07.494 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:13:07.494 [APP] setStreamingState(true)
-23:13:07.494 [APP] isStreaming = true
-23:13:07.494 [OUT] SYNC_STATE	1	listening
-23:13:07.494 [APP] statusMessage = Started from Frame tap
-23:13:07.520 [APP] recognitionTask ignored cancellation error No speech detected
-23:13:07.535 [IN] EVT	STATUS	listening
-23:13:07.535 [APP] peripheralStatus = listening
-23:13:07.541 [APP] recognitionTask ignored cancellation error No speech detected
-23:13:09.964 [IN] EVT	MIC_REQUEST	1	0	5
-23:13:09.965 [APP] peripheralStatus = Tap requested mic off
-23:13:09.965 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:13:09.965 [APP] stopRecognition invoked
-23:13:09.965 [APP] cancelTranslation invoked
-23:13:09.965 [APP] setStreamingState(false)
-23:13:09.965 [APP] isStreaming = false
-23:13:09.965 [OUT] SYNC_STATE	0	idle
-23:13:09.966 [APP] statusMessage = Stopped
-23:13:09.966 [APP] statusMessage = Stopped from Frame tap
-23:13:09.993 [APP] recognitionTask ignored cancellation error No speech detected
-23:13:10.000 [IN] EVT	STATUS	idle
-23:13:10.000 [APP] peripheralStatus = idle
-23:13:10.160 [IN] EVT	MIC_REQUEST	0	1	6
-23:13:10.160 [APP] peripheralStatus = Tap requested mic on
-23:13:10.160 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:13:10.164 [APP] statusMessage = Listening language set to Spanish
-23:13:10.164 [APP] statusMessage = Target language set to English
-23:13:10.189 [APP] startRecognition invoked locale=es
-23:13:10.190 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:13:10.190 [APP] setStreamingState(true)
-23:13:10.190 [APP] isStreaming = true
-23:13:10.190 [OUT] SYNC_STATE	1	listening
-23:13:10.190 [APP] statusMessage = Started from Frame tap
-23:13:10.221 [IN] EVT	STATUS	listening
-23:13:10.221 [APP] peripheralStatus = listening
-23:13:11.214 [APP] connectionDebugStage = Install failed
-23:13:11.214 [APP] statusMessage = Timed out: HUDINI_CHUNK_8_OK
-23:13:11.916 [IN] EVT	MIC_REQUEST	1	0	7
-23:13:11.916 [APP] peripheralStatus = Tap requested mic off
-23:13:11.916 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:13:11.916 [APP] stopRecognition invoked
-23:13:11.917 [APP] cancelTranslation invoked
-23:13:11.917 [APP] setStreamingState(false)
-23:13:11.917 [APP] isStreaming = false
-23:13:11.917 [OUT] SYNC_STATE	0	idle
-23:13:11.917 [APP] statusMessage = Stopped
-23:13:11.917 [APP] statusMessage = Stopped from Frame tap
-23:13:11.946 [APP] recognitionTask ignored cancellation error No speech detected
-23:13:11.960 [IN] EVT	STATUS	idle
-23:13:11.960 [APP] peripheralStatus = idle
-23:13:13.655 [IN] EVT	MIC_REQUEST	0	1	8
-23:13:13.655 [APP] peripheralStatus = Tap requested mic on
-23:13:13.655 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:13:13.659 [APP] statusMessage = Listening language set to Spanish
-23:13:13.659 [APP] statusMessage = Target language set to English
-23:13:13.683 [APP] startRecognition invoked locale=es
-23:13:13.684 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:13:13.684 [APP] setStreamingState(true)
-23:13:13.685 [APP] isStreaming = true
-23:13:13.685 [OUT] SYNC_STATE	1	listening
-23:13:13.685 [APP] statusMessage = Started from Frame tap
-23:13:13.730 [IN] EVT	STATUS	listening
-23:13:13.730 [APP] peripheralStatus = listening
-23:13:14.374 [IN] EVT	MIC_REQUEST	1	0	9
-23:13:14.375 [APP] peripheralStatus = Tap requested mic off
-23:13:14.375 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:13:14.375 [APP] stopRecognition invoked
-23:13:14.375 [APP] cancelTranslation invoked
-23:13:14.375 [APP] setStreamingState(false)
-23:13:14.375 [APP] isStreaming = false
-23:13:14.375 [OUT] SYNC_STATE	0	idle
-23:13:14.376 [APP] statusMessage = Stopped
-23:13:14.376 [APP] statusMessage = Stopped from Frame tap
-23:13:14.403 [APP] recognitionTask ignored cancellation error No speech detected
-23:13:14.414 [IN] EVT	STATUS	idle
-23:13:14.414 [APP] peripheralStatus = idle
-23:13:14.989 [IN] EVT	MIC_REQUEST	0	1	10
-23:13:14.990 [APP] peripheralStatus = Tap requested mic on
-23:13:14.990 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:13:14.994 [APP] statusMessage = Listening language set to Spanish
-23:13:14.994 [APP] statusMessage = Target language set to English
-23:13:15.017 [APP] startRecognition invoked locale=es
-23:13:15.018 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:13:15.018 [APP] setStreamingState(true)
-23:13:15.018 [APP] isStreaming = true
-23:13:15.018 [OUT] SYNC_STATE	1	listening
-23:13:15.019 [APP] statusMessage = Started from Frame tap
-23:13:15.049 [IN] EVT	STATUS	listening
-23:13:15.050 [APP] peripheralStatus = listening
-23:13:17.495 [IN] EVT	MIC_REQUEST	1	0	11
-23:13:17.495 [APP] peripheralStatus = Tap requested mic off
-23:13:17.495 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:13:17.495 [APP] stopRecognition invoked
-23:13:17.496 [APP] cancelTranslation invoked
-23:13:17.496 [APP] setStreamingState(false)
-23:13:17.496 [APP] isStreaming = false
-23:13:17.496 [OUT] SYNC_STATE	0	idle
-23:13:17.496 [APP] statusMessage = Stopped
-23:13:17.496 [APP] statusMessage = Stopped from Frame tap
-23:13:17.523 [APP] recognitionTask ignored cancellation error No speech detected
-23:13:17.533 [IN] EVT	STATUS	idle
-23:13:17.533 [APP] peripheralStatus = idle
-23:13:20.360 [IN] EVT	MIC_REQUEST	0	1	12
-23:13:20.360 [APP] peripheralStatus = Tap requested mic on
-23:13:20.360 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:13:20.364 [APP] statusMessage = Listening language set to Spanish
-23:13:20.364 [APP] statusMessage = Target language set to English
-23:13:20.389 [APP] startRecognition invoked locale=es
-23:13:20.390 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:13:20.390 [APP] setStreamingState(true)
-23:13:20.390 [APP] isStreaming = true
-23:13:20.391 [OUT] SYNC_STATE	1	listening
-23:13:20.391 [APP] statusMessage = Started from Frame tap
-23:13:20.418 [IN] EVT	MIC_REQUEST	0	1	13
-23:13:20.419 [APP] handleTapToggleListening desiredEnabled=true isStreaming=true
-23:13:20.424 [IN] EVT	MIC_REQUEST	0	1	14
-23:13:20.424 [APP] handleTapToggleListening desiredEnabled=true isStreaming=true
-23:13:20.450 [IN] EVT	STATUS	listening
-23:13:20.450 [APP] peripheralStatus = listening
-23:13:20.960 [IN] EVT	MIC_REQUEST	1	0	15
-23:13:20.960 [APP] peripheralStatus = Tap requested mic off
-23:13:20.960 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:13:20.960 [APP] stopRecognition invoked
-23:13:20.960 [APP] cancelTranslation invoked
-23:13:20.961 [APP] setStreamingState(false)
-23:13:20.961 [APP] isStreaming = false
-23:13:20.961 [OUT] SYNC_STATE	0	idle
-23:13:20.961 [APP] statusMessage = Stopped
-23:13:20.961 [APP] statusMessage = Stopped from Frame tap
-23:13:20.989 [APP] recognitionTask ignored cancellation error No speech detected
-23:13:21.005 [IN] EVT	STATUS	idle
-23:13:21.005 [APP] peripheralStatus = idle
-23:13:21.365 [IN] EVT	MIC_REQUEST	0	1	16
-23:13:21.365 [APP] peripheralStatus = Tap requested mic on
-23:13:21.365 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:13:21.369 [APP] statusMessage = Listening language set to Spanish
-23:13:21.369 [APP] statusMessage = Target language set to English
-23:13:21.395 [APP] startRecognition invoked locale=es
-23:13:21.396 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:13:21.396 [APP] setStreamingState(true)
-23:13:21.396 [APP] isStreaming = true
-23:13:21.396 [OUT] SYNC_STATE	1	listening
-23:13:21.396 [APP] statusMessage = Started from Frame tap
-23:13:21.427 [IN] EVT	STATUS	listening
-23:13:21.427 [APP] peripheralStatus = listening
-23:13:28.003 [APP] connectionDebugStage = Installing app
-23:13:28.003 [OUT] CONTROL 0x03
-23:13:28.531 [OUT] LUA print('HUDINI_REPL_READY')
-23:13:28.565 [APP] peripheralStatus = HUDINI_REPL_READY
-23:13:28.612 [OUT] LUA pcall(frame.file.remove,'main.lua'); print('HUDINI_REMOVE_OK')
-23:13:28.643 [APP] peripheralStatus = HUDINI_REMOVE_OK
-23:13:28.697 [OUT] LUA f=assert(frame.file.open('main.lua','write')); print('HUDINI_OPEN_OK')
-23:13:28.745 [APP] peripheralStatus = HUDINI_OPEN_OK
-23:13:28.783 [OUT] LUA local ok,err=pcall(function() f:write('local APP_DIR = "/hudini"\nlocal APP_VERSION = "2026.04.08.6"') end); if ok then print('HUDINI_CHUNK_1_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:28.954 [APP] peripheralStatus = HUDINI_CHUNK_1_OK
-23:13:29.034 [OUT] LUA local ok,err=pcall(function() f:write('\nlocal CRASH_PATH = APP_DIR .. "/crash.txt"\n\nlocal state = {') end); if ok then print('HUDINI_CHUNK_2_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.105 [APP] peripheralStatus = HUDINI_CHUNK_2_OK
-23:13:29.132 [OUT] LUA local ok,err=pcall(function() f:write('\n  connected = false,\n  status = "idle",\n  listening = false') end); if ok then print('HUDINI_CHUNK_3_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.164 [APP] peripheralStatus = HUDINI_CHUNK_3_OK
-23:13:29.215 [OUT] LUA local ok,err=pcall(function() f:write(',\n  partial_caption = "",\n  final_caption = "",\n  brightness') end); if ok then print('HUDINI_CHUNK_4_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.256 [APP] peripheralStatus = HUDINI_CHUNK_4_OK
-23:13:29.301 [OUT] LUA local ok,err=pcall(function() f:write(' = 0,\n  partials = true,\n  needs_render = true,\n  audio_sequ') end); if ok then print('HUDINI_CHUNK_5_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.345 [APP] peripheralStatus = HUDINI_CHUNK_5_OK
-23:13:29.387 [OUT] LUA local ok,err=pcall(function() f:write('ence = 0,\n  tap_sequence = 0,\n}\n\nframe.display.text("HUDini"') end); if ok then print('HUDINI_CHUNK_6_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.435 [APP] peripheralStatus = HUDINI_CHUNK_6_OK
-23:13:29.470 [OUT] LUA local ok,err=pcall(function() f:write(', 220, 116, { color = "WHITE", spacing = 4 })\nframe.display.') end); if ok then print('HUDINI_CHUNK_7_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.496 [APP] peripheralStatus = HUDINI_CHUNK_7_OK
-23:13:29.555 [OUT] LUA local ok,err=pcall(function() f:write('text("Loading...", 210, 154, { color = "LIGHTGREEN", spacing') end); if ok then print('HUDINI_CHUNK_8_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.600 [APP] peripheralStatus = HUDINI_CHUNK_8_OK
-23:13:29.641 [OUT] LUA local ok,err=pcall(function() f:write(' = 4 })\nframe.display.show()\n\nlocal function ensure_dir()\n  ') end); if ok then print('HUDINI_CHUNK_9_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.675 [APP] peripheralStatus = HUDINI_CHUNK_9_OK
-23:13:29.727 [OUT] LUA local ok,err=pcall(function() f:write('pcall(frame.file.mkdir, APP_DIR)\nend\n\nlocal function crash_t') end); if ok then print('HUDINI_CHUNK_10_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.752 [APP] peripheralStatus = HUDINI_CHUNK_10_OK
-23:13:29.813 [OUT] LUA local ok,err=pcall(function() f:write('ext(err)\n  local text = tostring(err or "unknown error")\n  i') end); if ok then print('HUDINI_CHUNK_11_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.842 [APP] peripheralStatus = HUDINI_CHUNK_11_OK
-23:13:29.896 [OUT] LUA local ok,err=pcall(function() f:write('f string.len(text) > 240 then\n    text = string.sub(text, 1,') end); if ok then print('HUDINI_CHUNK_12_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:29.960 [APP] peripheralStatus = HUDINI_CHUNK_12_OK
-23:13:29.982 [OUT] LUA local ok,err=pcall(function() f:write(' 240)\n  end\n  return text\nend\n\nlocal function save_crash(err') end); if ok then print('HUDINI_CHUNK_13_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.006 [APP] peripheralStatus = HUDINI_CHUNK_13_OK
-23:13:30.067 [OUT] LUA local ok,err=pcall(function() f:write(')\n  ensure_dir()\n  local f = frame.file.open(CRASH_PATH, "wr') end); if ok then print('HUDINI_CHUNK_14_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.110 [APP] peripheralStatus = HUDINI_CHUNK_14_OK
-23:13:30.151 [OUT] LUA local ok,err=pcall(function() f:write('ite")\n  if f ~= nil then\n    f:write(crash_text(err) .. "\\n"') end); if ok then print('HUDINI_CHUNK_15_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.200 [APP] peripheralStatus = HUDINI_CHUNK_15_OK
-23:13:30.232 [OUT] LUA local ok,err=pcall(function() f:write(')\n    f:close()\n  end\nend\n\nlocal function emit_crash(err)\n  ') end); if ok then print('HUDINI_CHUNK_16_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.275 [APP] peripheralStatus = HUDINI_CHUNK_16_OK
-23:13:30.317 [OUT] LUA local ok,err=pcall(function() f:write('pcall(frame.bluetooth.send, "EVT\\tCRASH\\t" .. crash_text(err') end); if ok then print('HUDINI_CHUNK_17_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.350 [APP] peripheralStatus = HUDINI_CHUNK_17_OK
-23:13:30.399 [OUT] LUA local ok,err=pcall(function() f:write('))\nend\n\nlocal function load_saved_crash()\n  local ok, f = pc') end); if ok then print('HUDINI_CHUNK_18_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.455 [APP] peripheralStatus = HUDINI_CHUNK_18_OK
-23:13:30.485 [OUT] LUA local ok,err=pcall(function() f:write('all(frame.file.open, CRASH_PATH, "read")\n  if not ok or f ==') end); if ok then print('HUDINI_CHUNK_19_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.517 [APP] peripheralStatus = HUDINI_CHUNK_19_OK
-23:13:30.572 [OUT] LUA local ok,err=pcall(function() f:write(' nil then\n    return nil\n  end\n  local line = f:read()\n  f:c') end); if ok then print('HUDINI_CHUNK_20_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.635 [APP] peripheralStatus = HUDINI_CHUNK_20_OK
-23:13:30.656 [OUT] LUA local ok,err=pcall(function() f:write('lose()\n  return line\nend\n\nlocal function clear_saved_crash()') end); if ok then print('HUDINI_CHUNK_21_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.698 [APP] peripheralStatus = HUDINI_CHUNK_21_OK
-23:13:30.742 [OUT] LUA local ok,err=pcall(function() f:write('\n  pcall(frame.file.remove, CRASH_PATH)\nend\n\nlocal function ') end); if ok then print('HUDINI_CHUNK_22_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.785 [APP] peripheralStatus = HUDINI_CHUNK_22_OK
-23:13:30.828 [OUT] LUA local ok,err=pcall(function() f:write('split_text(text, separator)\n  local result = {}\n  local star') end); if ok then print('HUDINI_CHUNK_23_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.875 [APP] peripheralStatus = HUDINI_CHUNK_23_OK
-23:13:30.914 [OUT] LUA local ok,err=pcall(function() f:write('t = 1\n  while true do\n    local found_start, found_end = str') end); if ok then print('HUDINI_CHUNK_24_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:30.950 [APP] peripheralStatus = HUDINI_CHUNK_24_OK
-23:13:31.000 [OUT] LUA local ok,err=pcall(function() f:write('ing.find(text, separator, start, true)\n    if found_start ==') end); if ok then print('HUDINI_CHUNK_25_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.041 [APP] peripheralStatus = HUDINI_CHUNK_25_OK
-23:13:31.083 [OUT] LUA local ok,err=pcall(function() f:write(' nil then\n      table.insert(result, string.sub(text, start)') end); if ok then print('HUDINI_CHUNK_26_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.145 [APP] peripheralStatus = HUDINI_CHUNK_26_OK
-23:13:31.169 [OUT] LUA local ok,err=pcall(function() f:write(')\n      return result\n    end\n    table.insert(result, strin') end); if ok then print('HUDINI_CHUNK_27_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.192 [APP] peripheralStatus = HUDINI_CHUNK_27_OK
-23:13:31.255 [OUT] LUA local ok,err=pcall(function() f:write('g.sub(text, start, found_start - 1))\n    start = found_end +') end); if ok then print('HUDINI_CHUNK_28_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.296 [APP] peripheralStatus = HUDINI_CHUNK_28_OK
-23:13:31.341 [OUT] LUA local ok,err=pcall(function() f:write(' 1\n  end\nend\n\nlocal function trim(text)\n  return (string.gsu') end); if ok then print('HUDINI_CHUNK_29_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.386 [APP] peripheralStatus = HUDINI_CHUNK_29_OK
-23:13:31.428 [OUT] LUA local ok,err=pcall(function() f:write('b(text, "^%s*(.-)%s*$", "%1"))\nend\n\nlocal function normalize') end); if ok then print('HUDINI_CHUNK_30_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.475 [APP] peripheralStatus = HUDINI_CHUNK_30_OK
-23:13:31.510 [OUT] LUA local ok,err=pcall(function() f:write('_display_text(text)\n  if text == nil then\n    return ""\n  en') end); if ok then print('HUDINI_CHUNK_31_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.536 [APP] peripheralStatus = HUDINI_CHUNK_31_OK
-23:13:31.594 [OUT] LUA local ok,err=pcall(function() f:write('d\n  local normalized = tostring(text)\n  normalized = string.') end); if ok then print('HUDINI_CHUNK_32_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.626 [APP] peripheralStatus = HUDINI_CHUNK_32_OK
-23:13:31.676 [OUT] LUA local ok,err=pcall(function() f:write('gsub(normalized, "[\\r\\n\\t]", " ")\n  normalized = string.gsub') end); if ok then print('HUDINI_CHUNK_33_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.702 [APP] peripheralStatus = HUDINI_CHUNK_33_OK
-23:13:31.762 [OUT] LUA local ok,err=pcall(function() f:write('(normalized, "%s+", " ")\n  return trim(normalized)\nend\n\nloca') end); if ok then print('HUDINI_CHUNK_34_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.806 [APP] peripheralStatus = HUDINI_CHUNK_34_OK
-23:13:31.844 [OUT] LUA local ok,err=pcall(function() f:write('l function send_event(parts)\n  local payload = table.concat(') end); if ok then print('HUDINI_CHUNK_35_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.880 [APP] peripheralStatus = HUDINI_CHUNK_35_OK
-23:13:31.929 [OUT] LUA local ok,err=pcall(function() f:write('parts, "\\t")\n  pcall(frame.bluetooth.send, payload)\nend\n\nloc') end); if ok then print('HUDINI_CHUNK_36_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:31.970 [APP] peripheralStatus = HUDINI_CHUNK_36_OK
-23:13:32.015 [OUT] LUA local ok,err=pcall(function() f:write('al function wrap_lines(text, limit, max_lines)\n  local lines') end); if ok then print('HUDINI_CHUNK_37_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.060 [APP] peripheralStatus = HUDINI_CHUNK_37_OK
-23:13:32.097 [OUT] LUA local ok,err=pcall(function() f:write(' = {}\n  local current = ""\n  local truncated = false\n\n  text') end); if ok then print('HUDINI_CHUNK_38_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.121 [APP] peripheralStatus = HUDINI_CHUNK_38_OK
-23:13:32.183 [OUT] LUA local ok,err=pcall(function() f:write(' = normalize_display_text(text)\n  if text == "" then\n    ret') end); if ok then print('HUDINI_CHUNK_39_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.226 [APP] peripheralStatus = HUDINI_CHUNK_39_OK
-23:13:32.267 [OUT] LUA local ok,err=pcall(function() f:write('urn lines\n  end\n\n  local words = split_text(text, " ")\n  for') end); if ok then print('HUDINI_CHUNK_40_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.330 [APP] peripheralStatus = HUDINI_CHUNK_40_OK
-23:13:32.352 [OUT] LUA local ok,err=pcall(function() f:write(' _, raw_word in ipairs(words) do\n    local word = raw_word\n\n') end); if ok then print('HUDINI_CHUNK_41_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.377 [APP] peripheralStatus = HUDINI_CHUNK_41_OK
-23:13:32.438 [OUT] LUA local ok,err=pcall(function() f:write('    while string.len(word) > limit do\n      if current ~= ""') end); if ok then print('HUDINI_CHUNK_42_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.480 [APP] peripheralStatus = HUDINI_CHUNK_42_OK
-23:13:32.524 [OUT] LUA local ok,err=pcall(function() f:write(' then\n        table.insert(lines, current)\n        current =') end); if ok then print('HUDINI_CHUNK_43_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.570 [APP] peripheralStatus = HUDINI_CHUNK_43_OK
-23:13:32.608 [OUT] LUA local ok,err=pcall(function() f:write(' ""\n        if #lines >= max_lines then\n          truncated ') end); if ok then print('HUDINI_CHUNK_44_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.645 [APP] peripheralStatus = HUDINI_CHUNK_44_OK
-23:13:32.694 [OUT] LUA local ok,err=pcall(function() f:write('= true\n          break\n        end\n      end\n      table.ins') end); if ok then print('HUDINI_CHUNK_45_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.722 [APP] peripheralStatus = HUDINI_CHUNK_45_OK
-23:13:32.781 [OUT] LUA local ok,err=pcall(function() f:write('ert(lines, string.sub(word, 1, limit - 1) .. "-")\n      word') end); if ok then print('HUDINI_CHUNK_46_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.826 [APP] peripheralStatus = HUDINI_CHUNK_46_OK
-23:13:32.867 [OUT] LUA local ok,err=pcall(function() f:write(' = string.sub(word, limit)\n      if #lines >= max_lines then') end); if ok then print('HUDINI_CHUNK_47_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.915 [APP] peripheralStatus = HUDINI_CHUNK_47_OK
-23:13:32.953 [OUT] LUA local ok,err=pcall(function() f:write('\n        truncated = true\n        break\n      end\n    end\n\n ') end); if ok then print('HUDINI_CHUNK_48_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:32.977 [APP] peripheralStatus = HUDINI_CHUNK_48_OK
-23:13:33.039 [OUT] LUA local ok,err=pcall(function() f:write('   if truncated then\n      break\n    end\n\n    if word == "" ') end); if ok then print('HUDINI_CHUNK_49_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.067 [APP] peripheralStatus = HUDINI_CHUNK_49_OK
-23:13:33.127 [OUT] LUA local ok,err=pcall(function() f:write('then\n      break\n    end\n\n    local candidate = word\n    if ') end); if ok then print('HUDINI_CHUNK_50_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.185 [APP] peripheralStatus = HUDINI_CHUNK_50_OK
-23:13:33.212 [OUT] LUA local ok,err=pcall(function() f:write('current ~= "" then\n      candidate = current .. " " .. word\n') end); if ok then print('HUDINI_CHUNK_51_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.260 [APP] peripheralStatus = HUDINI_CHUNK_51_OK
-23:13:33.298 [OUT] LUA local ok,err=pcall(function() f:write('    end\n\n    if string.len(candidate) <= limit then\n      cu') end); if ok then print('HUDINI_CHUNK_52_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.350 [APP] peripheralStatus = HUDINI_CHUNK_52_OK
-23:13:33.380 [OUT] LUA local ok,err=pcall(function() f:write('rrent = candidate\n    else\n      if current ~= "" then\n     ') end); if ok then print('HUDINI_CHUNK_53_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.425 [APP] peripheralStatus = HUDINI_CHUNK_53_OK
-23:13:33.465 [OUT] LUA local ok,err=pcall(function() f:write('   table.insert(lines, current)\n        if #lines >= max_lin') end); if ok then print('HUDINI_CHUNK_54_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.499 [APP] peripheralStatus = HUDINI_CHUNK_54_OK
-23:13:33.551 [OUT] LUA local ok,err=pcall(function() f:write('es then\n          truncated = true\n          break\n        e') end); if ok then print('HUDINI_CHUNK_55_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.589 [APP] peripheralStatus = HUDINI_CHUNK_55_OK
-23:13:33.637 [OUT] LUA local ok,err=pcall(function() f:write('nd\n      end\n      current = word\n    end\n  end\n\n  if curren') end); if ok then print('HUDINI_CHUNK_56_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.669 [APP] peripheralStatus = HUDINI_CHUNK_56_OK
-23:13:33.723 [OUT] LUA local ok,err=pcall(function() f:write('t ~= "" and #lines < max_lines then\n    table.insert(lines, ') end); if ok then print('HUDINI_CHUNK_57_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.757 [APP] peripheralStatus = HUDINI_CHUNK_57_OK
-23:13:33.807 [OUT] LUA local ok,err=pcall(function() f:write('current)\n  elseif current ~= "" then\n    truncated = true\n  ') end); if ok then print('HUDINI_CHUNK_58_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.832 [APP] peripheralStatus = HUDINI_CHUNK_58_OK
-23:13:33.893 [OUT] LUA local ok,err=pcall(function() f:write('end\n\n  if truncated and #lines > 0 then\n    local last = lin') end); if ok then print('HUDINI_CHUNK_59_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:33.921 [APP] peripheralStatus = HUDINI_CHUNK_59_OK
-23:13:33.975 [OUT] LUA local ok,err=pcall(function() f:write('es[#lines]\n    if string.len(last) > limit - 3 then\n      la') end); if ok then print('HUDINI_CHUNK_60_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:34.012 [APP] peripheralStatus = HUDINI_CHUNK_60_OK
-23:13:34.061 [OUT] LUA local ok,err=pcall(function() f:write('st = string.sub(last, 1, limit - 3)\n    end\n    lines[#lines') end); if ok then print('HUDINI_CHUNK_61_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:34.115 [APP] peripheralStatus = HUDINI_CHUNK_61_OK
-23:13:34.146 [OUT] LUA local ok,err=pcall(function() f:write('] = last .. "..."\n  end\n\n  return lines\nend\n\nlocal function ') end); if ok then print('HUDINI_CHUNK_62_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:34.204 [APP] peripheralStatus = HUDINI_CHUNK_62_OK
-23:13:34.232 [OUT] LUA local ok,err=pcall(function() f:write('draw_multiline(text, x, y, color, max_chars, max_lines)\n  lo') end); if ok then print('HUDINI_CHUNK_63_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:34.280 [APP] peripheralStatus = HUDINI_CHUNK_63_OK
-23:13:34.316 [OUT] LUA local ok,err=pcall(function() f:write('cal lines = wrap_lines(text, max_chars, max_lines)\n  local l') end); if ok then print('HUDINI_CHUNK_64_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:34.370 [APP] peripheralStatus = HUDINI_CHUNK_64_OK
-23:13:34.399 [OUT] LUA local ok,err=pcall(function() f:write('ine_y = y\n  for _, line in ipairs(lines) do\n    frame.displa') end); if ok then print('HUDINI_CHUNK_65_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:34.445 [APP] peripheralStatus = HUDINI_CHUNK_65_OK
-23:13:34.481 [OUT] LUA local ok,err=pcall(function() f:write('y.text(line, x, line_y, { color = color, spacing = 4 })\n    ') end); if ok then print('HUDINI_CHUNK_66_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:34.520 [APP] peripheralStatus = HUDINI_CHUNK_66_OK
-23:13:34.562 [OUT] LUA local ok,err=pcall(function() f:write('line_y = line_y + 45\n  end\n  return line_y\nend\n\nlocal functi') end); if ok then print('HUDINI_CHUNK_67_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:34.595 [APP] peripheralStatus = HUDINI_CHUNK_67_OK
-23:13:34.644 [OUT] LUA local ok,err=pcall(function() f:write('on render_ui()\n  if not state.connected then\n    frame.displ') end); if ok then print('HUDINI_CHUNK_68_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:34.672 [APP] peripheralStatus = HUDINI_CHUNK_68_OK
-23:13:34.730 [OUT] LUA local ok,err=pcall(function() f:write('ay.power_save(true)\n    state.needs_render = false\n    retur') end); if ok then print('HUDINI_CHUNK_69_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:34.911 [APP] peripheralStatus = HUDINI_CHUNK_69_OK
-23:13:34.987 [OUT] LUA local ok,err=pcall(function() f:write('n\n  end\n\n  frame.display.power_save(false)\n  frame.display.s') end); if ok then print('HUDINI_CHUNK_70_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.030 [APP] peripheralStatus = HUDINI_CHUNK_70_OK
-23:13:35.068 [OUT] LUA local ok,err=pcall(function() f:write('et_brightness(state.brightness)\n\n  frame.display.text("Mic:"') end); if ok then print('HUDINI_CHUNK_71_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.092 [APP] peripheralStatus = HUDINI_CHUNK_71_OK
-23:13:35.154 [OUT] LUA local ok,err=pcall(function() f:write(', 24, 52, { color = "WHITE", spacing = 4 })\n  frame.display.') end); if ok then print('HUDINI_CHUNK_72_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.196 [APP] peripheralStatus = HUDINI_CHUNK_72_OK
-23:13:35.240 [OUT] LUA local ok,err=pcall(function() f:write('text(state.listening and "ON" or "OFF", 98, 52, { color = st') end); if ok then print('HUDINI_CHUNK_73_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.300 [APP] peripheralStatus = HUDINI_CHUNK_73_OK
-23:13:35.326 [OUT] LUA local ok,err=pcall(function() f:write('ate.listening and "GREEN" or "RED", spacing = 4 })\n\n  local ') end); if ok then print('HUDINI_CHUNK_74_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.375 [APP] peripheralStatus = HUDINI_CHUNK_74_OK
-23:13:35.408 [OUT] LUA local ok,err=pcall(function() f:write('text = state.final_caption\n  if text == "" and state.partial') end); if ok then print('HUDINI_CHUNK_75_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.450 [APP] peripheralStatus = HUDINI_CHUNK_75_OK
-23:13:35.490 [OUT] LUA local ok,err=pcall(function() f:write('s then\n    text = state.partial_caption\n  end\n  draw_multili') end); if ok then print('HUDINI_CHUNK_76_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.525 [APP] peripheralStatus = HUDINI_CHUNK_76_OK
-23:13:35.576 [OUT] LUA local ok,err=pcall(function() f:write('ne(text, 24, 98, "SKYBLUE", 30, 6)\n\n  frame.display.show()\n ') end); if ok then print('HUDINI_CHUNK_77_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.615 [APP] peripheralStatus = HUDINI_CHUNK_77_OK
-23:13:35.661 [OUT] LUA local ok,err=pcall(function() f:write(' state.needs_render = false\nend\n\nlocal function handle_comma') end); if ok then print('HUDINI_CHUNK_78_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.705 [APP] peripheralStatus = HUDINI_CHUNK_78_OK
-23:13:35.742 [OUT] LUA local ok,err=pcall(function() f:write('nd(payload)\n  local parts = split_text(payload, "\\t")\n  loca') end); if ok then print('HUDINI_CHUNK_79_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.780 [APP] peripheralStatus = HUDINI_CHUNK_79_OK
-23:13:35.828 [OUT] LUA local ok,err=pcall(function() f:write('l command = parts[1]\n\n  if command ~= nil then\n    state.con') end); if ok then print('HUDINI_CHUNK_80_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.870 [APP] peripheralStatus = HUDINI_CHUNK_80_OK
-23:13:35.910 [OUT] LUA local ok,err=pcall(function() f:write('nected = true\n    state.needs_render = true\n  end\n\n  if comm') end); if ok then print('HUDINI_CHUNK_81_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:35.945 [APP] peripheralStatus = HUDINI_CHUNK_81_OK
-23:13:35.993 [OUT] LUA local ok,err=pcall(function() f:write('and == "PING" then\n    send_event({ "EVT", "READY", frame.FI') end); if ok then print('HUDINI_CHUNK_82_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.022 [APP] peripheralStatus = HUDINI_CHUNK_82_OK
-23:13:36.079 [OUT] LUA local ok,err=pcall(function() f:write('RMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP_') end); if ok then print('HUDINI_CHUNK_83_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.111 [APP] peripheralStatus = HUDINI_CHUNK_83_OK
-23:13:36.164 [OUT] LUA local ok,err=pcall(function() f:write('VERSION })\n    return\n  end\n\n  if command == "SYNC_STATE" th') end); if ok then print('HUDINI_CHUNK_84_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.200 [APP] peripheralStatus = HUDINI_CHUNK_84_OK
-23:13:36.248 [OUT] LUA local ok,err=pcall(function() f:write('en\n    state.listening = parts[2] == "1"\n    state.status = ') end); if ok then print('HUDINI_CHUNK_85_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.305 [APP] peripheralStatus = HUDINI_CHUNK_85_OK
-23:13:36.333 [OUT] LUA local ok,err=pcall(function() f:write('parts[3] or (state.listening and "listening" or "idle")\n    ') end); if ok then print('HUDINI_CHUNK_86_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.365 [APP] peripheralStatus = HUDINI_CHUNK_86_OK
-23:13:36.415 [OUT] LUA local ok,err=pcall(function() f:write('state.needs_render = true\n    send_event({ "EVT", "STATUS", ') end); if ok then print('HUDINI_CHUNK_87_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.456 [APP] peripheralStatus = HUDINI_CHUNK_87_OK
-23:13:36.501 [OUT] LUA local ok,err=pcall(function() f:write('state.status })\n    return\n  end\n\n  if command == "SET_PREFS') end); if ok then print('HUDINI_CHUNK_88_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.560 [APP] peripheralStatus = HUDINI_CHUNK_88_OK
-23:13:36.586 [OUT] LUA local ok,err=pcall(function() f:write('" then\n    local pairs_list = split_text(parts[2] or "", ";"') end); if ok then print('HUDINI_CHUNK_89_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.634 [APP] peripheralStatus = HUDINI_CHUNK_89_OK
-23:13:36.670 [OUT] LUA local ok,err=pcall(function() f:write(')\n    for _, entry in ipairs(pairs_list) do\n      local eq =') end); if ok then print('HUDINI_CHUNK_90_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.710 [APP] peripheralStatus = HUDINI_CHUNK_90_OK
-23:13:36.751 [OUT] LUA local ok,err=pcall(function() f:write(' string.find(entry, "=", 1, true)\n      if eq ~= nil then\n  ') end); if ok then print('HUDINI_CHUNK_91_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.815 [APP] peripheralStatus = HUDINI_CHUNK_91_OK
-23:13:36.840 [OUT] LUA local ok,err=pcall(function() f:write('      local key = string.sub(entry, 1, eq - 1)\n        local') end); if ok then print('HUDINI_CHUNK_92_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.874 [APP] peripheralStatus = HUDINI_CHUNK_92_OK
-23:13:36.925 [OUT] LUA local ok,err=pcall(function() f:write(' value = string.sub(entry, eq + 1)\n        if key == "bright') end); if ok then print('HUDINI_CHUNK_93_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:36.964 [APP] peripheralStatus = HUDINI_CHUNK_93_OK
-23:13:37.012 [OUT] LUA local ok,err=pcall(function() f:write('ness" then\n          state.brightness = tonumber(value) or s') end); if ok then print('HUDINI_CHUNK_94_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.056 [APP] peripheralStatus = HUDINI_CHUNK_94_OK
-23:13:37.092 [OUT] LUA local ok,err=pcall(function() f:write('tate.brightness\n        elseif key == "partials" then\n      ') end); if ok then print('HUDINI_CHUNK_95_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.116 [APP] peripheralStatus = HUDINI_CHUNK_95_OK
-23:13:37.178 [OUT] LUA local ok,err=pcall(function() f:write('    state.partials = value == "1"\n        end\n      end\n    ') end); if ok then print('HUDINI_CHUNK_96_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.206 [APP] peripheralStatus = HUDINI_CHUNK_96_OK
-23:13:37.260 [OUT] LUA local ok,err=pcall(function() f:write('end\n    state.needs_render = true\n    send_event({ "EVT", "P') end); if ok then print('HUDINI_CHUNK_97_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.297 [APP] peripheralStatus = HUDINI_CHUNK_97_OK
-23:13:37.344 [OUT] LUA local ok,err=pcall(function() f:write('REFS_SAVED" })\n    return\n  end\n\n  if command == "SHOW_CAPTI') end); if ok then print('HUDINI_CHUNK_98_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.371 [APP] peripheralStatus = HUDINI_CHUNK_98_OK
-23:13:37.427 [OUT] LUA local ok,err=pcall(function() f:write('ON" then\n    local caption_kind = parts[2] or "final"\n    lo') end); if ok then print('HUDINI_CHUNK_99_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.460 [APP] peripheralStatus = HUDINI_CHUNK_99_OK
-23:13:37.509 [OUT] LUA local ok,err=pcall(function() f:write('cal text = parts[3] or ""\n    if caption_kind == "partial" t') end); if ok then print('HUDINI_CHUNK_100_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.549 [APP] peripheralStatus = HUDINI_CHUNK_100_OK
-23:13:37.595 [OUT] LUA local ok,err=pcall(function() f:write('hen\n      state.partial_caption = trim(text)\n      if not st') end); if ok then print('HUDINI_CHUNK_101_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.655 [APP] peripheralStatus = HUDINI_CHUNK_101_OK
-23:13:37.681 [OUT] LUA local ok,err=pcall(function() f:write('ate.partials then\n        state.partial_caption = ""\n      e') end); if ok then print('HUDINI_CHUNK_102_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.729 [APP] peripheralStatus = HUDINI_CHUNK_102_OK
-23:13:37.767 [OUT] LUA local ok,err=pcall(function() f:write('nd\n    else\n      state.final_caption = trim(text)\n      sta') end); if ok then print('HUDINI_CHUNK_103_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.804 [APP] peripheralStatus = HUDINI_CHUNK_103_OK
-23:13:37.851 [OUT] LUA local ok,err=pcall(function() f:write('te.partial_caption = ""\n    end\n    state.needs_render = tru') end); if ok then print('HUDINI_CHUNK_104_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:37.881 [APP] peripheralStatus = HUDINI_CHUNK_104_OK
-23:13:37.937 [OUT] LUA local ok,err=pcall(function() f:write('e\n    return\n  end\n\n  if command == "CLEAR_CAPTION" then\n   ') end); if ok then print('HUDINI_CHUNK_105_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.000 [APP] peripheralStatus = HUDINI_CHUNK_105_OK
-23:13:38.028 [OUT] LUA local ok,err=pcall(function() f:write(' state.partial_caption = ""\n    state.final_caption = ""\n   ') end); if ok then print('HUDINI_CHUNK_106_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.076 [APP] peripheralStatus = HUDINI_CHUNK_106_OK
-23:13:38.112 [OUT] LUA local ok,err=pcall(function() f:write(' state.needs_render = true\n    return\n  end\n\n  if command ==') end); if ok then print('HUDINI_CHUNK_107_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.149 [APP] peripheralStatus = HUDINI_CHUNK_107_OK
-23:13:38.197 [OUT] LUA local ok,err=pcall(function() f:write(' "RESET" then\n    pcall(frame.microphone.stop)\n    state.par') end); if ok then print('HUDINI_CHUNK_108_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.226 [APP] peripheralStatus = HUDINI_CHUNK_108_OK
-23:13:38.282 [OUT] LUA local ok,err=pcall(function() f:write('tial_caption = ""\n    state.final_caption = ""\n    state.lis') end); if ok then print('HUDINI_CHUNK_109_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.315 [APP] peripheralStatus = HUDINI_CHUNK_109_OK
-23:13:38.368 [OUT] LUA local ok,err=pcall(function() f:write('tening = false\n    state.audio_sequence = 0\n    send_buffer ') end); if ok then print('HUDINI_CHUNK_110_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.405 [APP] peripheralStatus = HUDINI_CHUNK_110_OK
-23:13:38.454 [OUT] LUA local ok,err=pcall(function() f:write('= ""\n    state.needs_render = true\n    frame.sleep(0.05)\n   ') end); if ok then print('HUDINI_CHUNK_111_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.495 [APP] peripheralStatus = HUDINI_CHUNK_111_OK
-23:13:38.539 [OUT] LUA local ok,err=pcall(function() f:write(' start_mic()\n    send_event({ "EVT", "RESET_OK" })\n    retur') end); if ok then print('HUDINI_CHUNK_112_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.585 [APP] peripheralStatus = HUDINI_CHUNK_112_OK
-23:13:38.625 [OUT] LUA local ok,err=pcall(function() f:write('n\n  end\nend\n\nlocal function on_tap()\n  state.tap_sequence = ') end); if ok then print('HUDINI_CHUNK_113_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.646 [APP] peripheralStatus = HUDINI_CHUNK_113_OK
-23:13:38.708 [OUT] LUA local ok,err=pcall(function() f:write('state.tap_sequence + 1\n  send_event({\n    "EVT",\n    "MIC_RE') end); if ok then print('HUDINI_CHUNK_114_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.736 [APP] peripheralStatus = HUDINI_CHUNK_114_OK
-23:13:38.789 [OUT] LUA local ok,err=pcall(function() f:write('QUEST",\n    state.listening and "1" or "0",\n    state.listen') end); if ok then print('HUDINI_CHUNK_115_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.828 [APP] peripheralStatus = HUDINI_CHUNK_115_OK
-23:13:38.875 [OUT] LUA local ok,err=pcall(function() f:write('ing and "0" or "1",\n    tostring(state.tap_sequence),\n  })\ne') end); if ok then print('HUDINI_CHUNK_116_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.914 [APP] peripheralStatus = HUDINI_CHUNK_116_OK
-23:13:38.961 [OUT] LUA local ok,err=pcall(function() f:write('nd\n\nlocal function send_audio_chunk(data)\n  local sequence =') end); if ok then print('HUDINI_CHUNK_117_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:38.991 [APP] peripheralStatus = HUDINI_CHUNK_117_OK
-23:13:39.045 [OUT] LUA local ok,err=pcall(function() f:write(' state.audio_sequence\n  local packet = string.char(0x20, seq') end); if ok then print('HUDINI_CHUNK_118_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.081 [APP] peripheralStatus = HUDINI_CHUNK_118_OK
-23:13:39.126 [OUT] LUA local ok,err=pcall(function() f:write('uence % 256, math.floor(sequence / 256) % 256) .. data\n  for') end); if ok then print('HUDINI_CHUNK_119_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.185 [APP] peripheralStatus = HUDINI_CHUNK_119_OK
-23:13:39.212 [OUT] LUA local ok,err=pcall(function() f:write(' _ = 1, 3 do\n    if pcall(frame.bluetooth.send, packet) then') end); if ok then print('HUDINI_CHUNK_120_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.260 [APP] peripheralStatus = HUDINI_CHUNK_120_OK
-23:13:39.294 [OUT] LUA local ok,err=pcall(function() f:write('\n      break\n    end\n    frame.sleep(0.001)\n  end\n  state.au') end); if ok then print('HUDINI_CHUNK_121_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.350 [APP] peripheralStatus = HUDINI_CHUNK_121_OK
-23:13:39.380 [OUT] LUA local ok,err=pcall(function() f:write('dio_sequence = (sequence + 1) % 65536\nend\n\nlocal function st') end); if ok then print('HUDINI_CHUNK_122_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.440 [APP] peripheralStatus = HUDINI_CHUNK_122_OK
-23:13:39.461 [OUT] LUA local ok,err=pcall(function() f:write('art_mic()\n  local ok, err = pcall(frame.microphone.start, { ') end); if ok then print('HUDINI_CHUNK_123_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.500 [APP] peripheralStatus = HUDINI_CHUNK_123_OK
-23:13:39.545 [OUT] LUA local ok,err=pcall(function() f:write('sample_rate = 16000, bit_depth = 8 })\n  if ok then\n    state') end); if ok then print('HUDINI_CHUNK_124_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.576 [APP] peripheralStatus = HUDINI_CHUNK_124_OK
-23:13:39.631 [OUT] LUA local ok,err=pcall(function() f:write('.audio_sequence = 0\n    return true\n  end\n  local message = ') end); if ok then print('HUDINI_CHUNK_125_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.664 [APP] peripheralStatus = HUDINI_CHUNK_125_OK
-23:13:39.717 [OUT] LUA local ok,err=pcall(function() f:write('tostring(err or "")\n  if string.find(message, "already start') end); if ok then print('HUDINI_CHUNK_126_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.755 [APP] peripheralStatus = HUDINI_CHUNK_126_OK
-23:13:39.798 [OUT] LUA local ok,err=pcall(function() f:write('ed", 1, true) ~= nil then\n    return true\n  end\n  send_event') end); if ok then print('HUDINI_CHUNK_127_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.860 [APP] peripheralStatus = HUDINI_CHUNK_127_OK
-23:13:39.887 [OUT] LUA local ok,err=pcall(function() f:write('({ "EVT", "MIC_ERROR", message })\n  return false\nend\n\nlocal ') end); if ok then print('HUDINI_CHUNK_128_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.935 [APP] peripheralStatus = HUDINI_CHUNK_128_OK
-23:13:39.968 [OUT] LUA local ok,err=pcall(function() f:write('function run_app()\n  frame.bluetooth.receive_callback(functi') end); if ok then print('HUDINI_CHUNK_129_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:39.997 [APP] peripheralStatus = HUDINI_CHUNK_129_OK
-23:13:40.054 [OUT] LUA local ok,err=pcall(function() f:write('on(data) handle_command(data) end)\n  frame.imu.tap_callback(') end); if ok then print('HUDINI_CHUNK_130_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:40.084 [APP] peripheralStatus = HUDINI_CHUNK_130_OK
-23:13:40.134 [OUT] LUA local ok,err=pcall(function() f:write('on_tap)\n  frame.display.set_brightness(state.brightness)\n  s') end); if ok then print('HUDINI_CHUNK_131_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:40.174 [APP] peripheralStatus = HUDINI_CHUNK_131_OK
-23:13:40.216 [OUT] LUA local ok,err=pcall(function() f:write('tate.connected = false\n  send_event({ "EVT", "BOOT", frame.F') end); if ok then print('HUDINI_CHUNK_132_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:40.250 [APP] peripheralStatus = HUDINI_CHUNK_132_OK
-23:13:40.302 [OUT] LUA local ok,err=pcall(function() f:write('IRMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP') end); if ok then print('HUDINI_CHUNK_133_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:40.341 [APP] peripheralStatus = HUDINI_CHUNK_133_OK
-23:13:40.388 [OUT] LUA local ok,err=pcall(function() f:write('_VERSION })\n\n  local saved_crash = load_saved_crash()\n  if s') end); if ok then print('HUDINI_CHUNK_134_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:40.416 [APP] peripheralStatus = HUDINI_CHUNK_134_OK
-23:13:40.470 [OUT] LUA local ok,err=pcall(function() f:write('aved_crash ~= nil and saved_crash ~= "" then\n    send_event(') end); if ok then print('HUDINI_CHUNK_135_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:40.504 [APP] peripheralStatus = HUDINI_CHUNK_135_OK
-23:13:40.551 [OUT] LUA local ok,err=pcall(function() f:write('{ "EVT", "CRASH", crash_text(saved_crash) })\n    clear_saved') end); if ok then print('HUDINI_CHUNK_136_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:40.611 [APP] peripheralStatus = HUDINI_CHUNK_136_OK
-23:13:40.637 [OUT] LUA local ok,err=pcall(function() f:write('_crash()\n  end\n\n  local max_audio_bytes = frame.bluetooth.ma') end); if ok then print('HUDINI_CHUNK_137_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:40.835 [APP] peripheralStatus = HUDINI_CHUNK_137_OK
-23:13:40.892 [OUT] LUA local ok,err=pcall(function() f:write('x_length() - 3\n  if max_audio_bytes % 2 == 1 then\n    max_au') end); if ok then print('HUDINI_CHUNK_138_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:40.955 [APP] peripheralStatus = HUDINI_CHUNK_138_OK
-23:13:40.989 [OUT] LUA local ok,err=pcall(function() f:write('dio_bytes = max_audio_bytes - 1\n  end\n  if max_audio_bytes <') end); if ok then print('HUDINI_CHUNK_139_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.016 [APP] peripheralStatus = HUDINI_CHUNK_139_OK
-23:13:41.070 [OUT] LUA local ok,err=pcall(function() f:write(' 64 then\n    max_audio_bytes = 64\n  end\n\n  start_mic()\n  sen') end); if ok then print('HUDINI_CHUNK_140_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.105 [APP] peripheralStatus = HUDINI_CHUNK_140_OK
-23:13:41.151 [OUT] LUA local ok,err=pcall(function() f:write('d_buffer = ""\n\n  while true do\n    if state.needs_render the') end); if ok then print('HUDINI_CHUNK_141_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.211 [APP] peripheralStatus = HUDINI_CHUNK_141_OK
-23:13:41.238 [OUT] LUA local ok,err=pcall(function() f:write('n\n      render_ui()\n    end\n\n    local audio = frame.microph') end); if ok then print('HUDINI_CHUNK_142_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.285 [APP] peripheralStatus = HUDINI_CHUNK_142_OK
-23:13:41.321 [OUT] LUA local ok,err=pcall(function() f:write('one.read(max_audio_bytes)\n    if audio == nil then\n      if ') end); if ok then print('HUDINI_CHUNK_143_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.360 [APP] peripheralStatus = HUDINI_CHUNK_143_OK
-23:13:41.406 [OUT] LUA local ok,err=pcall(function() f:write('send_buffer ~= "" then\n        send_audio_chunk(send_buffer)') end); if ok then print('HUDINI_CHUNK_144_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.451 [APP] peripheralStatus = HUDINI_CHUNK_144_OK
-23:13:41.492 [OUT] LUA local ok,err=pcall(function() f:write('\n        send_buffer = ""\n      end\n      frame.sleep(0.1)\n ') end); if ok then print('HUDINI_CHUNK_145_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.555 [APP] peripheralStatus = HUDINI_CHUNK_145_OK
-23:13:41.582 [OUT] LUA local ok,err=pcall(function() f:write('     start_mic()\n    elseif audio ~= "" then\n      send_buff') end); if ok then print('HUDINI_CHUNK_146_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.630 [APP] peripheralStatus = HUDINI_CHUNK_146_OK
-23:13:41.663 [OUT] LUA local ok,err=pcall(function() f:write('er = send_buffer .. audio\n      if string.len(send_buffer) >') end); if ok then print('HUDINI_CHUNK_147_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.720 [APP] peripheralStatus = HUDINI_CHUNK_147_OK
-23:13:41.748 [OUT] LUA local ok,err=pcall(function() f:write('= max_audio_bytes then\n        send_audio_chunk(string.sub(s') end); if ok then print('HUDINI_CHUNK_148_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.840 [APP] peripheralStatus = HUDINI_CHUNK_148_OK
-23:13:41.915 [OUT] LUA local ok,err=pcall(function() f:write('end_buffer, 1, max_audio_bytes))\n        send_buffer = strin') end); if ok then print('HUDINI_CHUNK_149_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:41.960 [APP] peripheralStatus = HUDINI_CHUNK_149_OK
-23:13:42.001 [OUT] LUA local ok,err=pcall(function() f:write('g.sub(send_buffer, max_audio_bytes + 1)\n      end\n    else\n ') end); if ok then print('HUDINI_CHUNK_150_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:42.035 [APP] peripheralStatus = HUDINI_CHUNK_150_OK
-23:13:42.085 [OUT] LUA local ok,err=pcall(function() f:write('     if send_buffer ~= "" then\n        send_audio_chunk(send') end); if ok then print('HUDINI_CHUNK_151_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:42.141 [APP] peripheralStatus = HUDINI_CHUNK_151_OK
-23:13:42.171 [OUT] LUA local ok,err=pcall(function() f:write('_buffer)\n        send_buffer = ""\n      end\n      frame.slee') end); if ok then print('HUDINI_CHUNK_152_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:42.215 [APP] peripheralStatus = HUDINI_CHUNK_152_OK
-23:13:42.256 [OUT] LUA local ok,err=pcall(function() f:write('p(0.004)\n    end\n  end\nend\n\nlocal ok, err = xpcall(run_app, ') end); if ok then print('HUDINI_CHUNK_153_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:42.276 [APP] peripheralStatus = HUDINI_CHUNK_153_OK
-23:13:42.340 [OUT] LUA local ok,err=pcall(function() f:write('debug.traceback)\nif not ok then\n  save_crash(err)\n  emit_cra') end); if ok then print('HUDINI_CHUNK_154_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:42.366 [APP] peripheralStatus = HUDINI_CHUNK_154_OK
-23:13:42.423 [OUT] LUA local ok,err=pcall(function() f:write('sh(err)\n  pcall(frame.display.power_save, true)\n  while true') end); if ok then print('HUDINI_CHUNK_155_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:42.485 [APP] peripheralStatus = HUDINI_CHUNK_155_OK
-23:13:42.518 [OUT] LUA local ok,err=pcall(function() f:write(' do\n    frame.sleep(1)\n  end\nend') end); if ok then print('HUDINI_CHUNK_156_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:13:42.560 [APP] peripheralStatus = HUDINI_CHUNK_156_OK
-23:13:42.604 [OUT] LUA f:close(); print('HUDINI_CLOSE_OK')
-23:13:44.678 [APP] connectionDebugStage = Disconnected with error
-23:13:44.678 [APP] state connected("Frame D7") -> idle
-23:13:44.678 [APP] connectionDebugStage = Disconnected: The connection has timed out unexpectedly.
-23:13:44.679 [APP] statusMessage = Disconnected: The connection has timed out unexpectedly.
-23:13:44.679 [APP] peripheralStatus = 
-23:13:44.679 [APP] stopRecognition invoked
-23:13:44.679 [APP] cancelTranslation invoked
-23:13:44.679 [APP] isStreaming = false
-23:13:44.679 [APP] connectionDebugStage = Reconnecting to known Frame
-23:13:44.679 [APP] statusMessage = Reconnecting to Frame…
-23:13:44.680 [APP] state idle -> connecting("Frame D7")
-23:13:44.732 [APP] recognitionTask ignored cancellation error No speech detected
-23:13:45.649 [APP] connectionDebugStage = Install failed
-23:13:45.649 [APP] statusMessage = Timed out: HUDINI_CLOSE_OK
-23:14:02.823 [APP] connectionDebugStage = Scanning
-23:14:02.824 [APP] state connecting("Frame D7") -> scanning
-23:14:02.824 [APP] statusMessage = Scanning for Frame glasses…
-23:14:02.887 [APP] state scanning -> idle
-23:14:02.887 [APP] state idle -> connecting("Frame D7")
-23:14:02.887 [APP] connectionDebugStage = Reconnecting to known Frame
-23:14:02.887 [APP] statusMessage = Reconnecting to Frame D7…
-23:14:03.715 [APP] state connecting("Frame D7") -> connected("Frame D7")
-23:14:03.715 [APP] connectionDebugStage = Connected, discovering service
-23:14:03.715 [APP] statusMessage = Connected. Discovering Frame service…
-23:14:03.788 [APP] connectionDebugStage = Service found
-23:14:03.788 [APP] statusMessage = Frame service found. Discovering characteristics…
-23:14:03.802 [APP] connectionDebugStage = Characteristics found
-23:14:03.802 [APP] connectionDebugStage = Enabling notifications
-23:14:03.802 [APP] connectionDebugStage = Waiting for Frame event
-23:14:03.802 [APP] statusMessage = Frame connected. Waiting for HUDini app heartbeat…
-23:14:03.802 [OUT] PING
-23:14:03.805 [APP] connect(to:) ignored because peripheral is already connected
-23:14:03.832 [APP] connectionDebugStage = Notifications enabled
-23:14:03.832 [APP] statusMessage = Notifications enabled. Waiting for Frame app events…
-23:14:03.865 [IN] EVT	READY	v25.278.1113	243	2026.04.08.6
-23:14:03.865 [APP] connectionDebugStage = Frame app responded
-23:14:03.865 [APP] peripheralStatus = Ready on v25.278.1113
-23:14:03.865 [APP] statusMessage = Connected to Frame
-23:14:03.865 [APP] connectionDebugStage = Bootstrapping session
-23:14:03.865 [OUT] SET_PREFS	brightness=0;partials=1
-23:14:03.865 [OUT] SYNC_STATE	0	idle
-23:14:03.924 [IN] EVT	STATUS	idle
-23:14:03.925 [APP] peripheralStatus = idle
-23:14:03.925 [IN] EVT	STATUS	idle
-23:14:03.925 [IN] EVT	STATUS	idle
-23:14:03.925 [IN] EVT	STATUS	idle
-23:14:05.646 [APP] connectionDebugStage = Installing app
-23:14:05.646 [OUT] CONTROL 0x03
-23:14:06.164 [OUT] LUA print('HUDINI_REPL_READY')
-23:14:10.213 [APP] connectionDebugStage = Install failed
-23:14:10.214 [APP] statusMessage = Timed out: HUDINI_REPL_READY
-23:14:12.665 [APP] connectionDebugStage = Installing app
-23:14:12.666 [OUT] CONTROL 0x03
-23:14:12.698 [APP] peripheralStatus = HUDINI_REPL_READY
-23:14:13.166 [OUT] LUA print('HUDINI_REPL_READY')
-23:14:13.253 [OUT] LUA pcall(frame.file.remove,'main.lua'); print('HUDINI_REMOVE_OK')
-23:14:13.283 [APP] peripheralStatus = HUDINI_REMOVE_OK
-23:14:13.339 [OUT] LUA f=assert(frame.file.open('main.lua','write')); print('HUDINI_OPEN_OK')
-23:14:13.386 [APP] peripheralStatus = HUDINI_OPEN_OK
-23:14:13.425 [OUT] LUA local ok,err=pcall(function() f:write('local APP_DIR = "/hudini"\nlocal APP_VERSION = "2026.04.08.6"') end); if ok then print('HUDINI_CHUNK_1_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:13.595 [APP] peripheralStatus = HUDINI_CHUNK_1_OK
-23:14:13.624 [OUT] LUA local ok,err=pcall(function() f:write('\nlocal CRASH_PATH = APP_DIR .. "/crash.txt"\n\nlocal state = {') end); if ok then print('HUDINI_CHUNK_2_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:13.670 [APP] peripheralStatus = HUDINI_CHUNK_2_OK
-23:14:13.705 [OUT] LUA local ok,err=pcall(function() f:write('\n  connected = false,\n  status = "idle",\n  listening = false') end); if ok then print('HUDINI_CHUNK_3_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:13.733 [APP] peripheralStatus = HUDINI_CHUNK_3_OK
-23:14:13.791 [OUT] LUA local ok,err=pcall(function() f:write(',\n  partial_caption = "",\n  final_caption = "",\n  brightness') end); if ok then print('HUDINI_CHUNK_4_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:13.851 [APP] peripheralStatus = HUDINI_CHUNK_4_OK
-23:14:13.877 [OUT] LUA local ok,err=pcall(function() f:write(' = 0,\n  partials = true,\n  needs_render = true,\n  audio_sequ') end); if ok then print('HUDINI_CHUNK_5_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:13.925 [APP] peripheralStatus = HUDINI_CHUNK_5_OK
-23:14:13.959 [OUT] LUA local ok,err=pcall(function() f:write('ence = 0,\n  tap_sequence = 0,\n}\n\nframe.display.text("HUDini"') end); if ok then print('HUDINI_CHUNK_6_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:13.986 [APP] peripheralStatus = HUDINI_CHUNK_6_OK
-23:14:14.042 [OUT] LUA local ok,err=pcall(function() f:write(', 220, 116, { color = "WHITE", spacing = 4 })\nframe.display.') end); if ok then print('HUDINI_CHUNK_7_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.075 [APP] peripheralStatus = HUDINI_CHUNK_7_OK
-23:14:14.129 [OUT] LUA local ok,err=pcall(function() f:write('text("Loading...", 210, 154, { color = "LIGHTGREEN", spacing') end); if ok then print('HUDINI_CHUNK_8_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.166 [APP] peripheralStatus = HUDINI_CHUNK_8_OK
-23:14:14.210 [OUT] LUA local ok,err=pcall(function() f:write(' = 4 })\nframe.display.show()\n\nlocal function ensure_dir()\n  ') end); if ok then print('HUDINI_CHUNK_9_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.256 [APP] peripheralStatus = HUDINI_CHUNK_9_OK
-23:14:14.297 [OUT] LUA local ok,err=pcall(function() f:write('pcall(frame.file.mkdir, APP_DIR)\nend\n\nlocal function crash_t') end); if ok then print('HUDINI_CHUNK_10_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.346 [APP] peripheralStatus = HUDINI_CHUNK_10_OK
-23:14:14.383 [OUT] LUA local ok,err=pcall(function() f:write('ext(err)\n  local text = tostring(err or "unknown error")\n  i') end); if ok then print('HUDINI_CHUNK_11_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.435 [APP] peripheralStatus = HUDINI_CHUNK_11_OK
-23:14:14.468 [OUT] LUA local ok,err=pcall(function() f:write('f string.len(text) > 240 then\n    text = string.sub(text, 1,') end); if ok then print('HUDINI_CHUNK_12_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.511 [APP] peripheralStatus = HUDINI_CHUNK_12_OK
-23:14:14.551 [OUT] LUA local ok,err=pcall(function() f:write(' 240)\n  end\n  return text\nend\n\nlocal function save_crash(err') end); if ok then print('HUDINI_CHUNK_13_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.615 [APP] peripheralStatus = HUDINI_CHUNK_13_OK
-23:14:14.639 [OUT] LUA local ok,err=pcall(function() f:write(')\n  ensure_dir()\n  local f = frame.file.open(CRASH_PATH, "wr') end); if ok then print('HUDINI_CHUNK_14_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.676 [APP] peripheralStatus = HUDINI_CHUNK_14_OK
-23:14:14.725 [OUT] LUA local ok,err=pcall(function() f:write('ite")\n  if f ~= nil then\n    f:write(crash_text(err) .. "\\n"') end); if ok then print('HUDINI_CHUNK_15_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.780 [APP] peripheralStatus = HUDINI_CHUNK_15_OK
-23:14:14.807 [OUT] LUA local ok,err=pcall(function() f:write(')\n    f:close()\n  end\nend\n\nlocal function emit_crash(err)\n  ') end); if ok then print('HUDINI_CHUNK_16_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.855 [APP] peripheralStatus = HUDINI_CHUNK_16_OK
-23:14:14.893 [OUT] LUA local ok,err=pcall(function() f:write('pcall(frame.bluetooth.send, "EVT\\tCRASH\\t" .. crash_text(err') end); if ok then print('HUDINI_CHUNK_17_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:14.945 [APP] peripheralStatus = HUDINI_CHUNK_17_OK
-23:14:14.980 [OUT] LUA local ok,err=pcall(function() f:write('))\nend\n\nlocal function load_saved_crash()\n  local ok, f = pc') end); if ok then print('HUDINI_CHUNK_18_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.022 [APP] peripheralStatus = HUDINI_CHUNK_18_OK
-23:14:15.061 [OUT] LUA local ok,err=pcall(function() f:write('all(frame.file.open, CRASH_PATH, "read")\n  if not ok or f ==') end); if ok then print('HUDINI_CHUNK_19_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.095 [APP] peripheralStatus = HUDINI_CHUNK_19_OK
-23:14:15.143 [OUT] LUA local ok,err=pcall(function() f:write(' nil then\n    return nil\n  end\n  local line = f:read()\n  f:c') end); if ok then print('HUDINI_CHUNK_20_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.185 [APP] peripheralStatus = HUDINI_CHUNK_20_OK
-23:14:15.229 [OUT] LUA local ok,err=pcall(function() f:write('lose()\n  return line\nend\n\nlocal function clear_saved_crash()') end); if ok then print('HUDINI_CHUNK_21_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.263 [APP] peripheralStatus = HUDINI_CHUNK_21_OK
-23:14:15.315 [OUT] LUA local ok,err=pcall(function() f:write('\n  pcall(frame.file.remove, CRASH_PATH)\nend\n\nlocal function ') end); if ok then print('HUDINI_CHUNK_22_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.351 [APP] peripheralStatus = HUDINI_CHUNK_22_OK
-23:14:15.399 [OUT] LUA local ok,err=pcall(function() f:write('split_text(text, separator)\n  local result = {}\n  local star') end); if ok then print('HUDINI_CHUNK_23_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.441 [APP] peripheralStatus = HUDINI_CHUNK_23_OK
-23:14:15.486 [OUT] LUA local ok,err=pcall(function() f:write('t = 1\n  while true do\n    local found_start, found_end = str') end); if ok then print('HUDINI_CHUNK_24_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.546 [APP] peripheralStatus = HUDINI_CHUNK_24_OK
-23:14:15.568 [OUT] LUA local ok,err=pcall(function() f:write('ing.find(text, separator, start, true)\n    if found_start ==') end); if ok then print('HUDINI_CHUNK_25_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.636 [APP] peripheralStatus = HUDINI_CHUNK_25_OK
-23:14:15.660 [OUT] LUA local ok,err=pcall(function() f:write(' nil then\n      table.insert(result, string.sub(text, start)') end); if ok then print('HUDINI_CHUNK_26_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.681 [APP] peripheralStatus = HUDINI_CHUNK_26_OK
-23:14:15.745 [OUT] LUA local ok,err=pcall(function() f:write(')\n      return result\n    end\n    table.insert(result, strin') end); if ok then print('HUDINI_CHUNK_27_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.772 [APP] peripheralStatus = HUDINI_CHUNK_27_OK
-23:14:15.828 [OUT] LUA local ok,err=pcall(function() f:write('g.sub(text, start, found_start - 1))\n    start = found_end +') end); if ok then print('HUDINI_CHUNK_28_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.875 [APP] peripheralStatus = HUDINI_CHUNK_28_OK
-23:14:15.914 [OUT] LUA local ok,err=pcall(function() f:write(' 1\n  end\nend\n\nlocal function trim(text)\n  return (string.gsu') end); if ok then print('HUDINI_CHUNK_29_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:15.953 [APP] peripheralStatus = HUDINI_CHUNK_29_OK
-23:14:16.000 [OUT] LUA local ok,err=pcall(function() f:write('b(text, "^%s*(.-)%s*$", "%1"))\nend\n\nlocal function normalize') end); if ok then print('HUDINI_CHUNK_30_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.026 [APP] peripheralStatus = HUDINI_CHUNK_30_OK
-23:14:16.086 [OUT] LUA local ok,err=pcall(function() f:write('_display_text(text)\n  if text == nil then\n    return ""\n  en') end); if ok then print('HUDINI_CHUNK_31_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.146 [APP] peripheralStatus = HUDINI_CHUNK_31_OK
-23:14:16.172 [OUT] LUA local ok,err=pcall(function() f:write('d\n  local normalized = tostring(text)\n  normalized = string.') end); if ok then print('HUDINI_CHUNK_32_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.221 [APP] peripheralStatus = HUDINI_CHUNK_32_OK
-23:14:16.258 [OUT] LUA local ok,err=pcall(function() f:write('gsub(normalized, "[\\r\\n\\t]", " ")\n  normalized = string.gsub') end); if ok then print('HUDINI_CHUNK_33_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.296 [APP] peripheralStatus = HUDINI_CHUNK_33_OK
-23:14:16.344 [OUT] LUA local ok,err=pcall(function() f:write('(normalized, "%s+", " ")\n  return trim(normalized)\nend\n\nloca') end); if ok then print('HUDINI_CHUNK_34_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.387 [APP] peripheralStatus = HUDINI_CHUNK_34_OK
-23:14:16.431 [OUT] LUA local ok,err=pcall(function() f:write('l function send_event(parts)\n  local payload = table.concat(') end); if ok then print('HUDINI_CHUNK_35_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.476 [APP] peripheralStatus = HUDINI_CHUNK_35_OK
-23:14:16.517 [OUT] LUA local ok,err=pcall(function() f:write('parts, "\\t")\n  pcall(frame.bluetooth.send, payload)\nend\n\nloc') end); if ok then print('HUDINI_CHUNK_36_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.565 [APP] peripheralStatus = HUDINI_CHUNK_36_OK
-23:14:16.603 [OUT] LUA local ok,err=pcall(function() f:write('al function wrap_lines(text, limit, max_lines)\n  local lines') end); if ok then print('HUDINI_CHUNK_37_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.626 [APP] peripheralStatus = HUDINI_CHUNK_37_OK
-23:14:16.688 [OUT] LUA local ok,err=pcall(function() f:write(' = {}\n  local current = ""\n  local truncated = false\n\n  text') end); if ok then print('HUDINI_CHUNK_38_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.716 [APP] peripheralStatus = HUDINI_CHUNK_38_OK
-23:14:16.769 [OUT] LUA local ok,err=pcall(function() f:write(' = normalize_display_text(text)\n  if text == "" then\n    ret') end); if ok then print('HUDINI_CHUNK_39_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.821 [APP] peripheralStatus = HUDINI_CHUNK_39_OK
-23:14:16.855 [OUT] LUA local ok,err=pcall(function() f:write('urn lines\n  end\n\n  local words = split_text(text, " ")\n  for') end); if ok then print('HUDINI_CHUNK_40_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.896 [APP] peripheralStatus = HUDINI_CHUNK_40_OK
-23:14:16.941 [OUT] LUA local ok,err=pcall(function() f:write(' _, raw_word in ipairs(words) do\n    local word = raw_word\n\n') end); if ok then print('HUDINI_CHUNK_41_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:16.973 [APP] peripheralStatus = HUDINI_CHUNK_41_OK
-23:14:17.028 [OUT] LUA local ok,err=pcall(function() f:write('    while string.len(word) > limit do\n      if current ~= ""') end); if ok then print('HUDINI_CHUNK_42_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.091 [APP] peripheralStatus = HUDINI_CHUNK_42_OK
-23:14:17.113 [OUT] LUA local ok,err=pcall(function() f:write(' then\n        table.insert(lines, current)\n        current =') end); if ok then print('HUDINI_CHUNK_43_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.150 [APP] peripheralStatus = HUDINI_CHUNK_43_OK
-23:14:17.199 [OUT] LUA local ok,err=pcall(function() f:write(' ""\n        if #lines >= max_lines then\n          truncated ') end); if ok then print('HUDINI_CHUNK_44_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.255 [APP] peripheralStatus = HUDINI_CHUNK_44_OK
-23:14:17.281 [OUT] LUA local ok,err=pcall(function() f:write('= true\n          break\n        end\n      end\n      table.ins') end); if ok then print('HUDINI_CHUNK_45_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.345 [APP] peripheralStatus = HUDINI_CHUNK_45_OK
-23:14:17.370 [OUT] LUA local ok,err=pcall(function() f:write('ert(lines, string.sub(word, 1, limit - 1) .. "-")\n      word') end); if ok then print('HUDINI_CHUNK_46_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.422 [APP] peripheralStatus = HUDINI_CHUNK_46_OK
-23:14:17.456 [OUT] LUA local ok,err=pcall(function() f:write(' = string.sub(word, limit)\n      if #lines >= max_lines then') end); if ok then print('HUDINI_CHUNK_47_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.495 [APP] peripheralStatus = HUDINI_CHUNK_47_OK
-23:14:17.542 [OUT] LUA local ok,err=pcall(function() f:write('\n        truncated = true\n        break\n      end\n    end\n\n ') end); if ok then print('HUDINI_CHUNK_48_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.574 [APP] peripheralStatus = HUDINI_CHUNK_48_OK
-23:14:17.628 [OUT] LUA local ok,err=pcall(function() f:write('   if truncated then\n      break\n    end\n\n    if word == "" ') end); if ok then print('HUDINI_CHUNK_49_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.660 [APP] peripheralStatus = HUDINI_CHUNK_49_OK
-23:14:17.714 [OUT] LUA local ok,err=pcall(function() f:write('then\n      break\n    end\n\n    local candidate = word\n    if ') end); if ok then print('HUDINI_CHUNK_50_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.739 [APP] peripheralStatus = HUDINI_CHUNK_50_OK
-23:14:17.801 [OUT] LUA local ok,err=pcall(function() f:write('current ~= "" then\n      candidate = current .. " " .. word\n') end); if ok then print('HUDINI_CHUNK_51_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.826 [APP] peripheralStatus = HUDINI_CHUNK_51_OK
-23:14:17.887 [OUT] LUA local ok,err=pcall(function() f:write('    end\n\n    if string.len(candidate) <= limit then\n      cu') end); if ok then print('HUDINI_CHUNK_52_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:17.917 [APP] peripheralStatus = HUDINI_CHUNK_52_OK
-23:14:17.971 [OUT] LUA local ok,err=pcall(function() f:write('rrent = candidate\n    else\n      if current ~= "" then\n     ') end); if ok then print('HUDINI_CHUNK_53_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.006 [APP] peripheralStatus = HUDINI_CHUNK_53_OK
-23:14:18.057 [OUT] LUA local ok,err=pcall(function() f:write('   table.insert(lines, current)\n        if #lines >= max_lin') end); if ok then print('HUDINI_CHUNK_54_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.095 [APP] peripheralStatus = HUDINI_CHUNK_54_OK
-23:14:18.141 [OUT] LUA local ok,err=pcall(function() f:write('es then\n          truncated = true\n          break\n        e') end); if ok then print('HUDINI_CHUNK_55_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.185 [APP] peripheralStatus = HUDINI_CHUNK_55_OK
-23:14:18.227 [OUT] LUA local ok,err=pcall(function() f:write('nd\n      end\n      current = word\n    end\n  end\n\n  if curren') end); if ok then print('HUDINI_CHUNK_56_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.291 [APP] peripheralStatus = HUDINI_CHUNK_56_OK
-23:14:18.315 [OUT] LUA local ok,err=pcall(function() f:write('t ~= "" and #lines < max_lines then\n    table.insert(lines, ') end); if ok then print('HUDINI_CHUNK_57_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.351 [APP] peripheralStatus = HUDINI_CHUNK_57_OK
-23:14:18.399 [OUT] LUA local ok,err=pcall(function() f:write('current)\n  elseif current ~= "" then\n    truncated = true\n  ') end); if ok then print('HUDINI_CHUNK_58_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.441 [APP] peripheralStatus = HUDINI_CHUNK_58_OK
-23:14:18.486 [OUT] LUA local ok,err=pcall(function() f:write('end\n\n  if truncated and #lines > 0 then\n    local last = lin') end); if ok then print('HUDINI_CHUNK_59_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.530 [APP] peripheralStatus = HUDINI_CHUNK_59_OK
-23:14:18.572 [OUT] LUA local ok,err=pcall(function() f:write('es[#lines]\n    if string.len(last) > limit - 3 then\n      la') end); if ok then print('HUDINI_CHUNK_60_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.622 [APP] peripheralStatus = HUDINI_CHUNK_60_OK
-23:14:18.657 [OUT] LUA local ok,err=pcall(function() f:write('st = string.sub(last, 1, limit - 3)\n    end\n    lines[#lines') end); if ok then print('HUDINI_CHUNK_61_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.695 [APP] peripheralStatus = HUDINI_CHUNK_61_OK
-23:14:18.743 [OUT] LUA local ok,err=pcall(function() f:write('] = last .. "..."\n  end\n\n  return lines\nend\n\nlocal function ') end); if ok then print('HUDINI_CHUNK_62_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.785 [APP] peripheralStatus = HUDINI_CHUNK_62_OK
-23:14:18.829 [OUT] LUA local ok,err=pcall(function() f:write('draw_multiline(text, x, y, color, max_chars, max_lines)\n  lo') end); if ok then print('HUDINI_CHUNK_63_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.876 [APP] peripheralStatus = HUDINI_CHUNK_63_OK
-23:14:18.914 [OUT] LUA local ok,err=pcall(function() f:write('cal lines = wrap_lines(text, max_chars, max_lines)\n  local l') end); if ok then print('HUDINI_CHUNK_64_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:18.950 [APP] peripheralStatus = HUDINI_CHUNK_64_OK
-23:14:18.999 [OUT] LUA local ok,err=pcall(function() f:write('ine_y = y\n  for _, line in ipairs(lines) do\n    frame.displa') end); if ok then print('HUDINI_CHUNK_65_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:19.026 [APP] peripheralStatus = HUDINI_CHUNK_65_OK
-23:14:19.080 [OUT] LUA local ok,err=pcall(function() f:write('y.text(line, x, line_y, { color = color, spacing = 4 })\n    ') end); if ok then print('HUDINI_CHUNK_66_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:19.116 [APP] peripheralStatus = HUDINI_CHUNK_66_OK
-23:14:19.164 [OUT] LUA local ok,err=pcall(function() f:write('line_y = line_y + 45\n  end\n  return line_y\nend\n\nlocal functi') end); if ok then print('HUDINI_CHUNK_67_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:19.206 [APP] peripheralStatus = HUDINI_CHUNK_67_OK
-23:14:19.250 [OUT] LUA local ok,err=pcall(function() f:write('on render_ui()\n  if not state.connected then\n    frame.displ') end); if ok then print('HUDINI_CHUNK_68_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:19.310 [APP] peripheralStatus = HUDINI_CHUNK_68_OK
-23:14:19.336 [OUT] LUA local ok,err=pcall(function() f:write('ay.power_save(true)\n    state.needs_render = false\n    retur') end); if ok then print('HUDINI_CHUNK_69_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:19.536 [APP] peripheralStatus = HUDINI_CHUNK_69_OK
-23:14:19.588 [OUT] LUA local ok,err=pcall(function() f:write('n\n  end\n\n  frame.display.power_save(false)\n  frame.display.s') end); if ok then print('HUDINI_CHUNK_70_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:19.626 [APP] peripheralStatus = HUDINI_CHUNK_70_OK
-23:14:19.670 [OUT] LUA local ok,err=pcall(function() f:write('et_brightness(state.brightness)\n\n  frame.display.text("Mic:"') end); if ok then print('HUDINI_CHUNK_71_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:19.715 [APP] peripheralStatus = HUDINI_CHUNK_71_OK
-23:14:19.753 [OUT] LUA local ok,err=pcall(function() f:write(', 24, 52, { color = "WHITE", spacing = 4 })\n  frame.display.') end); if ok then print('HUDINI_CHUNK_72_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:19.791 [APP] peripheralStatus = HUDINI_CHUNK_72_OK
-23:14:19.835 [OUT] LUA local ok,err=pcall(function() f:write('text(state.listening and "ON" or "OFF", 98, 52, { color = st') end); if ok then print('HUDINI_CHUNK_73_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:19.866 [APP] peripheralStatus = HUDINI_CHUNK_73_OK
-23:14:19.916 [OUT] LUA local ok,err=pcall(function() f:write('ate.listening and "GREEN" or "RED", spacing = 4 })\n\n  local ') end); if ok then print('HUDINI_CHUNK_74_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:19.943 [APP] peripheralStatus = HUDINI_CHUNK_74_OK
-23:14:20.002 [OUT] LUA local ok,err=pcall(function() f:write('text = state.final_caption\n  if text == "" and state.partial') end); if ok then print('HUDINI_CHUNK_75_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.045 [APP] peripheralStatus = HUDINI_CHUNK_75_OK
-23:14:20.089 [OUT] LUA local ok,err=pcall(function() f:write('s then\n    text = state.partial_caption\n  end\n  draw_multili') end); if ok then print('HUDINI_CHUNK_76_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.120 [APP] peripheralStatus = HUDINI_CHUNK_76_OK
-23:14:20.171 [OUT] LUA local ok,err=pcall(function() f:write('ne(text, 24, 98, "SKYBLUE", 30, 6)\n\n  frame.display.show()\n ') end); if ok then print('HUDINI_CHUNK_77_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.210 [APP] peripheralStatus = HUDINI_CHUNK_77_OK
-23:14:20.257 [OUT] LUA local ok,err=pcall(function() f:write(' state.needs_render = false\nend\n\nlocal function handle_comma') end); if ok then print('HUDINI_CHUNK_78_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.287 [APP] peripheralStatus = HUDINI_CHUNK_78_OK
-23:14:20.340 [OUT] LUA local ok,err=pcall(function() f:write('nd(payload)\n  local parts = split_text(payload, "\\t")\n  loca') end); if ok then print('HUDINI_CHUNK_79_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.375 [APP] peripheralStatus = HUDINI_CHUNK_79_OK
-23:14:20.425 [OUT] LUA local ok,err=pcall(function() f:write('l command = parts[1]\n\n  if command ~= nil then\n    state.con') end); if ok then print('HUDINI_CHUNK_80_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.466 [APP] peripheralStatus = HUDINI_CHUNK_80_OK
-23:14:20.511 [OUT] LUA local ok,err=pcall(function() f:write('nected = true\n    state.needs_render = true\n  end\n\n  if comm') end); if ok then print('HUDINI_CHUNK_81_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.555 [APP] peripheralStatus = HUDINI_CHUNK_81_OK
-23:14:20.596 [OUT] LUA local ok,err=pcall(function() f:write('and == "PING" then\n    send_event({ "EVT", "READY", frame.FI') end); if ok then print('HUDINI_CHUNK_82_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.645 [APP] peripheralStatus = HUDINI_CHUNK_82_OK
-23:14:20.682 [OUT] LUA local ok,err=pcall(function() f:write('RMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP_') end); if ok then print('HUDINI_CHUNK_83_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.751 [APP] peripheralStatus = HUDINI_CHUNK_83_OK
-23:14:20.786 [OUT] LUA local ok,err=pcall(function() f:write('VERSION })\n    return\n  end\n\n  if command == "SYNC_STATE" th') end); if ok then print('HUDINI_CHUNK_84_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.825 [APP] peripheralStatus = HUDINI_CHUNK_84_OK
-23:14:20.871 [OUT] LUA local ok,err=pcall(function() f:write('en\n    state.listening = parts[2] == "1"\n    state.status = ') end); if ok then print('HUDINI_CHUNK_85_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.915 [APP] peripheralStatus = HUDINI_CHUNK_85_OK
-23:14:20.957 [OUT] LUA local ok,err=pcall(function() f:write('parts[3] or (state.listening and "listening" or "idle")\n    ') end); if ok then print('HUDINI_CHUNK_86_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:20.991 [APP] peripheralStatus = HUDINI_CHUNK_86_OK
-23:14:21.043 [OUT] LUA local ok,err=pcall(function() f:write('state.needs_render = true\n    send_event({ "EVT", "STATUS", ') end); if ok then print('HUDINI_CHUNK_87_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.081 [APP] peripheralStatus = HUDINI_CHUNK_87_OK
-23:14:21.129 [OUT] LUA local ok,err=pcall(function() f:write('state.status })\n    return\n  end\n\n  if command == "SET_PREFS') end); if ok then print('HUDINI_CHUNK_88_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.171 [APP] peripheralStatus = HUDINI_CHUNK_88_OK
-23:14:21.213 [OUT] LUA local ok,err=pcall(function() f:write('" then\n    local pairs_list = split_text(parts[2] or "", ";"') end); if ok then print('HUDINI_CHUNK_89_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.246 [APP] peripheralStatus = HUDINI_CHUNK_89_OK
-23:14:21.300 [OUT] LUA local ok,err=pcall(function() f:write(')\n    for _, entry in ipairs(pairs_list) do\n      local eq =') end); if ok then print('HUDINI_CHUNK_90_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.338 [APP] peripheralStatus = HUDINI_CHUNK_90_OK
-23:14:21.383 [OUT] LUA local ok,err=pcall(function() f:write(' string.find(entry, "=", 1, true)\n      if eq ~= nil then\n  ') end); if ok then print('HUDINI_CHUNK_91_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.430 [APP] peripheralStatus = HUDINI_CHUNK_91_OK
-23:14:21.468 [OUT] LUA local ok,err=pcall(function() f:write('      local key = string.sub(entry, 1, eq - 1)\n        local') end); if ok then print('HUDINI_CHUNK_92_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.515 [APP] peripheralStatus = HUDINI_CHUNK_92_OK
-23:14:21.554 [OUT] LUA local ok,err=pcall(function() f:write(' value = string.sub(entry, eq + 1)\n        if key == "bright') end); if ok then print('HUDINI_CHUNK_93_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.591 [APP] peripheralStatus = HUDINI_CHUNK_93_OK
-23:14:21.636 [OUT] LUA local ok,err=pcall(function() f:write('ness" then\n          state.brightness = tonumber(value) or s') end); if ok then print('HUDINI_CHUNK_94_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.668 [APP] peripheralStatus = HUDINI_CHUNK_94_OK
-23:14:21.722 [OUT] LUA local ok,err=pcall(function() f:write('tate.brightness\n        elseif key == "partials" then\n      ') end); if ok then print('HUDINI_CHUNK_95_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.800 [APP] peripheralStatus = HUDINI_CHUNK_95_OK
-23:14:21.826 [OUT] LUA local ok,err=pcall(function() f:write('    state.partials = value == "1"\n        end\n      end\n    ') end); if ok then print('HUDINI_CHUNK_96_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.875 [APP] peripheralStatus = HUDINI_CHUNK_96_OK
-23:14:21.912 [OUT] LUA local ok,err=pcall(function() f:write('end\n    state.needs_render = true\n    send_event({ "EVT", "P') end); if ok then print('HUDINI_CHUNK_97_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:21.936 [APP] peripheralStatus = HUDINI_CHUNK_97_OK
-23:14:21.998 [OUT] LUA local ok,err=pcall(function() f:write('REFS_SAVED" })\n    return\n  end\n\n  if command == "SHOW_CAPTI') end); if ok then print('HUDINI_CHUNK_98_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.027 [APP] peripheralStatus = HUDINI_CHUNK_98_OK
-23:14:22.079 [OUT] LUA local ok,err=pcall(function() f:write('ON" then\n    local caption_kind = parts[2] or "final"\n    lo') end); if ok then print('HUDINI_CHUNK_99_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.103 [APP] peripheralStatus = HUDINI_CHUNK_99_OK
-23:14:22.164 [OUT] LUA local ok,err=pcall(function() f:write('cal text = parts[3] or ""\n    if caption_kind == "partial" t') end); if ok then print('HUDINI_CHUNK_100_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.238 [APP] peripheralStatus = HUDINI_CHUNK_100_OK
-23:14:22.261 [OUT] LUA local ok,err=pcall(function() f:write('hen\n      state.partial_caption = trim(text)\n      if not st') end); if ok then print('HUDINI_CHUNK_101_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.325 [APP] peripheralStatus = HUDINI_CHUNK_101_OK
-23:14:22.350 [OUT] LUA local ok,err=pcall(function() f:write('ate.partials then\n        state.partial_caption = ""\n      e') end); if ok then print('HUDINI_CHUNK_102_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.386 [APP] peripheralStatus = HUDINI_CHUNK_102_OK
-23:14:22.430 [OUT] LUA local ok,err=pcall(function() f:write('nd\n    else\n      state.final_caption = trim(text)\n      sta') end); if ok then print('HUDINI_CHUNK_103_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.490 [APP] peripheralStatus = HUDINI_CHUNK_103_OK
-23:14:22.516 [OUT] LUA local ok,err=pcall(function() f:write('te.partial_caption = ""\n    end\n    state.needs_render = tru') end); if ok then print('HUDINI_CHUNK_104_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.566 [APP] peripheralStatus = HUDINI_CHUNK_104_OK
-23:14:22.597 [OUT] LUA local ok,err=pcall(function() f:write('e\n    return\n  end\n\n  if command == "CLEAR_CAPTION" then\n   ') end); if ok then print('HUDINI_CHUNK_105_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.640 [APP] peripheralStatus = HUDINI_CHUNK_105_OK
-23:14:22.680 [OUT] LUA local ok,err=pcall(function() f:write(' state.partial_caption = ""\n    state.final_caption = ""\n   ') end); if ok then print('HUDINI_CHUNK_106_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.716 [APP] peripheralStatus = HUDINI_CHUNK_106_OK
-23:14:22.763 [OUT] LUA local ok,err=pcall(function() f:write(' state.needs_render = true\n    return\n  end\n\n  if command ==') end); if ok then print('HUDINI_CHUNK_107_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.805 [APP] peripheralStatus = HUDINI_CHUNK_107_OK
-23:14:22.848 [OUT] LUA local ok,err=pcall(function() f:write(' "RESET" then\n    pcall(frame.microphone.stop)\n    state.par') end); if ok then print('HUDINI_CHUNK_108_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.880 [APP] peripheralStatus = HUDINI_CHUNK_108_OK
-23:14:22.934 [OUT] LUA local ok,err=pcall(function() f:write('tial_caption = ""\n    state.final_caption = ""\n    state.lis') end); if ok then print('HUDINI_CHUNK_109_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:22.970 [APP] peripheralStatus = HUDINI_CHUNK_109_OK
-23:14:23.020 [OUT] LUA local ok,err=pcall(function() f:write('tening = false\n    state.audio_sequence = 0\n    send_buffer ') end); if ok then print('HUDINI_CHUNK_110_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.060 [APP] peripheralStatus = HUDINI_CHUNK_110_OK
-23:14:23.101 [OUT] LUA local ok,err=pcall(function() f:write('= ""\n    state.needs_render = true\n    frame.sleep(0.05)\n   ') end); if ok then print('HUDINI_CHUNK_111_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.123 [APP] peripheralStatus = HUDINI_CHUNK_111_OK
-23:14:23.187 [OUT] LUA local ok,err=pcall(function() f:write(' start_mic()\n    send_event({ "EVT", "RESET_OK" })\n    retur') end); if ok then print('HUDINI_CHUNK_112_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.225 [APP] peripheralStatus = HUDINI_CHUNK_112_OK
-23:14:23.272 [OUT] LUA local ok,err=pcall(function() f:write('n\n  end\nend\n\nlocal function on_tap()\n  state.tap_sequence = ') end); if ok then print('HUDINI_CHUNK_113_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.315 [APP] peripheralStatus = HUDINI_CHUNK_113_OK
-23:14:23.356 [OUT] LUA local ok,err=pcall(function() f:write('state.tap_sequence + 1\n  send_event({\n    "EVT",\n    "MIC_RE') end); if ok then print('HUDINI_CHUNK_114_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.405 [APP] peripheralStatus = HUDINI_CHUNK_114_OK
-23:14:23.442 [OUT] LUA local ok,err=pcall(function() f:write('QUEST",\n    state.listening and "1" or "0",\n    state.listen') end); if ok then print('HUDINI_CHUNK_115_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.466 [APP] peripheralStatus = HUDINI_CHUNK_115_OK
-23:14:23.528 [OUT] LUA local ok,err=pcall(function() f:write('ing and "0" or "1",\n    tostring(state.tap_sequence),\n  })\ne') end); if ok then print('HUDINI_CHUNK_116_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.570 [APP] peripheralStatus = HUDINI_CHUNK_116_OK
-23:14:23.609 [OUT] LUA local ok,err=pcall(function() f:write('nd\n\nlocal function send_audio_chunk(data)\n  local sequence =') end); if ok then print('HUDINI_CHUNK_117_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.631 [APP] peripheralStatus = HUDINI_CHUNK_117_OK
-23:14:23.695 [OUT] LUA local ok,err=pcall(function() f:write(' state.audio_sequence\n  local packet = string.char(0x20, seq') end); if ok then print('HUDINI_CHUNK_118_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.721 [APP] peripheralStatus = HUDINI_CHUNK_118_OK
-23:14:23.781 [OUT] LUA local ok,err=pcall(function() f:write('uence % 256, math.floor(sequence / 256) % 256) .. data\n  for') end); if ok then print('HUDINI_CHUNK_119_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.840 [APP] peripheralStatus = HUDINI_CHUNK_119_OK
-23:14:23.869 [OUT] LUA local ok,err=pcall(function() f:write(' _ = 1, 3 do\n    if pcall(frame.bluetooth.send, packet) then') end); if ok then print('HUDINI_CHUNK_120_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.930 [APP] peripheralStatus = HUDINI_CHUNK_120_OK
-23:14:23.955 [OUT] LUA local ok,err=pcall(function() f:write('\n      break\n    end\n    frame.sleep(0.001)\n  end\n  state.au') end); if ok then print('HUDINI_CHUNK_121_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:23.990 [APP] peripheralStatus = HUDINI_CHUNK_121_OK
-23:14:24.040 [OUT] LUA local ok,err=pcall(function() f:write('dio_sequence = (sequence + 1) % 65536\nend\n\nlocal function st') end); if ok then print('HUDINI_CHUNK_122_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.066 [APP] peripheralStatus = HUDINI_CHUNK_122_OK
-23:14:24.126 [OUT] LUA local ok,err=pcall(function() f:write('art_mic()\n  local ok, err = pcall(frame.microphone.start, { ') end); if ok then print('HUDINI_CHUNK_123_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.156 [APP] peripheralStatus = HUDINI_CHUNK_123_OK
-23:14:24.212 [OUT] LUA local ok,err=pcall(function() f:write('sample_rate = 16000, bit_depth = 8 })\n  if ok then\n    state') end); if ok then print('HUDINI_CHUNK_124_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.246 [APP] peripheralStatus = HUDINI_CHUNK_124_OK
-23:14:24.296 [OUT] LUA local ok,err=pcall(function() f:write('.audio_sequence = 0\n    return true\n  end\n  local message = ') end); if ok then print('HUDINI_CHUNK_125_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.335 [APP] peripheralStatus = HUDINI_CHUNK_125_OK
-23:14:24.382 [OUT] LUA local ok,err=pcall(function() f:write('tostring(err or "")\n  if string.find(message, "already start') end); if ok then print('HUDINI_CHUNK_126_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.411 [APP] peripheralStatus = HUDINI_CHUNK_126_OK
-23:14:24.468 [OUT] LUA local ok,err=pcall(function() f:write('ed", 1, true) ~= nil then\n    return true\n  end\n  send_event') end); if ok then print('HUDINI_CHUNK_127_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.516 [APP] peripheralStatus = HUDINI_CHUNK_127_OK
-23:14:24.553 [OUT] LUA local ok,err=pcall(function() f:write('({ "EVT", "MIC_ERROR", message })\n  return false\nend\n\nlocal ') end); if ok then print('HUDINI_CHUNK_128_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.576 [APP] peripheralStatus = HUDINI_CHUNK_128_OK
-23:14:24.639 [OUT] LUA local ok,err=pcall(function() f:write('function run_app()\n  frame.bluetooth.receive_callback(functi') end); if ok then print('HUDINI_CHUNK_129_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.680 [APP] peripheralStatus = HUDINI_CHUNK_129_OK
-23:14:24.723 [OUT] LUA local ok,err=pcall(function() f:write('on(data) handle_command(data) end)\n  frame.imu.tap_callback(') end); if ok then print('HUDINI_CHUNK_130_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.755 [APP] peripheralStatus = HUDINI_CHUNK_130_OK
-23:14:24.806 [OUT] LUA local ok,err=pcall(function() f:write('on_tap)\n  frame.display.set_brightness(state.brightness)\n  s') end); if ok then print('HUDINI_CHUNK_131_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.846 [APP] peripheralStatus = HUDINI_CHUNK_131_OK
-23:14:24.888 [OUT] LUA local ok,err=pcall(function() f:write('tate.connected = false\n  send_event({ "EVT", "BOOT", frame.F') end); if ok then print('HUDINI_CHUNK_132_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:24.950 [APP] peripheralStatus = HUDINI_CHUNK_132_OK
-23:14:24.982 [OUT] LUA local ok,err=pcall(function() f:write('IRMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP') end); if ok then print('HUDINI_CHUNK_133_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:25.025 [APP] peripheralStatus = HUDINI_CHUNK_133_OK
-23:14:25.068 [OUT] LUA local ok,err=pcall(function() f:write('_VERSION })\n\n  local saved_crash = load_saved_crash()\n  if s') end); if ok then print('HUDINI_CHUNK_134_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:25.131 [APP] peripheralStatus = HUDINI_CHUNK_134_OK
-23:14:25.158 [OUT] LUA local ok,err=pcall(function() f:write('aved_crash ~= nil and saved_crash ~= "" then\n    send_event(') end); if ok then print('HUDINI_CHUNK_135_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:25.220 [APP] peripheralStatus = HUDINI_CHUNK_135_OK
-23:14:25.246 [OUT] LUA local ok,err=pcall(function() f:write('{ "EVT", "CRASH", crash_text(saved_crash) })\n    clear_saved') end); if ok then print('HUDINI_CHUNK_136_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:25.295 [APP] peripheralStatus = HUDINI_CHUNK_136_OK
-23:14:25.332 [OUT] LUA local ok,err=pcall(function() f:write('_crash()\n  end\n\n  local max_audio_bytes = frame.bluetooth.ma') end); if ok then print('HUDINI_CHUNK_137_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:25.521 [APP] peripheralStatus = HUDINI_CHUNK_137_OK
-23:14:25.583 [OUT] LUA local ok,err=pcall(function() f:write('x_length() - 3\n  if max_audio_bytes % 2 == 1 then\n    max_au') end); if ok then print('HUDINI_CHUNK_138_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:25.625 [APP] peripheralStatus = HUDINI_CHUNK_138_OK
-23:14:25.664 [OUT] LUA local ok,err=pcall(function() f:write('dio_bytes = max_audio_bytes - 1\n  end\n  if max_audio_bytes <') end); if ok then print('HUDINI_CHUNK_139_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:25.700 [APP] peripheralStatus = HUDINI_CHUNK_139_OK
-23:14:25.750 [OUT] LUA local ok,err=pcall(function() f:write(' 64 then\n    max_audio_bytes = 64\n  end\n\n  start_mic()\n  sen') end); if ok then print('HUDINI_CHUNK_140_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:25.790 [APP] peripheralStatus = HUDINI_CHUNK_140_OK
-23:14:25.831 [OUT] LUA local ok,err=pcall(function() f:write('d_buffer = ""\n\n  while true do\n    if state.needs_render the') end); if ok then print('HUDINI_CHUNK_141_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:25.851 [APP] peripheralStatus = HUDINI_CHUNK_141_OK
-23:14:25.915 [OUT] LUA local ok,err=pcall(function() f:write('n\n      render_ui()\n    end\n\n    local audio = frame.microph') end); if ok then print('HUDINI_CHUNK_142_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:25.955 [APP] peripheralStatus = HUDINI_CHUNK_142_OK
-23:14:26.001 [OUT] LUA local ok,err=pcall(function() f:write('one.read(max_audio_bytes)\n    if audio == nil then\n      if ') end); if ok then print('HUDINI_CHUNK_143_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.031 [APP] peripheralStatus = HUDINI_CHUNK_143_OK
-23:14:26.087 [OUT] LUA local ok,err=pcall(function() f:write('send_buffer ~= "" then\n        send_audio_chunk(send_buffer)') end); if ok then print('HUDINI_CHUNK_144_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.120 [APP] peripheralStatus = HUDINI_CHUNK_144_OK
-23:14:26.168 [OUT] LUA local ok,err=pcall(function() f:write('\n        send_buffer = ""\n      end\n      frame.sleep(0.1)\n ') end); if ok then print('HUDINI_CHUNK_145_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.196 [APP] peripheralStatus = HUDINI_CHUNK_145_OK
-23:14:26.254 [OUT] LUA local ok,err=pcall(function() f:write('     start_mic()\n    elseif audio ~= "" then\n      send_buff') end); if ok then print('HUDINI_CHUNK_146_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.301 [APP] peripheralStatus = HUDINI_CHUNK_146_OK
-23:14:26.340 [OUT] LUA local ok,err=pcall(function() f:write('er = send_buffer .. audio\n      if string.len(send_buffer) >') end); if ok then print('HUDINI_CHUNK_147_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.375 [APP] peripheralStatus = HUDINI_CHUNK_147_OK
-23:14:26.426 [OUT] LUA local ok,err=pcall(function() f:write('= max_audio_bytes then\n        send_audio_chunk(string.sub(s') end); if ok then print('HUDINI_CHUNK_148_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.451 [APP] peripheralStatus = HUDINI_CHUNK_148_OK
-23:14:26.512 [OUT] LUA local ok,err=pcall(function() f:write('end_buffer, 1, max_audio_bytes))\n        send_buffer = strin') end); if ok then print('HUDINI_CHUNK_149_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.570 [APP] peripheralStatus = HUDINI_CHUNK_149_OK
-23:14:26.603 [OUT] LUA local ok,err=pcall(function() f:write('g.sub(send_buffer, max_audio_bytes + 1)\n      end\n    else\n ') end); if ok then print('HUDINI_CHUNK_150_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.647 [APP] peripheralStatus = HUDINI_CHUNK_150_OK
-23:14:26.688 [OUT] LUA local ok,err=pcall(function() f:write('     if send_buffer ~= "" then\n        send_audio_chunk(send') end); if ok then print('HUDINI_CHUNK_151_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.720 [APP] peripheralStatus = HUDINI_CHUNK_151_OK
-23:14:26.773 [OUT] LUA local ok,err=pcall(function() f:write('_buffer)\n        send_buffer = ""\n      end\n      frame.slee') end); if ok then print('HUDINI_CHUNK_152_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.810 [APP] peripheralStatus = HUDINI_CHUNK_152_OK
-23:14:26.859 [OUT] LUA local ok,err=pcall(function() f:write('p(0.004)\n    end\n  end\nend\n\nlocal ok, err = xpcall(run_app, ') end); if ok then print('HUDINI_CHUNK_153_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.900 [APP] peripheralStatus = HUDINI_CHUNK_153_OK
-23:14:26.944 [OUT] LUA local ok,err=pcall(function() f:write('debug.traceback)\nif not ok then\n  save_crash(err)\n  emit_cra') end); if ok then print('HUDINI_CHUNK_154_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:26.990 [APP] peripheralStatus = HUDINI_CHUNK_154_OK
-23:14:27.026 [OUT] LUA local ok,err=pcall(function() f:write('sh(err)\n  pcall(frame.display.power_save, true)\n  while true') end); if ok then print('HUDINI_CHUNK_155_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:27.065 [APP] peripheralStatus = HUDINI_CHUNK_155_OK
-23:14:27.111 [OUT] LUA local ok,err=pcall(function() f:write(' do\n    frame.sleep(1)\n  end\nend') end); if ok then print('HUDINI_CHUNK_156_OK') else print('HUDINI_ERROR:'..tostring(err)) end
-23:14:27.141 [APP] peripheralStatus = HUDINI_CHUNK_156_OK
-23:14:27.197 [OUT] LUA f:close(); print('HUDINI_CLOSE_OK')
-23:14:27.276 [APP] peripheralStatus = HUDINI_CLOSE_OK
-23:14:27.313 [OUT] LUA local vf=assert(frame.file.open('main.lua','read')); local line1=vf:read() or ''; local line2=vf:read() or ''; vf:close(); print('HUDINI_VERIFY:'..line1..'|'..line2)
-23:14:27.365 [APP] peripheralStatus = HUDINI_VERIFY:local APP_DIR = "/hudini"|local APP_VERSION = "2026.04.08.6"
-23:14:27.399 [OUT] CONTROL 0x04
-23:14:27.399 [APP] connectionDebugStage = Install complete, waiting for reboot
-23:14:27.399 [APP] statusMessage = Verified upload. Waiting for Frame reboot…
-23:14:28.296 [IN] EVT	BOOT	v25.278.1113	243	2026.04.08.6
-23:14:28.297 [APP] connectionDebugStage = Frame app responded
-23:14:28.297 [APP] peripheralStatus = Booted on v25.278.1113
-23:14:28.297 [APP] statusMessage = Connected to Frame
-23:14:28.297 [APP] connectionDebugStage = Bootstrapping session
-23:14:28.298 [OUT] SET_PREFS	brightness=0;partials=1
-23:14:28.298 [OUT] SYNC_STATE	0	idle
-23:14:28.326 [IN] EVT	PREFS_SAVED
-23:14:28.327 [APP] statusMessage = Saved preferences on Frame
-23:14:28.341 [IN] EVT	STATUS	idle
-23:14:28.341 [APP] peripheralStatus = idle
-23:14:35.495 [IN] EVT	MIC_REQUEST	0	1	3
-23:14:35.496 [APP] peripheralStatus = Tap requested mic on
-23:14:35.496 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:14:35.500 [APP] statusMessage = Listening language set to Spanish
-23:14:35.501 [APP] statusMessage = Target language set to English
-23:14:35.524 [APP] startRecognition invoked locale=es
-23:14:35.525 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:14:35.525 [APP] setStreamingState(true)
-23:14:35.525 [APP] isStreaming = true
-23:14:35.525 [OUT] SYNC_STATE	1	listening
-23:14:35.526 [APP] statusMessage = Started from Frame tap
-23:14:36.428 [APP] audioPacket milestone count=100 seq=989
-23:14:37.025 [IN] EVT	MIC_REQUEST	1	0	5
-23:14:37.026 [APP] peripheralStatus = Tap requested mic off
-23:14:37.026 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:14:37.026 [APP] stopRecognition invoked
-23:14:37.026 [APP] cancelTranslation invoked
-23:14:37.027 [APP] setStreamingState(false)
-23:14:37.027 [APP] isStreaming = false
-23:14:37.027 [OUT] SYNC_STATE	0	idle
-23:14:37.028 [APP] statusMessage = Stopped
-23:14:37.028 [APP] statusMessage = Stopped from Frame tap
-23:14:37.057 [APP] recognitionTask ignored cancellation error No speech detected
-23:14:38.987 [APP] statusMessage = Listening language set to Spanish
-23:14:38.987 [APP] statusMessage = Target language set to English
-23:14:42.773 [APP] selectedLanguageCode = en
-23:14:42.774 [APP] statusMessage = Listening language set to English
-23:14:45.410 [APP] statusMessage = Target language set to English
-23:14:45.431 [APP] startRecognition invoked locale=en
-23:14:45.432 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:14:45.432 [APP] setStreamingState(true)
-23:14:45.433 [APP] isStreaming = true
-23:14:45.433 [OUT] SYNC_STATE	1	listening
-23:14:45.433 [APP] statusMessage = Listening…
-23:14:45.449 [IN] EVT	STATUS	listening
-23:14:45.449 [APP] peripheralStatus = listening
-23:14:45.449 [IN] EVT	STATUS	listening
-23:14:45.450 [IN] EVT	STATUS	listening
-23:14:45.450 [IN] EVT	STATUS	listening
-23:14:46.417 [APP] audioPacket milestone count=100 seq=2085
-23:14:47.347 [APP] audioPacket milestone count=200 seq=2187
-23:14:48.261 [APP] audioPacket milestone count=300 seq=2291
-23:14:49.252 [APP] audioPacket milestone count=400 seq=2397
-23:14:50.183 [APP] audioPacket milestone count=500 seq=2500
-23:14:51.202 [APP] audioPacket milestone count=600 seq=2610
-23:14:51.966 [IN] EVT	MIC_REQUEST	1	0	6
-23:14:51.966 [APP] peripheralStatus = Tap requested mic off
-23:14:51.966 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:14:51.967 [APP] stopRecognition invoked
-23:14:51.967 [APP] cancelTranslation invoked
-23:14:51.967 [APP] setStreamingState(false)
-23:14:51.967 [APP] isStreaming = false
-23:14:51.967 [OUT] SYNC_STATE	0	idle
-23:14:51.967 [APP] statusMessage = Stopped
-23:14:51.967 [APP] statusMessage = Stopped from Frame tap
-23:14:51.995 [APP] recognitionTask ignored cancellation error No speech detected
-23:14:54.645 [APP] statusMessage = Listening language set to English
-23:14:54.646 [APP] statusMessage = Target language set to English
-23:14:54.668 [APP] startRecognition invoked locale=en
-23:14:54.669 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:14:54.669 [APP] setStreamingState(true)
-23:14:54.669 [APP] isStreaming = true
-23:14:54.669 [OUT] SYNC_STATE	1	listening
-23:14:54.669 [APP] statusMessage = Listening…
-23:14:54.697 [IN] EVT	STATUS	listening
-23:14:54.697 [APP] peripheralStatus = listening
-23:14:55.582 [APP] audioPacket milestone count=100 seq=3090
-23:14:56.587 [APP] audioPacket milestone count=200 seq=3196
-23:14:57.576 [APP] audioPacket milestone count=300 seq=3302
-23:14:58.506 [APP] audioPacket milestone count=400 seq=3405
-23:14:59.409 [APP] audioPacket milestone count=500 seq=3506
-23:15:00.356 [APP] audioPacket milestone count=600 seq=3609
-23:15:00.917 [APP] stopRecognition invoked
-23:15:00.917 [APP] cancelTranslation invoked
-23:15:00.918 [APP] setStreamingState(false)
-23:15:00.918 [APP] isStreaming = false
-23:15:00.918 [OUT] SYNC_STATE	0	idle
-23:15:00.919 [APP] statusMessage = Stopped
-23:15:01.145 [APP] recognitionTask ignored cancellation error No speech detected
-23:15:10.394 [APP] statusMessage = App active
-23:15:10.395 [OUT] SET_PREFS	brightness=0;partials=1
-23:15:10.396 [OUT] SYNC_STATE	0	idle
-23:15:10.450 [IN] EVT	PREFS_SAVED
-23:15:10.450 [APP] statusMessage = Saved preferences on Frame
-23:15:10.450 [IN] EVT	PREFS_SAVED
-23:15:10.450 [IN] EVT	PREFS_SAVED
-23:15:10.450 [IN] EVT	PREFS_SAVED
-23:15:10.477 [IN] EVT	STATUS	idle
-23:15:10.477 [APP] peripheralStatus = idle
-23:15:17.093 [IN] EVT	MIC_REQUEST	0	1	10
-23:15:17.093 [APP] peripheralStatus = Tap requested mic on
-23:15:17.094 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:15:17.104 [APP] statusMessage = Listening language set to English
-23:15:17.104 [APP] statusMessage = Target language set to English
-23:15:17.105 [IN] EVT	MIC_REQUEST	0	1	10
-23:15:17.105 [APP] MIC_REQUEST ignored duplicate tapSequence=10
-23:15:17.127 [APP] startRecognition invoked locale=en
-23:15:17.129 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:15:17.129 [APP] setStreamingState(true)
-23:15:17.129 [APP] isStreaming = true
-23:15:17.129 [OUT] SYNC_STATE	1	listening
-23:15:17.129 [APP] statusMessage = Started from Frame tap
-23:15:17.152 [IN] EVT	STATUS	listening
-23:15:17.152 [APP] peripheralStatus = listening
-23:15:18.087 [APP] audioPacket milestone count=100 seq=5453
-23:15:19.042 [APP] audioPacket milestone count=200 seq=5557
-23:15:19.188 [APP] [TIMING] recognition result isFinal=false sinceLastResult=2061ms sinceLastAudio=11ms packets=217 transcript=Yes
-23:15:19.188 [APP] liveTranscript = Yes
-23:15:19.189 [APP] handleTranscriptUpdate isFinal=false raw=Yes trimmed=Yes
-23:15:19.189 [APP] handleTranscriptUpdate bypassing translation source=en target=en
-23:15:19.189 [APP] renderedText = Yes
-23:15:19.189 [APP] sendHUDTextToFrame isPartial=true text=Yes
-23:15:19.189 [OUT] SHOW_CAPTION	partial	Yes
-23:15:19.961 [APP] audioPacket milestone count=300 seq=5659
-23:15:20.904 [APP] audioPacket milestone count=400 seq=5762
-23:15:21.953 [APP] audioPacket milestone count=500 seq=5875
-23:15:23.257 [APP] audioPacket milestone count=600 seq=6007
-23:15:24.055 [IN] EVT	MIC_REQUEST	1	0	11
-23:15:24.055 [APP] peripheralStatus = Tap requested mic off
-23:15:24.055 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:15:24.055 [APP] stopRecognition invoked
-23:15:24.056 [APP] cancelTranslation invoked
-23:15:24.056 [APP] setStreamingState(false)
-23:15:24.056 [APP] isStreaming = false
-23:15:24.056 [OUT] SYNC_STATE	0	idle
-23:15:24.056 [APP] statusMessage = Stopped
-23:15:24.056 [APP] statusMessage = Stopped from Frame tap
-23:15:24.083 [IN] EVT	STATUS	idle
-23:15:24.083 [APP] peripheralStatus = idle
-23:15:24.083 [IN] EVT	STATUS	idle
-23:15:24.083 [IN] EVT	STATUS	idle
-23:15:24.083 [IN] EVT	STATUS	idle
-23:15:24.094 [APP] [TIMING] recognition result isFinal=false sinceLastResult=4906ms sinceLastAudio=39ms packets=676 transcript=Yes
-23:15:24.094 [APP] handleTranscriptUpdate isFinal=false raw=Yes trimmed=Yes
-23:15:24.094 [APP] handleTranscriptUpdate bypassing translation source=en target=en
-23:15:24.094 [APP] sendHUDTextToFrame isPartial=true text=Yes
-23:15:24.094 [APP] sendHUDTextToFrame skipped duplicate partial
-23:15:24.094 [APP] [TIMING] recognition result isFinal=true sinceLastResult=0ms sinceLastAudio=40ms packets=676 transcript=
-23:15:24.094 [APP] recognitionTask ignored empty transcript result
-23:15:24.104 [APP] recognitionTask ignored cancellation error Recognition request was canceled
-23:15:25.027 [IN] EVT	MIC_REQUEST	0	1	12
-23:15:25.028 [APP] peripheralStatus = Tap requested mic on
-23:15:25.028 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:15:25.032 [APP] statusMessage = Listening language set to English
-23:15:25.033 [APP] statusMessage = Target language set to English
-23:15:25.055 [APP] startRecognition invoked locale=en
-23:15:25.056 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:15:25.056 [APP] setStreamingState(true)
-23:15:25.056 [APP] isStreaming = true
-23:15:25.056 [OUT] SYNC_STATE	1	listening
-23:15:25.056 [APP] statusMessage = Started from Frame tap
-23:15:25.118 [IN] EVT	STATUS	listening
-23:15:25.118 [APP] peripheralStatus = listening
-23:15:26.167 [APP] audioPacket milestone count=100 seq=6315
-23:15:26.788 [APP] [TIMING] recognition result isFinal=false sinceLastResult=1733ms sinceLastAudio=33ms packets=152 transcript=Yes
-23:15:26.788 [APP] handleTranscriptUpdate isFinal=false raw=Yes trimmed=Yes
-23:15:26.788 [APP] handleTranscriptUpdate bypassing translation source=en target=en
-23:15:26.788 [APP] sendHUDTextToFrame isPartial=true text=Yes
-23:15:26.788 [APP] sendHUDTextToFrame skipped duplicate partial
-23:15:27.235 [APP] audioPacket milestone count=200 seq=6425
-23:15:27.959 [APP] [TIMING] recognition result isFinal=false sinceLastResult=1171ms sinceLastAudio=7ms packets=273 transcript=Yes testing
-23:15:27.959 [APP] liveTranscript = Yes testing
-23:15:27.959 [APP] handleTranscriptUpdate isFinal=false raw=Yes testing trimmed=Yes testing
-23:15:27.959 [APP] handleTranscriptUpdate bypassing translation source=en target=en
-23:15:27.959 [APP] renderedText = Yes testing
-23:15:27.959 [APP] sendHUDTextToFrame isPartial=true text=Yes testing
-23:15:27.959 [OUT] SHOW_CAPTION	partial	Yes testing
-23:15:27.964 [APP] [TIMING] recognition result isFinal=false sinceLastResult=6ms sinceLastAudio=12ms packets=273 transcript=Just testing
-23:15:27.964 [APP] liveTranscript = Just testing
-23:15:27.964 [APP] handleTranscriptUpdate isFinal=false raw=Just testing trimmed=Just testing
-23:15:27.964 [APP] handleTranscriptUpdate bypassing translation source=en target=en
-23:15:27.964 [APP] renderedText = Just testing
-23:15:27.964 [APP] sendHUDTextToFrame isPartial=true text=Just testing
-23:15:27.964 [OUT] SHOW_CAPTION	partial	Just testing
-23:15:28.224 [APP] audioPacket milestone count=300 seq=6533
-23:15:29.243 [APP] audioPacket milestone count=400 seq=6643
-23:15:30.187 [APP] audioPacket milestone count=500 seq=6747
-23:15:31.106 [APP] audioPacket milestone count=600 seq=6848
-23:15:32.002 [APP] audioPacket milestone count=700 seq=6947
-23:15:32.962 [APP] audioPacket milestone count=800 seq=7051
-23:15:33.908 [APP] audioPacket milestone count=900 seq=7154
-23:15:34.838 [APP] audioPacket milestone count=1000 seq=7256
-23:15:35.830 [APP] audioPacket milestone count=1100 seq=7364
-23:15:36.773 [APP] audioPacket milestone count=1200 seq=7467
-23:15:37.581 [APP] stopRecognition invoked
-23:15:37.582 [APP] cancelTranslation invoked
-23:15:37.582 [APP] setStreamingState(false)
-23:15:37.582 [APP] isStreaming = false
-23:15:37.582 [OUT] SYNC_STATE	0	idle
-23:15:37.582 [APP] statusMessage = Stopped
-23:15:37.605 [APP] [TIMING] recognition result isFinal=false sinceLastResult=9641ms sinceLastAudio=82ms packets=1284 transcript=Yes
-23:15:37.605 [APP] liveTranscript = Yes
-23:15:37.605 [APP] handleTranscriptUpdate isFinal=false raw=Yes trimmed=Yes
-23:15:37.605 [APP] handleTranscriptUpdate bypassing translation source=en target=en
-23:15:37.605 [APP] renderedText = Yes
-23:15:37.605 [APP] sendHUDTextToFrame isPartial=true text=Yes
-23:15:37.605 [OUT] SHOW_CAPTION	partial	Yes
-23:15:37.614 [APP] [TIMING] recognition result isFinal=true sinceLastResult=9ms sinceLastAudio=91ms packets=1284 transcript=
-23:15:37.614 [APP] recognitionTask ignored empty transcript result
-23:15:37.614 [APP] recognitionTask ignored cancellation error Recognition request was canceled
-23:15:38.886 [APP] statusMessage = Listening language set to English
-23:15:38.887 [APP] statusMessage = Target language set to English
-23:15:38.907 [APP] startRecognition invoked locale=en
-23:15:38.908 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:15:38.908 [APP] setStreamingState(true)
-23:15:38.908 [APP] isStreaming = true
-23:15:38.908 [OUT] SYNC_STATE	1	listening
-23:15:38.908 [APP] statusMessage = Listening…
-23:15:38.931 [IN] EVT	STATUS	listening
-23:15:39.891 [APP] audioPacket milestone count=100 seq=7807
-23:15:40.839 [APP] audioPacket milestone count=200 seq=7913
-23:15:41.754 [APP] audioPacket milestone count=300 seq=8014
-23:15:42.700 [APP] audioPacket milestone count=400 seq=8116
-23:15:43.628 [APP] audioPacket milestone count=500 seq=8219
-23:15:44.632 [APP] audioPacket milestone count=600 seq=8325
-23:15:45.547 [APP] audioPacket milestone count=700 seq=8430
-23:15:46.521 [APP] audioPacket milestone count=800 seq=8531
-23:15:47.437 [APP] audioPacket milestone count=900 seq=8636
-23:15:48.712 [APP] audioPacket milestone count=1000 seq=8764
-23:15:50.350 [APP] audioPacket milestone count=1100 seq=8899
-23:15:51.414 [APP] audioPacket milestone count=1200 seq=9029
-23:15:52.372 [APP] audioPacket milestone count=1300 seq=9136
-23:15:54.144 [APP] audioPacket milestone count=1400 seq=9296
-23:15:55.026 [IN] EVT	MIC_REQUEST	1	0	15
-23:15:55.027 [APP] peripheralStatus = Tap requested mic off
-23:15:55.027 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:15:55.027 [APP] stopRecognition invoked
-23:15:55.028 [APP] cancelTranslation invoked
-23:15:55.028 [APP] setStreamingState(false)
-23:15:55.028 [APP] isStreaming = false
-23:15:55.028 [OUT] SYNC_STATE	0	idle
-23:15:55.029 [APP] statusMessage = Stopped
-23:15:55.029 [APP] statusMessage = Stopped from Frame tap
-23:15:55.058 [APP] recognitionTask ignored cancellation error No speech detected
-23:15:55.089 [IN] EVT	STATUS	idle
-23:15:55.089 [APP] peripheralStatus = idle
-23:15:56.391 [IN] EVT	MIC_REQUEST	0	1	16
-23:15:56.391 [APP] peripheralStatus = Tap requested mic on
-23:15:56.392 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:15:56.396 [APP] statusMessage = Listening language set to English
-23:15:56.396 [APP] statusMessage = Target language set to English
-23:15:56.420 [APP] startRecognition invoked locale=en
-23:15:56.421 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:15:56.421 [APP] setStreamingState(true)
-23:15:56.421 [APP] isStreaming = true
-23:15:56.421 [OUT] SYNC_STATE	1	listening
-23:15:56.421 [APP] statusMessage = Started from Frame tap
-23:15:56.470 [IN] EVT	STATUS	listening
-23:15:56.470 [APP] peripheralStatus = listening
-23:15:57.443 [APP] audioPacket milestone count=100 seq=9656
-23:15:59.007 [APP] audioPacket milestone count=200 seq=9812
-23:16:00.387 [IN] EVT	MIC_REQUEST	1	0	17
-23:16:00.388 [APP] peripheralStatus = Tap requested mic off
-23:16:00.388 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:16:00.388 [APP] stopRecognition invoked
-23:16:00.389 [APP] cancelTranslation invoked
-23:16:00.389 [APP] setStreamingState(false)
-23:16:00.389 [APP] isStreaming = false
-23:16:00.390 [OUT] SYNC_STATE	0	idle
-23:16:00.390 [APP] statusMessage = Stopped
-23:16:00.391 [APP] statusMessage = Stopped from Frame tap
-23:16:00.418 [APP] recognitionTask ignored cancellation error No speech detected
-23:16:00.457 [IN] EVT	MIC_REQUEST	0	1	18
-23:16:00.458 [APP] peripheralStatus = Tap requested mic on
-23:16:00.458 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:16:00.460 [APP] statusMessage = Listening language set to English
-23:16:00.460 [APP] statusMessage = Target language set to English
-23:16:00.460 [IN] EVT	MIC_REQUEST	0	1	18
-23:16:00.460 [APP] MIC_REQUEST ignored duplicate tapSequence=18
-23:16:00.469 [APP] startRecognition invoked locale=en
-23:16:00.470 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:16:00.470 [APP] setStreamingState(true)
-23:16:00.470 [APP] isStreaming = true
-23:16:00.470 [OUT] SYNC_STATE	1	listening
-23:16:00.470 [APP] statusMessage = Started from Frame tap
-23:16:00.517 [IN] EVT	STATUS	listening
-23:16:00.517 [APP] peripheralStatus = listening
-23:16:01.403 [APP] audioPacket milestone count=100 seq=10061
-23:16:02.333 [APP] audioPacket milestone count=200 seq=10162
-23:16:02.603 [IN] EVT	MIC_REQUEST	1	0	20
-23:16:02.604 [APP] peripheralStatus = Tap requested mic off
-23:16:02.604 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:16:02.604 [APP] stopRecognition invoked
-23:16:02.604 [APP] cancelTranslation invoked
-23:16:02.605 [APP] setStreamingState(false)
-23:16:02.605 [APP] isStreaming = false
-23:16:02.605 [OUT] SYNC_STATE	0	idle
-23:16:02.606 [APP] statusMessage = Stopped
-23:16:02.606 [APP] statusMessage = Stopped from Frame tap
-23:16:02.606 [IN] EVT	MIC_REQUEST	1	0	20
-23:16:02.607 [APP] MIC_REQUEST ignored duplicate tapSequence=20
-23:16:02.631 [IN] EVT	STATUS	idle
-23:16:02.631 [APP] peripheralStatus = idle
-23:16:02.631 [IN] EVT	STATUS	idle
-23:16:02.631 [IN] EVT	STATUS	idle
-23:16:02.631 [IN] EVT	STATUS	idle
-23:16:02.641 [APP] recognitionTask ignored cancellation error No speech detected
-23:16:02.992 [IN] EVT	MIC_REQUEST	0	1	21
-23:16:02.992 [APP] peripheralStatus = Tap requested mic on
-23:16:02.993 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:16:02.996 [APP] statusMessage = Listening language set to English
-23:16:02.997 [APP] statusMessage = Target language set to English
-23:16:03.018 [APP] startRecognition invoked locale=en
-23:16:03.019 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:16:03.019 [APP] setStreamingState(true)
-23:16:03.019 [APP] isStreaming = true
-23:16:03.020 [OUT] SYNC_STATE	1	listening
-23:16:03.020 [APP] statusMessage = Started from Frame tap
-23:16:03.052 [IN] EVT	STATUS	listening
-23:16:03.052 [APP] peripheralStatus = listening
-23:16:03.907 [APP] audioPacket milestone count=100 seq=10336
-23:16:04.837 [APP] audioPacket milestone count=200 seq=10439
-23:16:05.812 [APP] audioPacket milestone count=300 seq=10545
-23:16:06.742 [APP] audioPacket milestone count=400 seq=10647
-23:16:07.672 [APP] audioPacket milestone count=500 seq=10749
-23:16:08.618 [APP] audioPacket milestone count=600 seq=10855
-23:16:08.946 [IN] EVT	MIC_REQUEST	1	0	22
-23:16:08.947 [APP] peripheralStatus = Tap requested mic off
-23:16:08.947 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:16:08.947 [APP] stopRecognition invoked
-23:16:08.947 [APP] cancelTranslation invoked
-23:16:08.948 [APP] setStreamingState(false)
-23:16:08.948 [APP] isStreaming = false
-23:16:08.948 [OUT] SYNC_STATE	0	idle
-23:16:08.949 [APP] statusMessage = Stopped
-23:16:08.949 [APP] statusMessage = Stopped from Frame tap
-23:16:08.976 [IN] EVT	STATUS	idle
-23:16:08.977 [APP] peripheralStatus = idle
-23:16:09.002 [APP] recognitionTask ignored cancellation error No speech detected
-23:16:09.216 [IN] EVT	MIC_REQUEST	0	1	23
-23:16:09.216 [APP] peripheralStatus = Tap requested mic on
-23:16:09.217 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:16:09.220 [APP] statusMessage = Listening language set to English
-23:16:09.221 [APP] statusMessage = Target language set to English
-23:16:09.240 [APP] startRecognition invoked locale=en
-23:16:09.242 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:16:09.242 [APP] setStreamingState(true)
-23:16:09.242 [APP] isStreaming = true
-23:16:09.242 [OUT] SYNC_STATE	1	listening
-23:16:09.242 [APP] statusMessage = Started from Frame tap
-23:16:09.276 [IN] EVT	STATUS	listening
-23:16:09.276 [APP] peripheralStatus = listening
-23:16:09.337 [IN] EVT	MIC_REQUEST	1	0	24
-23:16:09.337 [APP] peripheralStatus = Tap requested mic off
-23:16:09.337 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:16:09.337 [APP] stopRecognition invoked
-23:16:09.337 [APP] cancelTranslation invoked
-23:16:09.337 [APP] setStreamingState(false)
-23:16:09.337 [APP] isStreaming = false
-23:16:09.337 [OUT] SYNC_STATE	0	idle
-23:16:09.337 [APP] statusMessage = Stopped
-23:16:09.337 [APP] statusMessage = Stopped from Frame tap
-23:16:09.357 [APP] recognitionTask ignored cancellation error No speech detected
-23:16:09.367 [IN] EVT	STATUS	idle
-23:16:09.367 [APP] peripheralStatus = idle
-23:16:10.026 [IN] EVT	MIC_REQUEST	0	1	25
-23:16:10.027 [APP] peripheralStatus = Tap requested mic on
-23:16:10.027 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:16:10.031 [APP] statusMessage = Listening language set to English
-23:16:10.031 [APP] statusMessage = Target language set to English
-23:16:10.053 [APP] startRecognition invoked locale=en
-23:16:10.054 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:16:10.054 [APP] setStreamingState(true)
-23:16:10.055 [APP] isStreaming = true
-23:16:10.055 [OUT] SYNC_STATE	1	listening
-23:16:10.055 [APP] statusMessage = Started from Frame tap
-23:16:10.073 [IN] EVT	STATUS	listening
-23:16:10.074 [APP] peripheralStatus = listening
-23:16:11.001 [APP] audioPacket milestone count=100 seq=11110
-23:16:12.265 [APP] audioPacket milestone count=200 seq=11243
-23:16:13.238 [APP] audioPacket milestone count=300 seq=11348
-23:16:14.257 [APP] audioPacket milestone count=400 seq=11460
-23:16:15.232 [APP] audioPacket milestone count=500 seq=11566
-23:16:16.170 [APP] stopRecognition invoked
-23:16:16.171 [APP] cancelTranslation invoked
-23:16:16.171 [APP] setStreamingState(false)
-23:16:16.171 [APP] isStreaming = false
-23:16:16.171 [OUT] SYNC_STATE	0	idle
-23:16:16.171 [APP] statusMessage = Stopped
-23:16:16.196 [APP] recognitionTask ignored cancellation error No speech detected
-23:16:16.221 [IN] EVT	STATUS	idle
-23:16:16.222 [APP] peripheralStatus = idle
-23:16:18.855 [APP] selectedLanguageCode = es
-23:16:18.856 [APP] statusMessage = Listening language set to Spanish
-23:16:20.636 [IN] EVT	MIC_REQUEST	0	1	27
-23:16:20.637 [APP] peripheralStatus = Tap requested mic on
-23:16:20.637 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
-23:16:20.641 [APP] statusMessage = Target language set to English
-23:16:20.641 [IN] EVT	MIC_REQUEST	0	1	27
-23:16:20.642 [APP] MIC_REQUEST ignored duplicate tapSequence=27
-23:16:20.663 [APP] startRecognition invoked locale=es
-23:16:20.665 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
-23:16:20.665 [APP] setStreamingState(true)
-23:16:20.665 [APP] isStreaming = true
-23:16:20.665 [OUT] SYNC_STATE	1	listening
-23:16:20.665 [APP] statusMessage = Started from Frame tap
-23:16:20.691 [IN] EVT	STATUS	listening
-23:16:20.691 [APP] peripheralStatus = listening
-23:16:21.609 [APP] audioPacket milestone count=100 seq=12251
-23:16:22.522 [APP] audioPacket milestone count=200 seq=12356
-23:16:23.483 [APP] audioPacket milestone count=300 seq=12461
-23:16:24.547 [APP] audioPacket milestone count=400 seq=12573
-23:16:25.223 [IN] EVT	MIC_REQUEST	1	0	32
-23:16:25.224 [APP] peripheralStatus = Tap requested mic off
-23:16:25.224 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
-23:16:25.224 [APP] stopRecognition invoked
-23:16:25.224 [APP] cancelTranslation invoked
-23:16:25.224 [APP] setStreamingState(false)
-23:16:25.224 [APP] isStreaming = false
-23:16:25.224 [OUT] SYNC_STATE	0	idle
-23:16:25.225 [APP] statusMessage = Stopped
-23:16:25.225 [APP] statusMessage = Stopped from Frame tap
-23:16:25.225 [IN] EVT	MIC_REQUEST	1	0	32
-23:16:25.225 [APP] MIC_REQUEST ignored duplicate tapSequence=32
-23:16:25.244 [IN] EVT	MIC_REQUEST	1	0	33
-23:16:25.244 [APP] handleTapToggleListening desiredEnabled=false isStreaming=false
-23:16:25.256 [APP] recognitionTask ignored cancellation error No speech detected
+11:57:05.617 [APP] statusMessage = Waiting for Bluetooth…
+11:57:06.060 [APP] connectionDebugStage = Bluetooth ready
+11:57:06.060 [APP] statusMessage = Bluetooth ready
+11:57:06.061 [APP] connectionDebugStage = Reconnecting to known Frame
+11:57:06.061 [APP] statusMessage = Reconnecting to Frame…
+11:57:06.067 [APP] state idle -> connecting("Frame D7")
+11:57:07.532 [APP] statusMessage = Listening language set to English
+11:57:07.532 [APP] statusMessage = Target language set to English
+11:57:20.293 [APP] connectionDebugStage = Scanning
+11:57:20.293 [APP] state connecting("Frame D7") -> scanning
+11:57:20.293 [APP] statusMessage = Scanning for Frame glasses…
+11:57:20.394 [APP] state scanning -> idle
+11:57:20.394 [APP] state idle -> connecting("Frame D7")
+11:57:20.394 [APP] connectionDebugStage = Reconnecting to known Frame
+11:57:20.394 [APP] statusMessage = Reconnecting to Frame D7…
+11:57:21.257 [APP] state connecting("Frame D7") -> connected("Frame D7")
+11:57:21.257 [APP] connectionDebugStage = Connected, discovering service
+11:57:21.257 [APP] statusMessage = Connected. Discovering Frame service…
+11:57:21.327 [APP] connectionDebugStage = Service found
+11:57:21.327 [APP] statusMessage = Frame service found. Discovering characteristics…
+11:57:21.334 [APP] connectionDebugStage = Characteristics found
+11:57:21.334 [APP] connectionDebugStage = Enabling notifications
+11:57:21.334 [APP] connectionDebugStage = Waiting for Frame event
+11:57:21.334 [APP] statusMessage = Frame connected. Waiting for HUDini app heartbeat…
+11:57:21.336 [OUT] PING
+11:57:21.358 [APP] connectionDebugStage = Notifications enabled
+11:57:21.358 [APP] statusMessage = Notifications enabled. Waiting for Frame app events…
+11:57:21.405 [APP] connect(to:) ignored because peripheral is already connected
+11:57:21.418 [IN] EVT	READY	v25.278.1113	243	2026.04.09.1
+11:57:21.418 [APP] connectionDebugStage = Frame app update required
+11:57:21.418 [APP] peripheralStatus = Ready on v25.278.1113
+11:57:21.418 [APP] statusMessage = Connected, but the installed Frame app is outdated
+11:57:25.778 [APP] connectionDebugStage = Installing app
+11:57:25.778 [OUT] CONTROL 0x03
+11:57:26.283 [OUT] LUA print('HUDINI_REPL_READY')
+11:57:30.331 [APP] connectionDebugStage = Install failed
+11:57:30.331 [APP] statusMessage = Timed out: HUDINI_REPL_READY
+11:57:31.089 [APP] connectionDebugStage = Installing app
+11:57:31.089 [OUT] CONTROL 0x03
+11:57:31.122 [APP] peripheralStatus = [string "frame.stay_awake(false); require('main')"]:1: exiting module 'main': [string "main.lua"]:402: break signal
+11:57:31.149 [APP] peripheralStatus = HUDINI_REPL_READY
+11:57:31.620 [OUT] LUA print('HUDINI_REPL_READY')
+11:57:31.703 [OUT] LUA pcall(frame.file.remove,'main.lua'); print('HUDINI_REMOVE_OK')
+11:57:31.736 [APP] peripheralStatus = HUDINI_REMOVE_OK
+11:57:31.785 [OUT] LUA f=assert(frame.file.open('main.lua','write')); print('HUDINI_OPEN_OK')
+11:57:31.812 [APP] peripheralStatus = HUDINI_OPEN_OK
+11:57:31.873 [OUT] LUA local ok,err=pcall(function() f:write('local APP_DIR = "/hudini"\nlocal APP_VERSION = "2026.04.09.2"') end); if ok then print('HUDINI_CHUNK_1_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.052 [APP] peripheralStatus = HUDINI_CHUNK_1_OK
+11:57:32.127 [OUT] LUA local ok,err=pcall(function() f:write('\nlocal CRASH_PATH = APP_DIR .. "/crash.txt"\n\nlocal state = {') end); if ok then print('HUDINI_CHUNK_2_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.157 [APP] peripheralStatus = HUDINI_CHUNK_2_OK
+11:57:32.211 [OUT] LUA local ok,err=pcall(function() f:write('\n  connected = false,\n  status = "idle",\n  listening = false') end); if ok then print('HUDINI_CHUNK_3_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.247 [APP] peripheralStatus = HUDINI_CHUNK_3_OK
+11:57:32.297 [OUT] LUA local ok,err=pcall(function() f:write(',\n  partial_caption = "",\n  final_caption = "",\n  brightness') end); if ok then print('HUDINI_CHUNK_4_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.322 [APP] peripheralStatus = HUDINI_CHUNK_4_OK
+11:57:32.379 [OUT] LUA local ok,err=pcall(function() f:write(' = 0,\n  partials = true,\n  needs_render = true,\n  audio_sequ') end); if ok then print('HUDINI_CHUNK_5_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.411 [APP] peripheralStatus = HUDINI_CHUNK_5_OK
+11:57:32.463 [OUT] LUA local ok,err=pcall(function() f:write('ence = 0,\n  tap_sequence = 0,\n  suggestion = "",\n}\n\nframe.di') end); if ok then print('HUDINI_CHUNK_6_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.487 [APP] peripheralStatus = HUDINI_CHUNK_6_OK
+11:57:32.548 [OUT] LUA local ok,err=pcall(function() f:write('splay.text("HUDini", 220, 116, { color = "WHITE", spacing = ') end); if ok then print('HUDINI_CHUNK_7_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.578 [APP] peripheralStatus = HUDINI_CHUNK_7_OK
+11:57:32.630 [OUT] LUA local ok,err=pcall(function() f:write('4 })\nframe.display.text("Loading...", 210, 154, { color = "L') end); if ok then print('HUDINI_CHUNK_8_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.666 [APP] peripheralStatus = HUDINI_CHUNK_8_OK
+11:57:32.712 [OUT] LUA local ok,err=pcall(function() f:write('IGHTGREEN", spacing = 4 })\nframe.display.show()\n\nlocal funct') end); if ok then print('HUDINI_CHUNK_9_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.743 [APP] peripheralStatus = HUDINI_CHUNK_9_OK
+11:57:32.799 [OUT] LUA local ok,err=pcall(function() f:write('ion ensure_dir()\n  pcall(frame.file.mkdir, APP_DIR)\nend\n\nloc') end); if ok then print('HUDINI_CHUNK_10_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.862 [APP] peripheralStatus = HUDINI_CHUNK_10_OK
+11:57:32.884 [OUT] LUA local ok,err=pcall(function() f:write('al function crash_text(err)\n  local text = tostring(err or "') end); if ok then print('HUDINI_CHUNK_11_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:32.907 [APP] peripheralStatus = HUDINI_CHUNK_11_OK
+11:57:32.970 [OUT] LUA local ok,err=pcall(function() f:write('unknown error")\n  if string.len(text) > 240 then\n    text = ') end); if ok then print('HUDINI_CHUNK_12_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.030 [APP] peripheralStatus = HUDINI_CHUNK_12_OK
+11:57:33.052 [OUT] LUA local ok,err=pcall(function() f:write('string.sub(text, 1, 240)\n  end\n  return text\nend\n\nlocal func') end); if ok then print('HUDINI_CHUNK_13_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.086 [APP] peripheralStatus = HUDINI_CHUNK_13_OK
+11:57:33.135 [OUT] LUA local ok,err=pcall(function() f:write('tion save_crash(err)\n  ensure_dir()\n  local f = frame.file.o') end); if ok then print('HUDINI_CHUNK_14_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.193 [APP] peripheralStatus = HUDINI_CHUNK_14_OK
+11:57:33.218 [OUT] LUA local ok,err=pcall(function() f:write('pen(CRASH_PATH, "write")\n  if f ~= nil then\n    f:write(cras') end); if ok then print('HUDINI_CHUNK_15_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.267 [APP] peripheralStatus = HUDINI_CHUNK_15_OK
+11:57:33.301 [OUT] LUA local ok,err=pcall(function() f:write('h_text(err) .. "\\n")\n    f:close()\n  end\nend\n\nlocal function') end); if ok then print('HUDINI_CHUNK_16_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.356 [APP] peripheralStatus = HUDINI_CHUNK_16_OK
+11:57:33.382 [OUT] LUA local ok,err=pcall(function() f:write(' emit_crash(err)\n  pcall(frame.bluetooth.send, "EVT\\tCRASH\\t') end); if ok then print('HUDINI_CHUNK_17_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.431 [APP] peripheralStatus = HUDINI_CHUNK_17_OK
+11:57:33.468 [OUT] LUA local ok,err=pcall(function() f:write('" .. crash_text(err))\nend\n\nlocal function load_saved_crash()') end); if ok then print('HUDINI_CHUNK_18_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.506 [APP] peripheralStatus = HUDINI_CHUNK_18_OK
+11:57:33.551 [OUT] LUA local ok,err=pcall(function() f:write('\n  local ok, f = pcall(frame.file.open, CRASH_PATH, "read")\n') end); if ok then print('HUDINI_CHUNK_19_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.597 [APP] peripheralStatus = HUDINI_CHUNK_19_OK
+11:57:33.635 [OUT] LUA local ok,err=pcall(function() f:write('  if not ok or f == nil then\n    return nil\n  end\n  local li') end); if ok then print('HUDINI_CHUNK_20_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.671 [APP] peripheralStatus = HUDINI_CHUNK_20_OK
+11:57:33.721 [OUT] LUA local ok,err=pcall(function() f:write('ne = f:read()\n  f:close()\n  return line\nend\n\nlocal function ') end); if ok then print('HUDINI_CHUNK_21_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.762 [APP] peripheralStatus = HUDINI_CHUNK_21_OK
+11:57:33.807 [OUT] LUA local ok,err=pcall(function() f:write('clear_saved_crash()\n  pcall(frame.file.remove, CRASH_PATH)\ne') end); if ok then print('HUDINI_CHUNK_22_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.838 [APP] peripheralStatus = HUDINI_CHUNK_22_OK
+11:57:33.893 [OUT] LUA local ok,err=pcall(function() f:write('nd\n\nlocal function split_text(text, separator)\n  local resul') end); if ok then print('HUDINI_CHUNK_23_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:33.927 [APP] peripheralStatus = HUDINI_CHUNK_23_OK
+11:57:33.979 [OUT] LUA local ok,err=pcall(function() f:write('t = {}\n  local start = 1\n  while true do\n    local found_sta') end); if ok then print('HUDINI_CHUNK_24_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.017 [APP] peripheralStatus = HUDINI_CHUNK_24_OK
+11:57:34.065 [OUT] LUA local ok,err=pcall(function() f:write('rt, found_end = string.find(text, separator, start, true)\n  ') end); if ok then print('HUDINI_CHUNK_25_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.106 [APP] peripheralStatus = HUDINI_CHUNK_25_OK
+11:57:34.147 [OUT] LUA local ok,err=pcall(function() f:write('  if found_start == nil then\n      table.insert(result, stri') end); if ok then print('HUDINI_CHUNK_26_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.168 [APP] peripheralStatus = HUDINI_CHUNK_26_OK
+11:57:34.233 [OUT] LUA local ok,err=pcall(function() f:write('ng.sub(text, start))\n      return result\n    end\n    table.i') end); if ok then print('HUDINI_CHUNK_27_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.271 [APP] peripheralStatus = HUDINI_CHUNK_27_OK
+11:57:34.319 [OUT] LUA local ok,err=pcall(function() f:write('nsert(result, string.sub(text, start, found_start - 1))\n    ') end); if ok then print('HUDINI_CHUNK_28_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.362 [APP] peripheralStatus = HUDINI_CHUNK_28_OK
+11:57:34.405 [OUT] LUA local ok,err=pcall(function() f:write('start = found_end + 1\n  end\nend\n\nlocal function trim(text)\n ') end); if ok then print('HUDINI_CHUNK_29_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.467 [APP] peripheralStatus = HUDINI_CHUNK_29_OK
+11:57:34.490 [OUT] LUA local ok,err=pcall(function() f:write(' return (string.gsub(text, "^%s*(.-)%s*$", "%1"))\nend\n\nlocal') end); if ok then print('HUDINI_CHUNK_30_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.526 [APP] peripheralStatus = HUDINI_CHUNK_30_OK
+11:57:34.576 [OUT] LUA local ok,err=pcall(function() f:write(' function normalize_display_text(text)\n  if text == nil then') end); if ok then print('HUDINI_CHUNK_31_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.631 [APP] peripheralStatus = HUDINI_CHUNK_31_OK
+11:57:34.662 [OUT] LUA local ok,err=pcall(function() f:write('\n    return ""\n  end\n  local normalized = tostring(text)\n  n') end); if ok then print('HUDINI_CHUNK_32_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.706 [APP] peripheralStatus = HUDINI_CHUNK_32_OK
+11:57:34.744 [OUT] LUA local ok,err=pcall(function() f:write('ormalized = string.gsub(normalized, "[\\r\\n\\t]", " ")\n  norma') end); if ok then print('HUDINI_CHUNK_33_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.781 [APP] peripheralStatus = HUDINI_CHUNK_33_OK
+11:57:34.830 [OUT] LUA local ok,err=pcall(function() f:write('lized = string.gsub(normalized, "%s+", " ")\n  return trim(no') end); if ok then print('HUDINI_CHUNK_34_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.872 [APP] peripheralStatus = HUDINI_CHUNK_34_OK
+11:57:34.917 [OUT] LUA local ok,err=pcall(function() f:write('rmalized)\nend\n\nlocal function send_event(parts)\n  local payl') end); if ok then print('HUDINI_CHUNK_35_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:34.962 [APP] peripheralStatus = HUDINI_CHUNK_35_OK
+11:57:34.999 [OUT] LUA local ok,err=pcall(function() f:write('oad = table.concat(parts, "\\t")\n  pcall(frame.bluetooth.send') end); if ok then print('HUDINI_CHUNK_36_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.036 [APP] peripheralStatus = HUDINI_CHUNK_36_OK
+11:57:35.086 [OUT] LUA local ok,err=pcall(function() f:write(', payload)\nend\n\nlocal function wrap_lines(text, limit, max_l') end); if ok then print('HUDINI_CHUNK_37_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.126 [APP] peripheralStatus = HUDINI_CHUNK_37_OK
+11:57:35.170 [OUT] LUA local ok,err=pcall(function() f:write('ines)\n  local lines = {}\n  local current = ""\n  local trunca') end); if ok then print('HUDINI_CHUNK_38_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.202 [APP] peripheralStatus = HUDINI_CHUNK_38_OK
+11:57:35.256 [OUT] LUA local ok,err=pcall(function() f:write('ted = false\n\n  text = normalize_display_text(text)\n  if text') end); if ok then print('HUDINI_CHUNK_39_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.278 [APP] peripheralStatus = HUDINI_CHUNK_39_OK
+11:57:35.342 [OUT] LUA local ok,err=pcall(function() f:write(' == "" then\n    return lines\n  end\n\n  local words = split_te') end); if ok then print('HUDINI_CHUNK_40_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.367 [APP] peripheralStatus = HUDINI_CHUNK_40_OK
+11:57:35.425 [OUT] LUA local ok,err=pcall(function() f:write('xt(text, " ")\n  for _, raw_word in ipairs(words) do\n    loca') end); if ok then print('HUDINI_CHUNK_41_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.456 [APP] peripheralStatus = HUDINI_CHUNK_41_OK
+11:57:35.508 [OUT] LUA local ok,err=pcall(function() f:write('l word = raw_word\n\n    while string.len(word) > limit do\n   ') end); if ok then print('HUDINI_CHUNK_42_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.547 [APP] peripheralStatus = HUDINI_CHUNK_42_OK
+11:57:35.591 [OUT] LUA local ok,err=pcall(function() f:write('   if current ~= "" then\n        table.insert(lines, current') end); if ok then print('HUDINI_CHUNK_43_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.637 [APP] peripheralStatus = HUDINI_CHUNK_43_OK
+11:57:35.677 [OUT] LUA local ok,err=pcall(function() f:write(')\n        current = ""\n        if #lines >= max_lines then\n ') end); if ok then print('HUDINI_CHUNK_44_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.712 [APP] peripheralStatus = HUDINI_CHUNK_44_OK
+11:57:35.758 [OUT] LUA local ok,err=pcall(function() f:write('         truncated = true\n          break\n        end\n      ') end); if ok then print('HUDINI_CHUNK_45_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.801 [APP] peripheralStatus = HUDINI_CHUNK_45_OK
+11:57:35.840 [OUT] LUA local ok,err=pcall(function() f:write('end\n      table.insert(lines, string.sub(word, 1, limit - 1)') end); if ok then print('HUDINI_CHUNK_46_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.877 [APP] peripheralStatus = HUDINI_CHUNK_46_OK
+11:57:35.926 [OUT] LUA local ok,err=pcall(function() f:write(' .. "-")\n      word = string.sub(word, limit)\n      if #line') end); if ok then print('HUDINI_CHUNK_47_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:35.967 [APP] peripheralStatus = HUDINI_CHUNK_47_OK
+11:57:36.012 [OUT] LUA local ok,err=pcall(function() f:write('s >= max_lines then\n        truncated = true\n        break\n ') end); if ok then print('HUDINI_CHUNK_48_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.072 [APP] peripheralStatus = HUDINI_CHUNK_48_OK
+11:57:36.098 [OUT] LUA local ok,err=pcall(function() f:write('     end\n    end\n\n    if truncated then\n      break\n    end\n') end); if ok then print('HUDINI_CHUNK_49_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.162 [APP] peripheralStatus = HUDINI_CHUNK_49_OK
+11:57:36.185 [OUT] LUA local ok,err=pcall(function() f:write('\n    if word == "" then\n      break\n    end\n\n    local candi') end); if ok then print('HUDINI_CHUNK_50_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.221 [APP] peripheralStatus = HUDINI_CHUNK_50_OK
+11:57:36.267 [OUT] LUA local ok,err=pcall(function() f:write('date = word\n    if current ~= "" then\n      candidate = curr') end); if ok then print('HUDINI_CHUNK_51_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.327 [APP] peripheralStatus = HUDINI_CHUNK_51_OK
+11:57:36.349 [OUT] LUA local ok,err=pcall(function() f:write('ent .. " " .. word\n    end\n\n    if string.len(candidate) <= ') end); if ok then print('HUDINI_CHUNK_52_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.372 [APP] peripheralStatus = HUDINI_CHUNK_52_OK
+11:57:36.432 [OUT] LUA local ok,err=pcall(function() f:write('limit then\n      current = candidate\n    else\n      if curre') end); if ok then print('HUDINI_CHUNK_53_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.477 [APP] peripheralStatus = HUDINI_CHUNK_53_OK
+11:57:36.518 [OUT] LUA local ok,err=pcall(function() f:write('nt ~= "" then\n        table.insert(lines, current)\n        i') end); if ok then print('HUDINI_CHUNK_54_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.567 [APP] peripheralStatus = HUDINI_CHUNK_54_OK
+11:57:36.603 [OUT] LUA local ok,err=pcall(function() f:write('f #lines >= max_lines then\n          truncated = true\n      ') end); if ok then print('HUDINI_CHUNK_55_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.642 [APP] peripheralStatus = HUDINI_CHUNK_55_OK
+11:57:36.684 [OUT] LUA local ok,err=pcall(function() f:write('    break\n        end\n      end\n      current = word\n    end') end); if ok then print('HUDINI_CHUNK_56_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.717 [APP] peripheralStatus = HUDINI_CHUNK_56_OK
+11:57:36.769 [OUT] LUA local ok,err=pcall(function() f:write('\n  end\n\n  if current ~= "" and #lines < max_lines then\n    t') end); if ok then print('HUDINI_CHUNK_57_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.793 [APP] peripheralStatus = HUDINI_CHUNK_57_OK
+11:57:36.855 [OUT] LUA local ok,err=pcall(function() f:write('able.insert(lines, current)\n  elseif current ~= "" then\n    ') end); if ok then print('HUDINI_CHUNK_58_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.897 [APP] peripheralStatus = HUDINI_CHUNK_58_OK
+11:57:36.941 [OUT] LUA local ok,err=pcall(function() f:write('truncated = true\n  end\n\n  if truncated and #lines > 0 then\n ') end); if ok then print('HUDINI_CHUNK_59_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:36.987 [APP] peripheralStatus = HUDINI_CHUNK_59_OK
+11:57:37.023 [OUT] LUA local ok,err=pcall(function() f:write('   local last = lines[#lines]\n    if string.len(last) > limi') end); if ok then print('HUDINI_CHUNK_60_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:37.062 [APP] peripheralStatus = HUDINI_CHUNK_60_OK
+11:57:37.109 [OUT] LUA local ok,err=pcall(function() f:write('t - 3 then\n      last = string.sub(last, 1, limit - 3)\n    e') end); if ok then print('HUDINI_CHUNK_61_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:37.137 [APP] peripheralStatus = HUDINI_CHUNK_61_OK
+11:57:37.195 [OUT] LUA local ok,err=pcall(function() f:write('nd\n    lines[#lines] = last .. "..."\n  end\n\n  return lines\ne') end); if ok then print('HUDINI_CHUNK_62_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:37.227 [APP] peripheralStatus = HUDINI_CHUNK_62_OK
+11:57:37.279 [OUT] LUA local ok,err=pcall(function() f:write('nd\n\nlocal function draw_multiline(text, x, y, color, max_cha') end); if ok then print('HUDINI_CHUNK_63_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:37.332 [APP] peripheralStatus = HUDINI_CHUNK_63_OK
+11:57:37.365 [OUT] LUA local ok,err=pcall(function() f:write('rs, max_lines)\n  local lines = wrap_lines(text, max_chars, m') end); if ok then print('HUDINI_CHUNK_64_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:37.393 [APP] peripheralStatus = HUDINI_CHUNK_64_OK
+11:57:37.450 [OUT] LUA local ok,err=pcall(function() f:write('ax_lines)\n  local line_y = y\n  for _, line in ipairs(lines) ') end); if ok then print('HUDINI_CHUNK_65_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:37.483 [APP] peripheralStatus = HUDINI_CHUNK_65_OK
+11:57:37.536 [OUT] LUA local ok,err=pcall(function() f:write('do\n    frame.display.text(line, x, line_y, { color = color, ') end); if ok then print('HUDINI_CHUNK_66_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:37.573 [APP] peripheralStatus = HUDINI_CHUNK_66_OK
+11:57:37.618 [OUT] LUA local ok,err=pcall(function() f:write('spacing = 4 })\n    line_y = line_y + 45\n  end\n  return line_') end); if ok then print('HUDINI_CHUNK_67_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:37.648 [APP] peripheralStatus = HUDINI_CHUNK_67_OK
+11:57:37.704 [OUT] LUA local ok,err=pcall(function() f:write('y\nend\n\nlocal function render_ui()\n  if not state.connected t') end); if ok then print('HUDINI_CHUNK_68_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:37.752 [APP] peripheralStatus = HUDINI_CHUNK_68_OK
+11:57:37.790 [OUT] LUA local ok,err=pcall(function() f:write('hen\n    frame.display.power_save(true)\n    state.needs_rende') end); if ok then print('HUDINI_CHUNK_69_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:37.962 [APP] peripheralStatus = HUDINI_CHUNK_69_OK
+11:57:38.045 [OUT] LUA local ok,err=pcall(function() f:write('r = false\n    return\n  end\n\n  frame.display.power_save(false') end); if ok then print('HUDINI_CHUNK_70_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.082 [APP] peripheralStatus = HUDINI_CHUNK_70_OK
+11:57:38.128 [OUT] LUA local ok,err=pcall(function() f:write(')\n  frame.display.set_brightness(state.brightness)\n\n  frame.') end); if ok then print('HUDINI_CHUNK_71_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.187 [APP] peripheralStatus = HUDINI_CHUNK_71_OK
+11:57:38.210 [IN] EVT	MIC_REQUEST	0	1	27
+11:57:38.210 [APP] peripheralStatus = Tap requested mic on
+11:57:38.210 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
+11:57:38.211 [APP] statusMessage = Listening language set to English
+11:57:38.211 [APP] statusMessage = Target language set to English
+11:57:38.215 [APP] startRecognition invoked locale=en
+11:57:38.216 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
+11:57:38.216 [APP] setStreamingState(true)
+11:57:38.216 [APP] isStreaming = true
+11:57:38.217 [APP] [AUDIO] debug capture started: frame_audio_1775750258.raw
+11:57:38.217 [OUT] SYNC_STATE	1	listening
+11:57:38.217 [APP] statusMessage = Started from Frame tap
+11:57:38.217 [OUT] LUA local ok,err=pcall(function() f:write('display.text("Mic:", 24, 52, { color = "WHITE", spacing = 4 ') end); if ok then print('HUDINI_CHUNK_72_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.223 [IN] EVT	MIC_REQUEST	0	1	28
+11:57:38.223 [APP] handleTapToggleListening desiredEnabled=true isStreaming=true
+11:57:38.248 [IN] EVT	STATUS	listening
+11:57:38.248 [APP] peripheralStatus = listening
+11:57:38.291 [APP] peripheralStatus = HUDINI_CHUNK_72_OK
+11:57:38.301 [OUT] LUA local ok,err=pcall(function() f:write('})\n  frame.display.text(state.listening and "ON" or "OFF", 9') end); if ok then print('HUDINI_CHUNK_73_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.336 [APP] peripheralStatus = HUDINI_CHUNK_73_OK
+11:57:38.384 [OUT] LUA local ok,err=pcall(function() f:write('8, 52, { color = state.listening and "GREEN" or "RED", spaci') end); if ok then print('HUDINI_CHUNK_74_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.412 [APP] peripheralStatus = HUDINI_CHUNK_74_OK
+11:57:38.465 [OUT] LUA local ok,err=pcall(function() f:write('ng = 4 })\n\n  local text = state.final_caption\n  if text == "') end); if ok then print('HUDINI_CHUNK_75_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.501 [APP] peripheralStatus = HUDINI_CHUNK_75_OK
+11:57:38.545 [OUT] LUA local ok,err=pcall(function() f:write('" and state.partials then\n    text = state.partial_caption\n ') end); if ok then print('HUDINI_CHUNK_76_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.591 [APP] peripheralStatus = HUDINI_CHUNK_76_OK
+11:57:38.627 [OUT] LUA local ok,err=pcall(function() f:write(' end\n\n  local all_lines = wrap_lines(text, 30, 20)\n  local s') end); if ok then print('HUDINI_CHUNK_77_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.652 [IN] EVT	MIC_REQUEST	1	0	29
+11:57:38.652 [APP] peripheralStatus = Tap requested mic off
+11:57:38.652 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
+11:57:38.653 [APP] [AUDIO] debug capture saved: frame_audio_1775750258.raw size=0 bytes (~0.0s)
+11:57:38.653 [APP] stopRecognition invoked
+11:57:38.653 [APP] cancelTranslation invoked
+11:57:38.653 [APP] setStreamingState(false)
+11:57:38.653 [APP] isStreaming = false
+11:57:38.653 [OUT] SYNC_STATE	0	idle
+11:57:38.653 [APP] statusMessage = Stopped
+11:57:38.653 [APP] statusMessage = Stopped from Frame tap
+11:57:38.668 [APP] peripheralStatus = HUDINI_CHUNK_77_OK
+11:57:38.682 [IN] EVT	STATUS	idle
+11:57:38.683 [APP] peripheralStatus = idle
+11:57:38.690 [APP] recognitionTask error: No speech detected
+11:57:38.712 [OUT] LUA local ok,err=pcall(function() f:write('tart_idx = math.max(1, #all_lines - 2)\n  local caption_y = 9') end); if ok then print('HUDINI_CHUNK_78_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.756 [APP] peripheralStatus = HUDINI_CHUNK_78_OK
+11:57:38.796 [OUT] LUA local ok,err=pcall(function() f:write('8\n  local lines_drawn = 0\n  for i = start_idx, #all_lines do') end); if ok then print('HUDINI_CHUNK_79_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.831 [APP] peripheralStatus = HUDINI_CHUNK_79_OK
+11:57:38.877 [OUT] LUA local ok,err=pcall(function() f:write('\n    frame.display.text(all_lines[i], 24, caption_y, { color') end); if ok then print('HUDINI_CHUNK_80_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.907 [APP] peripheralStatus = HUDINI_CHUNK_80_OK
+11:57:38.962 [OUT] LUA local ok,err=pcall(function() f:write(' = "SKYBLUE", spacing = 4 })\n    caption_y = caption_y + 45\n') end); if ok then print('HUDINI_CHUNK_81_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:38.997 [APP] peripheralStatus = HUDINI_CHUNK_81_OK
+11:57:39.047 [OUT] LUA local ok,err=pcall(function() f:write('    lines_drawn = lines_drawn + 1\n  end\n\n  if state.suggesti') end); if ok then print('HUDINI_CHUNK_82_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.072 [APP] peripheralStatus = HUDINI_CHUNK_82_OK
+11:57:39.130 [OUT] LUA local ok,err=pcall(function() f:write('on ~= "" then\n    draw_multiline(state.suggestion, 24, capti') end); if ok then print('HUDINI_CHUNK_83_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.163 [APP] peripheralStatus = HUDINI_CHUNK_83_OK
+11:57:39.215 [OUT] LUA local ok,err=pcall(function() f:write('on_y, "YELLOW", 30, 3)\n  end\n\n  frame.display.show()\n  state') end); if ok then print('HUDINI_CHUNK_84_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.252 [APP] peripheralStatus = HUDINI_CHUNK_84_OK
+11:57:39.299 [OUT] LUA local ok,err=pcall(function() f:write('.needs_render = false\nend\n\nlocal function handle_command(pay') end); if ok then print('HUDINI_CHUNK_85_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.342 [APP] peripheralStatus = HUDINI_CHUNK_85_OK
+11:57:39.385 [OUT] LUA local ok,err=pcall(function() f:write('load)\n  local parts = split_text(payload, "\\t")\n  local comm') end); if ok then print('HUDINI_CHUNK_86_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.417 [APP] peripheralStatus = HUDINI_CHUNK_86_OK
+11:57:39.471 [OUT] LUA local ok,err=pcall(function() f:write('and = parts[1]\n\n  if command ~= nil then\n    state.connected') end); if ok then print('HUDINI_CHUNK_87_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.506 [APP] peripheralStatus = HUDINI_CHUNK_87_OK
+11:57:39.557 [OUT] LUA local ok,err=pcall(function() f:write(' = true\n    state.needs_render = true\n  end\n\n  if command ==') end); if ok then print('HUDINI_CHUNK_88_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.582 [APP] peripheralStatus = HUDINI_CHUNK_88_OK
+11:57:39.641 [OUT] LUA local ok,err=pcall(function() f:write(' "PING" then\n    send_event({ "EVT", "READY", frame.FIRMWARE') end); if ok then print('HUDINI_CHUNK_89_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.687 [APP] peripheralStatus = HUDINI_CHUNK_89_OK
+11:57:39.725 [OUT] LUA local ok,err=pcall(function() f:write('_VERSION, tostring(frame.bluetooth.max_length()), APP_VERSIO') end); if ok then print('HUDINI_CHUNK_90_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.762 [APP] peripheralStatus = HUDINI_CHUNK_90_OK
+11:57:39.807 [OUT] LUA local ok,err=pcall(function() f:write('N })\n    return\n  end\n\n  if command == "SYNC_STATE" then\n   ') end); if ok then print('HUDINI_CHUNK_91_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.838 [APP] peripheralStatus = HUDINI_CHUNK_91_OK
+11:57:39.893 [OUT] LUA local ok,err=pcall(function() f:write(' state.listening = parts[2] == "1"\n    state.status = parts[') end); if ok then print('HUDINI_CHUNK_92_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:39.957 [APP] peripheralStatus = HUDINI_CHUNK_92_OK
+11:57:39.988 [OUT] LUA local ok,err=pcall(function() f:write('3] or (state.listening and "listening" or "idle")\n    if sta') end); if ok then print('HUDINI_CHUNK_93_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.047 [APP] peripheralStatus = HUDINI_CHUNK_93_OK
+11:57:40.073 [OUT] LUA local ok,err=pcall(function() f:write('te.listening then\n      state.suggestion = ""\n    end\n    st') end); if ok then print('HUDINI_CHUNK_94_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.121 [APP] peripheralStatus = HUDINI_CHUNK_94_OK
+11:57:40.159 [OUT] LUA local ok,err=pcall(function() f:write('ate.needs_render = true\n    send_event({ "EVT", "STATUS", st') end); if ok then print('HUDINI_CHUNK_95_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.197 [APP] peripheralStatus = HUDINI_CHUNK_95_OK
+11:57:40.245 [OUT] LUA local ok,err=pcall(function() f:write('ate.status })\n    return\n  end\n\n  if command == "SET_PREFS" ') end); if ok then print('HUDINI_CHUNK_96_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.287 [APP] peripheralStatus = HUDINI_CHUNK_96_OK
+11:57:40.331 [OUT] LUA local ok,err=pcall(function() f:write('then\n    local pairs_list = split_text(parts[2] or "", ";")\n') end); if ok then print('HUDINI_CHUNK_97_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.377 [APP] peripheralStatus = HUDINI_CHUNK_97_OK
+11:57:40.412 [OUT] LUA local ok,err=pcall(function() f:write('    for _, entry in ipairs(pairs_list) do\n      local eq = s') end); if ok then print('HUDINI_CHUNK_98_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.438 [APP] peripheralStatus = HUDINI_CHUNK_98_OK
+11:57:40.497 [OUT] LUA local ok,err=pcall(function() f:write('tring.find(entry, "=", 1, true)\n      if eq ~= nil then\n    ') end); if ok then print('HUDINI_CHUNK_99_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.542 [APP] peripheralStatus = HUDINI_CHUNK_99_OK
+11:57:40.583 [OUT] LUA local ok,err=pcall(function() f:write('    local key = string.sub(entry, 1, eq - 1)\n        local v') end); if ok then print('HUDINI_CHUNK_100_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.632 [APP] peripheralStatus = HUDINI_CHUNK_100_OK
+11:57:40.669 [OUT] LUA local ok,err=pcall(function() f:write('alue = string.sub(entry, eq + 1)\n        if key == "brightne') end); if ok then print('HUDINI_CHUNK_101_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.707 [APP] peripheralStatus = HUDINI_CHUNK_101_OK
+11:57:40.753 [OUT] LUA local ok,err=pcall(function() f:write('ss" then\n          state.brightness = tonumber(value) or sta') end); if ok then print('HUDINI_CHUNK_102_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.797 [APP] peripheralStatus = HUDINI_CHUNK_102_OK
+11:57:40.837 [OUT] LUA local ok,err=pcall(function() f:write('te.brightness\n        elseif key == "partials" then\n        ') end); if ok then print('HUDINI_CHUNK_103_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.857 [APP] peripheralStatus = HUDINI_CHUNK_103_OK
+11:57:40.923 [OUT] LUA local ok,err=pcall(function() f:write('  state.partials = value == "1"\n        end\n      end\n    en') end); if ok then print('HUDINI_CHUNK_104_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:40.962 [APP] peripheralStatus = HUDINI_CHUNK_104_OK
+11:57:41.005 [OUT] LUA local ok,err=pcall(function() f:write('d\n    state.needs_render = true\n    send_event({ "EVT", "PRE') end); if ok then print('HUDINI_CHUNK_105_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.052 [APP] peripheralStatus = HUDINI_CHUNK_105_OK
+11:57:41.085 [OUT] LUA local ok,err=pcall(function() f:write('FS_SAVED" })\n    return\n  end\n\n  if command == "SHOW_CAPTION') end); if ok then print('HUDINI_CHUNK_106_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.126 [APP] peripheralStatus = HUDINI_CHUNK_106_OK
+11:57:41.171 [OUT] LUA local ok,err=pcall(function() f:write('" then\n    local caption_kind = parts[2] or "final"\n    loca') end); if ok then print('HUDINI_CHUNK_107_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.216 [APP] peripheralStatus = HUDINI_CHUNK_107_OK
+11:57:41.252 [OUT] LUA local ok,err=pcall(function() f:write('l text = parts[3] or ""\n    if caption_kind == "partial" the') end); if ok then print('HUDINI_CHUNK_108_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.291 [APP] peripheralStatus = HUDINI_CHUNK_108_OK
+11:57:41.338 [OUT] LUA local ok,err=pcall(function() f:write('n\n      state.partial_caption = trim(text)\n      if not stat') end); if ok then print('HUDINI_CHUNK_109_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.397 [APP] peripheralStatus = HUDINI_CHUNK_109_OK
+11:57:41.424 [OUT] LUA local ok,err=pcall(function() f:write('e.partials then\n        state.partial_caption = ""\n      end') end); if ok then print('HUDINI_CHUNK_110_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.471 [APP] peripheralStatus = HUDINI_CHUNK_110_OK
+11:57:41.510 [OUT] LUA local ok,err=pcall(function() f:write('\n    else\n      state.final_caption = trim(text)\n      state') end); if ok then print('HUDINI_CHUNK_111_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.532 [APP] peripheralStatus = HUDINI_CHUNK_111_OK
+11:57:41.595 [OUT] LUA local ok,err=pcall(function() f:write('.partial_caption = ""\n    end\n    state.needs_render = true\n') end); if ok then print('HUDINI_CHUNK_112_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.638 [APP] peripheralStatus = HUDINI_CHUNK_112_OK
+11:57:41.678 [OUT] LUA local ok,err=pcall(function() f:write('    return\n  end\n\n  if command == "SHOW_SUGGESTION" then\n   ') end); if ok then print('HUDINI_CHUNK_113_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.727 [APP] peripheralStatus = HUDINI_CHUNK_113_OK
+11:57:41.763 [OUT] LUA local ok,err=pcall(function() f:write(' state.suggestion = trim(parts[2] or "")\n    state.needs_ren') end); if ok then print('HUDINI_CHUNK_114_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.787 [APP] peripheralStatus = HUDINI_CHUNK_114_OK
+11:57:41.845 [OUT] LUA local ok,err=pcall(function() f:write('der = true\n    return\n  end\n\n  if command == "CLEAR_CAPTION"') end); if ok then print('HUDINI_CHUNK_115_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.891 [APP] peripheralStatus = HUDINI_CHUNK_115_OK
+11:57:41.928 [OUT] LUA local ok,err=pcall(function() f:write(' then\n    state.partial_caption = ""\n    state.final_caption') end); if ok then print('HUDINI_CHUNK_116_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:41.966 [APP] peripheralStatus = HUDINI_CHUNK_116_OK
+11:57:42.009 [OUT] LUA local ok,err=pcall(function() f:write(' = ""\n    state.suggestion = ""\n    state.needs_render = tru') end); if ok then print('HUDINI_CHUNK_117_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.057 [APP] peripheralStatus = HUDINI_CHUNK_117_OK
+11:57:42.095 [OUT] LUA local ok,err=pcall(function() f:write('e\n    return\n  end\n\n  if command == "RESET" then\n    pcall(f') end); if ok then print('HUDINI_CHUNK_118_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.131 [APP] peripheralStatus = HUDINI_CHUNK_118_OK
+11:57:42.178 [OUT] LUA local ok,err=pcall(function() f:write('rame.microphone.stop)\n    state.partial_caption = ""\n    sta') end); if ok then print('HUDINI_CHUNK_119_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.207 [APP] peripheralStatus = HUDINI_CHUNK_119_OK
+11:57:42.264 [OUT] LUA local ok,err=pcall(function() f:write('te.final_caption = ""\n    state.listening = false\n    state.') end); if ok then print('HUDINI_CHUNK_120_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.312 [APP] peripheralStatus = HUDINI_CHUNK_120_OK
+11:57:42.350 [OUT] LUA local ok,err=pcall(function() f:write('audio_sequence = 0\n    state.suggestion = ""\n    send_buffer') end); if ok then print('HUDINI_CHUNK_121_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.386 [APP] peripheralStatus = HUDINI_CHUNK_121_OK
+11:57:42.431 [OUT] LUA local ok,err=pcall(function() f:write(' = ""\n    state.needs_render = true\n    frame.sleep(0.05)\n  ') end); if ok then print('HUDINI_CHUNK_122_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.463 [APP] peripheralStatus = HUDINI_CHUNK_122_OK
+11:57:42.514 [OUT] LUA local ok,err=pcall(function() f:write('  start_mic()\n    send_event({ "EVT", "RESET_OK" })\n    retu') end); if ok then print('HUDINI_CHUNK_123_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.553 [APP] peripheralStatus = HUDINI_CHUNK_123_OK
+11:57:42.595 [OUT] LUA local ok,err=pcall(function() f:write('rn\n  end\nend\n\nlocal function on_tap()\n  state.tap_sequence =') end); if ok then print('HUDINI_CHUNK_124_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.627 [APP] peripheralStatus = HUDINI_CHUNK_124_OK
+11:57:42.681 [OUT] LUA local ok,err=pcall(function() f:write(' state.tap_sequence + 1\n  send_event({\n    "EVT",\n    "MIC_R') end); if ok then print('HUDINI_CHUNK_125_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.717 [APP] peripheralStatus = HUDINI_CHUNK_125_OK
+11:57:42.766 [OUT] LUA local ok,err=pcall(function() f:write('EQUEST",\n    state.listening and "1" or "0",\n    state.liste') end); if ok then print('HUDINI_CHUNK_126_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.807 [APP] peripheralStatus = HUDINI_CHUNK_126_OK
+11:57:42.850 [OUT] LUA local ok,err=pcall(function() f:write('ning and "0" or "1",\n    tostring(state.tap_sequence),\n  })\n') end); if ok then print('HUDINI_CHUNK_127_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:42.912 [APP] peripheralStatus = HUDINI_CHUNK_127_OK
+11:57:42.941 [OUT] LUA local ok,err=pcall(function() f:write('end\n\nlocal function send_audio_chunk(data)\n  local sequence ') end); if ok then print('HUDINI_CHUNK_128_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:43.002 [APP] peripheralStatus = HUDINI_CHUNK_128_OK
+11:57:43.027 [OUT] LUA local ok,err=pcall(function() f:write('= state.audio_sequence\n  local packet = string.char(0x20, se') end); if ok then print('HUDINI_CHUNK_129_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:43.048 [APP] peripheralStatus = HUDINI_CHUNK_129_OK
+11:57:43.112 [OUT] LUA local ok,err=pcall(function() f:write('quence % 256, math.floor(sequence / 256) % 256) .. data\n  fo') end); if ok then print('HUDINI_CHUNK_130_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:43.167 [APP] peripheralStatus = HUDINI_CHUNK_130_OK
+11:57:43.196 [OUT] LUA local ok,err=pcall(function() f:write('r _ = 1, 3 do\n    if pcall(frame.bluetooth.send, packet) the') end); if ok then print('HUDINI_CHUNK_131_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:43.228 [APP] peripheralStatus = HUDINI_CHUNK_131_OK
+11:57:43.282 [OUT] LUA local ok,err=pcall(function() f:write('n\n      break\n    end\n    frame.sleep(0.001)\n  end\n  state.a') end); if ok then print('HUDINI_CHUNK_132_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:43.333 [APP] peripheralStatus = HUDINI_CHUNK_132_OK
+11:57:43.367 [OUT] LUA local ok,err=pcall(function() f:write('udio_sequence = (sequence + 1) % 65536\nend\n\nlocal function s') end); if ok then print('HUDINI_CHUNK_133_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:43.392 [APP] peripheralStatus = HUDINI_CHUNK_133_OK
+11:57:43.453 [OUT] LUA local ok,err=pcall(function() f:write('tart_mic()\n  local ok, err = pcall(frame.microphone.start, {') end); if ok then print('HUDINI_CHUNK_134_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:43.483 [APP] peripheralStatus = HUDINI_CHUNK_134_OK
+11:57:43.535 [OUT] LUA local ok,err=pcall(function() f:write(' sample_rate = 16000, bit_depth = 8 })\n  if ok then\n    stat') end); if ok then print('HUDINI_CHUNK_135_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:43.572 [APP] peripheralStatus = HUDINI_CHUNK_135_OK
+11:57:43.621 [OUT] LUA local ok,err=pcall(function() f:write('e.audio_sequence = 0\n    return true\n  end\n  local message =') end); if ok then print('HUDINI_CHUNK_136_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:43.648 [APP] peripheralStatus = HUDINI_CHUNK_136_OK
+11:57:43.707 [OUT] LUA local ok,err=pcall(function() f:write(' tostring(err or "")\n  if string.find(message, "already star') end); if ok then print('HUDINI_CHUNK_137_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:43.917 [APP] peripheralStatus = HUDINI_CHUNK_137_OK
+11:57:43.963 [OUT] LUA local ok,err=pcall(function() f:write('ted", 1, true) ~= nil then\n    return true\n  end\n  send_even') end); if ok then print('HUDINI_CHUNK_138_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.007 [APP] peripheralStatus = HUDINI_CHUNK_138_OK
+11:57:44.049 [OUT] LUA local ok,err=pcall(function() f:write('t({ "EVT", "MIC_ERROR", message })\n  return false\nend\n\nlocal') end); if ok then print('HUDINI_CHUNK_139_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.081 [APP] peripheralStatus = HUDINI_CHUNK_139_OK
+11:57:44.132 [OUT] LUA local ok,err=pcall(function() f:write(' function run_app()\n  frame.bluetooth.receive_callback(funct') end); if ok then print('HUDINI_CHUNK_140_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.171 [APP] peripheralStatus = HUDINI_CHUNK_140_OK
+11:57:44.213 [OUT] LUA local ok,err=pcall(function() f:write('ion(data) handle_command(data) end)\n  frame.imu.tap_callback') end); if ok then print('HUDINI_CHUNK_141_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.277 [APP] peripheralStatus = HUDINI_CHUNK_141_OK
+11:57:44.302 [OUT] LUA local ok,err=pcall(function() f:write('(on_tap)\n  frame.display.set_brightness(state.brightness)\n  ') end); if ok then print('HUDINI_CHUNK_142_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.351 [APP] peripheralStatus = HUDINI_CHUNK_142_OK
+11:57:44.384 [OUT] LUA local ok,err=pcall(function() f:write('state.connected = false\n  send_event({ "EVT", "BOOT", frame.') end); if ok then print('HUDINI_CHUNK_143_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.442 [APP] peripheralStatus = HUDINI_CHUNK_143_OK
+11:57:44.465 [OUT] LUA local ok,err=pcall(function() f:write('FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()), AP') end); if ok then print('HUDINI_CHUNK_144_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.488 [APP] peripheralStatus = HUDINI_CHUNK_144_OK
+11:57:44.551 [OUT] LUA local ok,err=pcall(function() f:write('P_VERSION })\n\n  local saved_crash = load_saved_crash()\n  if ') end); if ok then print('HUDINI_CHUNK_145_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.606 [APP] peripheralStatus = HUDINI_CHUNK_145_OK
+11:57:44.635 [OUT] LUA local ok,err=pcall(function() f:write('saved_crash ~= nil and saved_crash ~= "" then\n    send_event') end); if ok then print('HUDINI_CHUNK_146_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.681 [APP] peripheralStatus = HUDINI_CHUNK_146_OK
+11:57:44.719 [OUT] LUA local ok,err=pcall(function() f:write('({ "EVT", "CRASH", crash_text(saved_crash) })\n    clear_save') end); if ok then print('HUDINI_CHUNK_147_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.756 [APP] peripheralStatus = HUDINI_CHUNK_147_OK
+11:57:44.804 [OUT] LUA local ok,err=pcall(function() f:write('d_crash()\n  end\n\n  local max_audio_bytes = frame.bluetooth.m') end); if ok then print('HUDINI_CHUNK_148_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.832 [APP] peripheralStatus = HUDINI_CHUNK_148_OK
+11:57:44.890 [OUT] LUA local ok,err=pcall(function() f:write('ax_length() - 3\n  if max_audio_bytes % 2 == 1 then\n    max_a') end); if ok then print('HUDINI_CHUNK_149_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.921 [APP] peripheralStatus = HUDINI_CHUNK_149_OK
+11:57:44.976 [OUT] LUA local ok,err=pcall(function() f:write('udio_bytes = max_audio_bytes - 1\n  end\n  if max_audio_bytes ') end); if ok then print('HUDINI_CHUNK_150_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:44.997 [APP] peripheralStatus = HUDINI_CHUNK_150_OK
+11:57:45.062 [OUT] LUA local ok,err=pcall(function() f:write('< 64 then\n    max_audio_bytes = 64\n  end\n\n  start_mic()\n  se') end); if ok then print('HUDINI_CHUNK_151_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.087 [APP] peripheralStatus = HUDINI_CHUNK_151_OK
+11:57:45.143 [OUT] LUA local ok,err=pcall(function() f:write('nd_buffer = ""\n\n  while true do\n    if state.needs_render th') end); if ok then print('HUDINI_CHUNK_152_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.191 [APP] peripheralStatus = HUDINI_CHUNK_152_OK
+11:57:45.228 [OUT] LUA local ok,err=pcall(function() f:write('en\n      render_ui()\n    end\n\n    local audio = frame.microp') end); if ok then print('HUDINI_CHUNK_153_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.252 [APP] peripheralStatus = HUDINI_CHUNK_153_OK
+11:57:45.312 [OUT] LUA local ok,err=pcall(function() f:write('hone.read(max_audio_bytes)\n    if audio == nil then\n      if') end); if ok then print('HUDINI_CHUNK_154_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.356 [APP] peripheralStatus = HUDINI_CHUNK_154_OK
+11:57:45.397 [OUT] LUA local ok,err=pcall(function() f:write(' send_buffer ~= "" then\n        send_audio_chunk(send_buffer') end); if ok then print('HUDINI_CHUNK_155_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.446 [APP] peripheralStatus = HUDINI_CHUNK_155_OK
+11:57:45.480 [OUT] LUA local ok,err=pcall(function() f:write(')\n        send_buffer = ""\n      end\n      frame.sleep(0.1)\n') end); if ok then print('HUDINI_CHUNK_156_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.507 [APP] peripheralStatus = HUDINI_CHUNK_156_OK
+11:57:45.566 [OUT] LUA local ok,err=pcall(function() f:write('      start_mic()\n    elseif audio ~= "" then\n      send_buf') end); if ok then print('HUDINI_CHUNK_157_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.611 [APP] peripheralStatus = HUDINI_CHUNK_157_OK
+11:57:45.647 [OUT] LUA local ok,err=pcall(function() f:write('fer = send_buffer .. audio\n      if string.len(send_buffer) ') end); if ok then print('HUDINI_CHUNK_158_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.687 [APP] peripheralStatus = HUDINI_CHUNK_158_OK
+11:57:45.733 [OUT] LUA local ok,err=pcall(function() f:write('>= max_audio_bytes then\n        send_audio_chunk(string.sub(') end); if ok then print('HUDINI_CHUNK_159_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.777 [APP] peripheralStatus = HUDINI_CHUNK_159_OK
+11:57:45.818 [OUT] LUA local ok,err=pcall(function() f:write('send_buffer, 1, max_audio_bytes))\n        send_buffer = stri') end); if ok then print('HUDINI_CHUNK_160_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.851 [APP] peripheralStatus = HUDINI_CHUNK_160_OK
+11:57:45.904 [OUT] LUA local ok,err=pcall(function() f:write('ng.sub(send_buffer, max_audio_bytes + 1)\n      end\n    else\n') end); if ok then print('HUDINI_CHUNK_161_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:45.941 [APP] peripheralStatus = HUDINI_CHUNK_161_OK
+11:57:45.989 [OUT] LUA local ok,err=pcall(function() f:write('      if send_buffer ~= "" then\n        send_audio_chunk(sen') end); if ok then print('HUDINI_CHUNK_162_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:46.017 [APP] peripheralStatus = HUDINI_CHUNK_162_OK
+11:57:46.073 [OUT] LUA local ok,err=pcall(function() f:write('d_buffer)\n        send_buffer = ""\n      end\n      frame.sle') end); if ok then print('HUDINI_CHUNK_163_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:46.136 [APP] peripheralStatus = HUDINI_CHUNK_163_OK
+11:57:46.166 [OUT] LUA local ok,err=pcall(function() f:write('ep(0.004)\n    end\n  end\nend\n\nlocal ok, err = xpcall(run_app,') end); if ok then print('HUDINI_CHUNK_164_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:46.226 [APP] peripheralStatus = HUDINI_CHUNK_164_OK
+11:57:46.253 [OUT] LUA local ok,err=pcall(function() f:write(' debug.traceback)\nif not ok then\n  save_crash(err)\n  emit_cr') end); if ok then print('HUDINI_CHUNK_165_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:46.286 [APP] peripheralStatus = HUDINI_CHUNK_165_OK
+11:57:46.339 [OUT] LUA local ok,err=pcall(function() f:write('ash(err)\n  pcall(frame.display.power_save, true)\n  while tru') end); if ok then print('HUDINI_CHUNK_166_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:46.377 [APP] peripheralStatus = HUDINI_CHUNK_166_OK
+11:57:46.420 [OUT] LUA local ok,err=pcall(function() f:write('e do\n    frame.sleep(1)\n  end\nend') end); if ok then print('HUDINI_CHUNK_167_OK') else print('HUDINI_ERROR:'..tostring(err)) end
+11:57:46.466 [APP] peripheralStatus = HUDINI_CHUNK_167_OK
+11:57:46.506 [OUT] LUA f:close(); print('HUDINI_CLOSE_OK')
+11:57:46.527 [APP] peripheralStatus = HUDINI_CLOSE_OK
+11:57:46.592 [OUT] LUA local vf=assert(frame.file.open('main.lua','read')); local line1=vf:read() or ''; local line2=vf:read() or ''; vf:close(); print('HUDINI_VERIFY:'..line1..'|'..line2)
+11:57:46.634 [APP] peripheralStatus = HUDINI_VERIFY:local APP_DIR = "/hudini"|local APP_VERSION = "2026.04.09.2"
+11:57:46.674 [OUT] CONTROL 0x04
+11:57:46.674 [APP] connectionDebugStage = Install complete, waiting for reboot
+11:57:46.674 [APP] statusMessage = Verified upload. Waiting for Frame reboot…
+11:57:47.653 [IN] EVT	BOOT	v25.278.1113	243	2026.04.09.2
+11:57:47.654 [APP] connectionDebugStage = Frame app responded
+11:57:47.654 [APP] peripheralStatus = Booted on v25.278.1113
+11:57:47.654 [APP] statusMessage = Connected to Frame
+11:57:47.654 [APP] connectionDebugStage = Bootstrapping session
+11:57:47.654 [OUT] SET_PREFS	brightness=0;partials=1
+11:57:47.655 [OUT] SYNC_STATE	0	idle
+11:57:47.684 [IN] EVT	CRASH	break signal
+11:57:47.684 [APP] peripheralStatus = break signal
+11:57:47.684 [APP] statusMessage = Frame app crashed
+11:57:47.714 [IN] EVT	PREFS_SAVED
+11:57:47.714 [APP] statusMessage = Saved preferences on Frame
+11:57:47.744 [IN] EVT	STATUS	idle
+11:57:47.744 [APP] peripheralStatus = idle
+11:57:49.093 [IN] EVT	MIC_REQUEST	0	1	2
+11:57:49.093 [APP] MIC_REQUEST ignored duplicate tapSequence=2
+11:57:52.292 [APP] statusMessage = Listening language set to English
+11:57:52.292 [APP] statusMessage = Target language set to English
+11:57:55.503 [OUT] SHOW_SUGGESTION	
+11:57:55.507 [APP] statusMessage = Listening language set to English
+11:57:55.507 [APP] statusMessage = Target language set to English
+11:57:55.523 [APP] startRecognition invoked locale=en
+11:57:55.524 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
+11:57:55.524 [APP] setStreamingState(true)
+11:57:55.524 [APP] isStreaming = true
+11:57:55.526 [APP] [AUDIO] debug capture started: frame_audio_1775750275.raw
+11:57:55.526 [OUT] SYNC_STATE	1	listening
+11:57:55.526 [APP] statusMessage = Listening…
+11:57:55.544 [IN] EVT	STATUS	listening
+11:57:55.544 [APP] peripheralStatus = listening
+11:57:56.489 [APP] audioPacket milestone count=100 seq=1018
+11:57:57.404 [APP] audioPacket milestone count=200 seq=1123
+11:57:58.366 [APP] audioPacket milestone count=300 seq=1229
+11:57:59.370 [APP] audioPacket milestone count=400 seq=1339
+11:58:00.272 [APP] audioPacket milestone count=500 seq=1440
+11:58:00.273 [APP] [AUDIO] energy=7237 gain=1.04 dc=-241 packets=500
+11:58:00.768 [APP] [AUDIO] debug capture saved: frame_audio_1775750275.raw size=157024 bytes (~4.9s)
+11:58:00.768 [APP] stopRecognition invoked
+11:58:00.768 [APP] cancelTranslation invoked
+11:58:00.769 [APP] setStreamingState(false)
+11:58:00.769 [APP] isStreaming = false
+11:58:00.769 [OUT] SYNC_STATE	0	idle
+11:58:00.769 [APP] statusMessage = Stopped
+11:58:00.989 [APP] recognitionTask error: No speech detected
+11:58:06.911 [APP] statusMessage = Listening language set to English
+11:58:06.911 [APP] statusMessage = Target language set to English
+11:58:18.831 [IN] EVT	MIC_REQUEST	0	1	3
+11:58:18.832 [APP] MIC_REQUEST ignored duplicate tapSequence=3
+11:58:19.011 [IN] EVT	MIC_REQUEST	0	1	4
+11:58:19.011 [APP] MIC_REQUEST ignored duplicate tapSequence=4
+11:58:20.855 [IN] EVT	MIC_REQUEST	0	1	6
+11:58:20.856 [APP] MIC_REQUEST ignored duplicate tapSequence=6
+11:58:23.322 [APP] connectionDebugStage = Disconnected with error
+11:58:23.323 [APP] state connected("Frame D7") -> idle
+11:58:23.323 [APP] connectionDebugStage = Disconnected: The connection has timed out unexpectedly.
+11:58:23.323 [APP] statusMessage = Disconnected: The connection has timed out unexpectedly.
+11:58:23.323 [APP] peripheralStatus = 
+11:58:23.323 [APP] stopRecognition invoked
+11:58:23.323 [APP] cancelTranslation invoked
+11:58:23.324 [APP] connectionDebugStage = Reconnecting to known Frame
+11:58:23.324 [APP] statusMessage = Reconnecting to Frame…
+11:58:23.324 [APP] state idle -> connecting("Frame D7")

@@ -56,11 +56,13 @@ final class HUDSuggestionManager: ObservableObject {
         do {
             let reply = try await service.suggestion(for: text, languageCode: languageCode)
             guard !Task.isCancelled else { return }
+            print("[Suggestion] success: phonetic=\(reply.phonetic) english=\(reply.english)")
             suggestionPhonetic = reply.phonetic
             suggestionEnglish = reply.english
         } catch {
             guard !Task.isCancelled else { return }
-            suggestionPhonetic = ""
+            print("[Suggestion] error: \(error)")
+            suggestionPhonetic = "Error: \(error.localizedDescription)"
             suggestionEnglish = ""
         }
     }

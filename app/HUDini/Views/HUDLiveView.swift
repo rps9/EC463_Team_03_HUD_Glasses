@@ -80,7 +80,7 @@ struct HUDLiveView: View {
             }
         }
         .onChange(of: suggestionManager.suggestionPhonetic, initial: false) { _, newPhonetic in
-            guard shouldUseFrameMic, isFrameConnected else { return }
+            guard shouldUseFrameMic, isFrameConnected, !isListening else { return }
             let trimmed = newPhonetic.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
                 frameManager.clearSuggestionOnFrame()
@@ -368,9 +368,6 @@ struct HUDLiveView: View {
         renderedTextDebounceTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
-            if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
-                suggestionManager.refreshSuggestion(for: text, languageCode: Self.hudTargetLanguageCode)
-            }
             if mirrorToFrame {
                 pushTranslatedTextToFrameIfNeeded(text)
             }

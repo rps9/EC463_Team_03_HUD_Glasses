@@ -44,10 +44,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let breakSignal: UInt8 = 0x03
     private static let resetSignal: UInt8 = 0x04
     private static let audioPacketType: UInt8 = 0x20
-    private static let streamSampleRate: Double = 8_000
-    private static let streamBitDepth: Int = 16
+    private static let streamSampleRate: Double = 16_000
+    private static let streamBitDepth: Int = 8
     private static let recognitionSampleRate: Double = 16_000
-    private static let embeddedAppVersion = "2026.04.09.1"
+    private static let embeddedAppVersion = "2026.04.09.3"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
 
@@ -148,6 +148,12 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var replTextBuffer: String = ""
     private var audioDCEstimate: Float = 0
     private var audioSmoothedGain: Float = 1
+    private var audioEnergyAccumulator: Float = 0
+    private var audioEnergySampleCount: Int = 0
+    private var debugAudioFileHandle: FileHandle?
+    private(set) var debugAudioFilePath: URL?
+    @Published private(set) var debugAudioRecordings: [URL] = []
+    private static let maxDebugRecordings = 10
     private lazy var streamFormat: AVAudioFormat = {
         AVAudioFormat(
             commonFormat: .pcmFormatInt16,
@@ -262,8 +268,8 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             statusMessage = "Connect to Frame first"
             return
         }
-        sendRawCommand(["RESET"], preferredType: .withResponse)
         stopListening()
+        sendControlByte(Self.resetSignal)
         statusMessage = "Frame reset"
     }
 
@@ -367,13 +373,15 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                 statusMessage = "Speech recognizer unavailable"
                 return
             }
-            setStreamingState(true)
-            sendRawCommand(["SYNC_STATE", "1", "listening"], preferredType: .withResponse)
-            statusMessage = triggeredByTap ? "Started from Frame tap" : "Listening…"
+            self.setStreamingState(true)
+            self.startDebugAudioCapture()
+            self.sendRawCommand(["SYNC_STATE", "1", "listening"], preferredType: .withResponse)
+            self.statusMessage = triggeredByTap ? "Started from Frame tap" : "Listening…"
         }
     }
 
     func stopListening() {
+        stopDebugAudioCapture()
         stopRecognition()
         setStreamingState(false)
         sendRawCommand(["SYNC_STATE", "0", "idle"], preferredType: .withResponse)
@@ -597,16 +605,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             }
 
             if let error {
-                let nsError = error as NSError
-                if error is CancellationError
-                    || nsError.domain == "kAFAssistantErrorDomain"
-                    || error.localizedDescription.localizedCaseInsensitiveContains("canceled") {
-                    self.logDecision("recognitionTask ignored cancellation error \(error.localizedDescription)")
-                    return
-                }
-                self.logDecision("recognitionTask error \(error.localizedDescription)")
-                self.statusMessage = "Recognition error: \(error.localizedDescription)"
-                self.stopListening()
+                let desc = error.localizedDescription
+                self.logDecision("recognitionTask error: \(desc)")
+                if !self.isStreaming { return }
+                self.statusMessage = "Recognition ended: \(desc)"
             }
         }
         return true
@@ -760,6 +762,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         } else {
             appendPCM16(audioPayload)
         }
+        logAudioEnergyIfNeeded()
     }
 
     private func appendPCM16(_ payload: Data) {
@@ -767,6 +770,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         guard sampleCount > 0 else { return }
         let conditionedPayload = preprocessPCM16(payload)
         let recognitionPayload = upsampleForRecognitionIfNeeded(conditionedPayload)
+        debugAudioFileHandle?.write(recognitionPayload)
         let recognitionSampleCount = recognitionPayload.count / MemoryLayout<Int16>.size
         if let request = recognitionRequest,
            let buffer = AVAudioPCMBuffer(pcmFormat: recognitionFormat, frameCapacity: AVAudioFrameCount(recognitionSampleCount)),
@@ -789,9 +793,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         converted.withUnsafeMutableBytes { dstRaw in
             guard let dst = dstRaw.bindMemory(to: Int16.self).baseAddress else { return }
             for index in 0 ..< sampleCount {
-                // Frame mic outputs unsigned 8-bit PCM (0-255, silence at 128)
-                // Convert to signed 16-bit PCM (silence at 0)
-                dst[index] = Int16(Int(payload[index]) - 128) << 8
+                // Frame mic outputs signed 8-bit PCM (-128 to 127, silence at 0)
+                // Convert to signed 16-bit PCM by shifting left 8 bits
+                let signedByte = Int8(bitPattern: payload[index])
+                dst[index] = Int16(signedByte) << 8
             }
         }
 
@@ -842,9 +847,59 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                     let amplified = Int32((Float(dst[index]) * audioSmoothedGain).rounded())
                     dst[index] = Int16(max(-30000, min(30000, amplified)))
                 }
+
+                audioEnergyAccumulator += avgAbs
+                audioEnergySampleCount += 1
             }
         }
         return conditioned
+    }
+
+    private func logAudioEnergyIfNeeded() {
+        guard audioEnergySampleCount > 0, audioPacketCount % 500 == 0 else { return }
+        let avgEnergy = audioEnergyAccumulator / Float(audioEnergySampleCount)
+        logDecision("[AUDIO] energy=\(Int(avgEnergy)) gain=\(String(format: "%.2f", audioSmoothedGain)) dc=\(Int(audioDCEstimate)) packets=\(audioPacketCount)")
+        audioEnergyAccumulator = 0
+        audioEnergySampleCount = 0
+    }
+
+    private func startDebugAudioCapture() {
+        let fileName = "frame_audio_\(Int(Date().timeIntervalSince1970)).raw"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        debugAudioFileHandle = try? FileHandle(forWritingTo: url)
+        debugAudioFilePath = url
+        logDecision("[AUDIO] debug capture started: \(url.lastPathComponent)")
+    }
+
+    private func stopDebugAudioCapture() {
+        guard let handle = debugAudioFileHandle else { return }
+        try? handle.close()
+        debugAudioFileHandle = nil
+        if let path = debugAudioFilePath {
+            let size = (try? FileManager.default.attributesOfItem(atPath: path.path)[.size] as? Int) ?? 0
+            let duration = Double(size) / (Self.recognitionSampleRate * 2.0)
+            logDecision("[AUDIO] debug capture saved: \(path.lastPathComponent) size=\(size) bytes (~\(String(format: "%.1f", duration))s)")
+            if size > 0 {
+                debugAudioRecordings.append(path)
+                trimOldRecordings()
+            }
+        }
+    }
+
+    private func trimOldRecordings() {
+        while debugAudioRecordings.count > Self.maxDebugRecordings {
+            let old = debugAudioRecordings.removeFirst()
+            try? FileManager.default.removeItem(at: old)
+        }
+    }
+
+    func clearDebugRecordings() {
+        for url in debugAudioRecordings {
+            try? FileManager.default.removeItem(at: url)
+        }
+        debugAudioRecordings.removeAll()
+        debugAudioFilePath = nil
     }
 
     private func upsampleForRecognitionIfNeeded(_ payload: Data) -> Data {
@@ -914,6 +969,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         framePayloadLimit = 0
         hasReceivedFrameAppHeartbeat = false
         frameAppIsCompatible = false
+        stopDebugAudioCapture()
         stopRecognition()
         isStreaming = false
     }
