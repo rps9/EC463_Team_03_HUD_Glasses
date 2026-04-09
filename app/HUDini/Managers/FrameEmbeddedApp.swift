@@ -3,7 +3,7 @@ import Foundation
 enum FrameEmbeddedApp {
     static let mainLua = #"""
 local APP_DIR = "/hudini"
-local APP_VERSION = "2026.04.08.2"
+local APP_VERSION = "2026.04.08.3"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
 local state = {
@@ -266,6 +266,19 @@ local function handle_command(payload)
     state.needs_render = true
     return
   end
+
+  if command == "RESET" then
+    pcall(frame.microphone.stop)
+    state.partial_caption = ""
+    state.final_caption = ""
+    state.listening = false
+    state.audio_sequence = 0
+    state.needs_render = true
+    frame.sleep(0.05)
+    start_mic()
+    send_event({ "EVT", "RESET_OK" })
+    return
+  end
 end
 
 local function on_tap()
@@ -282,10 +295,11 @@ end
 local function send_audio_chunk(data)
   local sequence = state.audio_sequence
   local packet = string.char(0x20, sequence % 256, math.floor(sequence / 256) % 256) .. data
-  while true do
+  for _ = 1, 3 do
     if pcall(frame.bluetooth.send, packet) then
       break
     end
+    frame.sleep(0.001)
   end
   state.audio_sequence = (sequence + 1) % 65536
 end

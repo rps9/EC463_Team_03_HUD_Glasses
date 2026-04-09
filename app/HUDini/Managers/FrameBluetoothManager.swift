@@ -4,7 +4,6 @@ import CoreBluetooth
 import AVFoundation
 import Speech
 import SwiftUI
-import NaturalLanguage
 
 struct FrameDisplayPreferences: Equatable {
     var brightness: Int = 0
@@ -48,7 +47,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let streamSampleRate: Double = 8_000
     private static let streamBitDepth: Int = 16
     private static let recognitionSampleRate: Double = 16_000
-    private static let embeddedAppVersion = "2026.04.08.2"
+    private static let embeddedAppVersion = "2026.04.08.3"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
 
@@ -138,6 +137,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private let partialTranslationInterval: TimeInterval = 0.10
     private var latestTranscriptSnapshot: String = ""
     private var lastPartialTranslationText: String = ""
+    private var lastRecognitionResultAt: Date = .distantPast
+    private var lastAudioPacketAt: Date = .distantPast
+    private var audioPacketCount: Int = 0
     private var expectedPacketSeq: UInt16?
     private var lastSentFinalCaption: String = ""
     private var lastSentPartialCaption: String = ""
@@ -174,6 +176,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguageCode))
         central = CBCentralManager(delegate: self, queue: nil)
         handleState(central.state)
+        Task { _ = try? await translationClient.translate(text: "hello", source: "en", target: "es") }
     }
 
     func beginScanning() {
@@ -251,6 +254,16 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
         sendControlByte(Self.resetSignal)
         statusMessage = "Sent Frame reset signal"
+    }
+
+    func resetFrame() {
+        guard connectedPeripheral != nil else {
+            statusMessage = "Connect to Frame first"
+            return
+        }
+        sendRawCommand(["RESET"], preferredType: .withResponse)
+        stopListening()
+        statusMessage = "Frame reset"
     }
 
     func breakRunningFrameApp() {
@@ -529,6 +542,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     private func startRecognition() -> Bool {
+        audioPacketCount = 0
+        lastRecognitionResultAt = Date()
+        lastAudioPacketAt = .distantPast
         logDecision("startRecognition invoked locale=\(selectedLanguageCode)")
         guard let recognizer, recognizer.isAvailable else {
             statusMessage = "Speech recognizer unavailable"
@@ -549,7 +565,11 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             guard let self else { return }
             if let result {
                 let transcript = result.bestTranscription.formattedString
-                self.logDecision("recognitionTask result isFinal=\(result.isFinal) transcript=\(transcript)")
+                let now = Date()
+                let sinceLastResult = now.timeIntervalSince(self.lastRecognitionResultAt)
+                let sinceLastAudio = now.timeIntervalSince(self.lastAudioPacketAt)
+                self.lastRecognitionResultAt = now
+                self.logDecision("[TIMING] recognition result isFinal=\(result.isFinal) sinceLastResult=\(String(format: "%.0f", sinceLastResult * 1000))ms sinceLastAudio=\(String(format: "%.0f", sinceLastAudio * 1000))ms packets=\(self.audioPacketCount) transcript=\(transcript)")
                 if !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     self.liveTranscript = transcript
                     self.handleTranscriptUpdate(text: transcript, isFinal: result.isFinal)
@@ -607,15 +627,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             return
         }
 
-        if !isFinal, trimmed.count >= 10, let detected = detectLanguage(trimmed),
-           detected == normalizedLanguageCode(targetLanguageCode),
-           detected != normalizedLanguageCode(selectedLanguageCode) {
-            logDecision("handleTranscriptUpdate detected target language (\(detected)), showing directly")
-            renderedText = trimmed
-            sendHUDTextToFrame(trimmed, isPartial: true)
-            return
-        }
-
         if !isFinal {
             guard trimmed.count >= 2 else {
                 logDecision("partial translation skipped text too short count=\(trimmed.count)")
@@ -642,8 +653,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         let requestID = UUID()
         latestTranslationRequestID = requestID
         let transcriptSnapshot = trimmed
+        let translationStartTime = Date()
         translationTask?.cancel()
-        logDecision("translationTask start requestID=\(requestID) isFinal=\(isFinal) source=\(selectedLanguageCode) target=\(targetLanguageCode) transcript=\(transcriptSnapshot)")
+        logDecision("[TIMING] translation start isFinal=\(isFinal) source=\(selectedLanguageCode) target=\(targetLanguageCode) text=\(transcriptSnapshot)")
         translationTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -652,17 +664,18 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                     source: selectedLanguageCode,
                     target: targetLanguageCode
                 )
+                let apiMs = Date().timeIntervalSince(translationStartTime) * 1000
                 guard !Task.isCancelled else { return }
                 guard latestTranslationRequestID == requestID else {
-                    self.logDecision("translationTask dropped stale requestID=\(requestID)")
+                    self.logDecision("[TIMING] translation dropped stale after \(String(format: "%.0f", apiMs))ms")
                     return
                 }
                 if !isFinal, latestTranscriptSnapshot != transcriptSnapshot {
-                    self.logDecision("translationTask dropped partial snapshot mismatch requestID=\(requestID) latest=\(self.latestTranscriptSnapshot) snapshot=\(transcriptSnapshot)")
+                    self.logDecision("[TIMING] translation dropped mismatch after \(String(format: "%.0f", apiMs))ms")
                     return
                 }
 
-                self.logDecision("translationTask success requestID=\(requestID) translated=\(translated)")
+                self.logDecision("[TIMING] translation done in \(String(format: "%.0f", apiMs))ms translated=\(translated)")
                 renderedText = translated
                 sendHUDTextToFrame(translated, isPartial: !isFinal)
             } catch is CancellationError {
@@ -692,13 +705,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         normalizedLanguageCode(source) == normalizedLanguageCode(target)
     }
 
-    private func detectLanguage(_ text: String) -> String? {
-        let recognizer = NLLanguageRecognizer()
-        recognizer.processString(text)
-        guard let lang = recognizer.dominantLanguage else { return nil }
-        return normalizedLanguageCode(lang.rawValue)
-    }
-
     private func normalizedLanguageCode(_ code: String) -> String {
         let cleaned = code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !cleaned.isEmpty else { return cleaned }
@@ -719,14 +725,17 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
         let packetSeq = UInt16(payload[1]) | (UInt16(payload[2]) << 8)
         let audioPayload = payload.subdata(in: 3 ..< payload.count)
-        logDecision("audioPacket seq=\(packetSeq) bytes=\(audioPayload.count) expected=\(expectedPacketSeq.map(String.init) ?? "nil")")
+        lastAudioPacketAt = Date()
+        audioPacketCount += 1
+        if audioPacketCount % 100 == 0 {
+            logDecision("audioPacket milestone count=\(audioPacketCount) seq=\(packetSeq)")
+        }
 
         if let expected = expectedPacketSeq {
             let missing = Int(packetSeq &- expected)
             if missing > 0 && missing < 64 {
                 let bytesPerSample = max(1, Self.streamBitDepth / 8)
                 let silenceSamples = (audioPayload.count / bytesPerSample) * missing
-                logDecision("audioPacket gap detected expected=\(expected) actual=\(packetSeq) missing=\(missing) silenceSamples=\(silenceSamples)")
                 appendSilence(samples: silenceSamples)
             }
         }

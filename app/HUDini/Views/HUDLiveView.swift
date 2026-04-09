@@ -224,6 +224,18 @@ struct HUDLiveView: View {
                      : "Connect the Frame glasses from Settings > Bluetooth to send rendered output to the device.")
                     .font(.system(.body, design: .rounded))
                     .foregroundStyle(HUDTheme.inkMuted)
+
+                if isFrameConnected {
+                    Button {
+                        frameManager.resetFrame()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.counterclockwise")
+                            Text("Reset Frame")
+                        }
+                    }
+                    .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.amber))
+                }
             }
         }
     }

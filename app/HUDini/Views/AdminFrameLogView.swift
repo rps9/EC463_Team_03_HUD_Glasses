@@ -77,6 +77,12 @@ struct AdminFrameLogView: View {
                             }
                             .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.rose))
                             .disabled(!isFrameConnected)
+
+                            Button("Reset Frame") {
+                                frameManager.resetFrame()
+                            }
+                            .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.amber))
+                            .disabled(!isFrameConnected)
                         }
                     }
                 }
