@@ -1,0 +1,7 @@
+[
+  {"text": "ہیلو", "expected": "HEE-loh"},
+  {"text": "شکریہ", "expected": "shoo-KREE-yah"},
+  {"text": "مہربانی", "expected": "mehr-bah-NEE"},
+  {"text": "جامعہ", "expected": "JAH-mee-ah"},
+  {"text": "کمپیوٹر", "expected": "kuhm-PYOO-tur"}
+]

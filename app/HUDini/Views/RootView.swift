@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var authManager = AuthenticationManager()
-    @StateObject private var bluetoothManager = BluetoothDemoManager()
+    @StateObject private var frameManager = FrameBluetoothManager()
     @StateObject private var conversationHistoryStore = HUDConversationHistoryStore()
     @StateObject private var suggestionProfileStore = SuggestionProfileStore()
     @State private var hasEnteredApp = false
@@ -29,13 +30,21 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.light)
+        .onChange(of: scenePhase, initial: true) { _, newPhase in
+            frameManager.handleScenePhaseChange(newPhase)
+        }
+        .task {
+            if authManager.isAuthenticated {
+                await authManager.refreshCurrentUserRole()
+            }
+        }
     }
 
     private var mainContentView: some View {
         TabView {
             NavigationStack {
                 HUDLiveView()
-                    .environmentObject(bluetoothManager)
+                    .environmentObject(frameManager)
                     .environmentObject(conversationHistoryStore)
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
@@ -92,7 +101,7 @@ struct RootView: View {
         VStack(alignment: .leading, spacing: 8) {
             NavigationLink {
                 SettingsView()
-                    .environmentObject(bluetoothManager)
+                    .environmentObject(frameManager)
                     .environmentObject(authManager)
                     .environmentObject(suggestionProfileStore)
                     .environmentObject(conversationHistoryStore)
@@ -104,6 +113,20 @@ struct RootView: View {
                     showAppMenu = false
                 }
             })
+
+            if authManager.isAdmin {
+                NavigationLink {
+                    AdminFrameLogView()
+                        .environmentObject(frameManager)
+                } label: {
+                    menuRow(title: "Admin", icon: "terminal")
+                }
+                .simultaneousGesture(TapGesture().onEnded {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                        showAppMenu = false
+                    }
+                })
+            }
 
             Button {
                 withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {

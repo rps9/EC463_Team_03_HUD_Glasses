@@ -13,7 +13,7 @@ final class TranscriptionManager: ObservableObject {
     private let pipeline: HUDTranscriptionTranslationPipeline
 
     init(pipeline: HUDTranscriptionTranslationPipeline? = nil) {
-        self.listeningLanguageCode = Self.defaultListeningLanguageCode
+        self.listeningLanguageCode = TranslationLanguages.defaultListeningLanguageCode
         self.targetLanguageCode = "en"
 
         if let pipeline {
@@ -94,6 +94,7 @@ final class TranscriptionManager: ObservableObject {
         }
 
         listeningLanguageCode = code
+        UserDefaults.standard.set(code, forKey: APIConfig.AppStorageKey.hudListeningLanguageCode)
         if isTranscribing {
             statusMessage = "Listening language updated — restart to apply."
         } else {
@@ -128,24 +129,5 @@ final class TranscriptionManager: ObservableObject {
             return String(lowered[..<underscore])
         }
         return lowered
-    }
-}
-
-private extension TranscriptionManager {
-    static var defaultListeningLanguageCode: String {
-        if #available(iOS 16.0, *) {
-            if let current = Locale.current.language.languageCode?.identifier,
-               TranslationLanguages.supported.contains(where: { $0.code == current }) {
-                return current
-            }
-        }
-
-        let identifier = Locale.current.identifier
-        if let prefix = identifier.split(separator: "_").first,
-           TranslationLanguages.supported.contains(where: { $0.code == String(prefix) }) {
-            return String(prefix)
-        }
-
-        return "en"
     }
 }

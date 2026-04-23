@@ -1,0 +1,13 @@
+{
+  "language": "bn",
+  "required_rule_families": ["greeting", "politeness", "sentence_phrase", "technology", "lexical_rules"],
+  "thresholds": {"minimum_holdout_cases": 2, "max_exception_dependency_rate": 0.85},
+  "cases": [
+    {"text": "হ্যালো", "expected": "HYAH-loh", "rule_family": "greeting", "split": "train"},
+    {"text": "ধন্যবাদ", "expected": "dhon-noh-BAHD", "rule_family": "politeness", "split": "train"},
+    {"text": "আমি ভালো আছি", "expected": "AH-mee BHAH-loh AH-chhee", "rule_family": "sentence_phrase", "split": "train"},
+    {"text": "কম্পিউটার", "expected": "kohm-PYOO-tar", "rule_family": "technology", "split": "train"},
+    {"text": "ভাষা", "expected": "BAHS-sah", "rule_family": "lexical_rules", "split": "holdout"},
+    {"text": "বাংলা", "expected": "BAHNG-lah", "rule_family": "lexical_rules", "split": "holdout"}
+  ]
+}

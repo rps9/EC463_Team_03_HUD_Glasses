@@ -28,6 +28,8 @@ final class HUDTranscriptionTranslationPipeline {
     private let translationClient: HUDTranslationClient
     private var translationTask: Task<Void, Never>?
     private var latestRequestID = UUID()
+    private var latestTranscriptSnapshot: String = ""
+    private var lastPartialTranslationWordCount: Int = 0
 
     init(
         transcriptionService: HUDTranscriptionService? = nil,
@@ -103,24 +105,36 @@ final class HUDTranscriptionTranslationPipeline {
             return
         }
 
+        latestTranscriptSnapshot = trimmed
+
         if shouldBypassTranslation(source: listeningLanguageCode, target: targetLanguageCode) {
             onUpdate(Output(transcript: transcript, renderedText: transcript, isFinal: update.isFinal, wasTranslated: false))
             return
         }
 
+        if !update.isFinal {
+            let partialWordCount = wordCount(in: trimmed)
+            guard partialWordCount > lastPartialTranslationWordCount else { return }
+            lastPartialTranslationWordCount = partialWordCount
+        } else {
+            lastPartialTranslationWordCount = wordCount(in: trimmed)
+        }
+
         let requestID = UUID()
         latestRequestID = requestID
         translationTask?.cancel()
+        let transcriptSnapshot = trimmed
         translationTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let translated = try await translationClient.translate(
-                    text: trimmed,
+                    text: transcriptSnapshot,
                     source: listeningLanguageCode,
                     target: targetLanguageCode
                 )
                 guard !Task.isCancelled else { return }
                 guard self.latestRequestID == requestID else { return }
+                if !update.isFinal, self.latestTranscriptSnapshot != transcriptSnapshot { return }
                 onUpdate(Output(transcript: transcript, renderedText: translated, isFinal: update.isFinal, wasTranslated: true))
             } catch is CancellationError {
                 return
@@ -136,6 +150,7 @@ final class HUDTranscriptionTranslationPipeline {
         latestRequestID = UUID()
         translationTask?.cancel()
         translationTask = nil
+        lastPartialTranslationWordCount = 0
     }
 
     private func shouldBypassTranslation(source: String, target: String) -> Bool {
@@ -155,5 +170,9 @@ final class HUDTranscriptionTranslationPipeline {
         }
 
         return cleaned
+    }
+
+    private func wordCount(in text: String) -> Int {
+        text.split(whereSeparator: \.isWhitespace).count
     }
 }

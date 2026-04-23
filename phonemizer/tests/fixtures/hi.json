@@ -1,0 +1,7 @@
+[
+  {"text": "नमस्ते", "expected": "nah-mahs-TAY"},
+  {"text": "धन्यवाद", "expected": "dhun-yuh-VAHD"},
+  {"text": "मैं ठीक हूँ", "expected": "mein theek hoon"},
+  {"text": "कंप्यूटर", "expected": "kuhm-PYOO-tur"},
+  {"text": "विश्वविद्यालय", "expected": "vish-vuh-vid-DYAH-lay"}
+]

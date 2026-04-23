@@ -1,0 +1,7 @@
+[
+  {"text": "হ্যালো", "expected": "HYAH-loh"},
+  {"text": "ধন্যবাদ", "expected": "dhon-noh-BAHD"},
+  {"text": "আমি ভালো আছি", "expected": "AH-mee BHAH-loh AH-chhee"},
+  {"text": "কম্পিউটার", "expected": "kohm-PYOO-tar"},
+  {"text": "বিশ্ববিদ্যালয়", "expected": "beesh-shoh-bid-DYAH-loy"}
+]

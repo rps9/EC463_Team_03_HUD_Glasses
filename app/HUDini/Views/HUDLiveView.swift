@@ -1,14 +1,15 @@
 import SwiftUI
 
 struct HUDLiveView: View {
-    @EnvironmentObject private var bluetoothManager: BluetoothDemoManager
+    @EnvironmentObject private var frameManager: FrameBluetoothManager
     @EnvironmentObject private var conversationHistoryStore: HUDConversationHistoryStore
     @AppStorage(wrappedValue: true, APIConfig.AppStorageKey.hudSuggestionEnabled) private var suggestionEnabled: Bool
+    @AppStorage(wrappedValue: TranslationLanguages.defaultListeningLanguageCode, APIConfig.AppStorageKey.hudListeningLanguageCode) private var storedListeningLanguageCode: String
     @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
     @State private var targetLanguage: String = "en"
-    @State private var listeningLanguageCode: String = HUDLiveView.defaultListeningLanguageCode
-    @State private var installedLanguages: [TranslationLanguageOption] = TranslationLanguages.supported
+    @State private var listeningLanguageCode: String = TranslationLanguages.defaultListeningLanguageCode
+    @State private var listeningLanguageOptions: [TranslationLanguageOption] = TranslationLanguages.supported
     @State private var renderedTextDebounceTask: Task<Void, Never>?
     @State private var lastSentBLEText: String = ""
 
@@ -44,19 +45,29 @@ struct HUDLiveView: View {
         }
         .task {
             await transcriptionManager.requestPermissions()
-            await loadInstalledLanguages()
+            loadListeningLanguages()
+            applyInitialLanguageConfiguration()
         }
         .onChange(of: listeningLanguageCode, initial: false) { _, newValue in
             transcriptionManager.setListeningLanguage(newValue)
+            frameManager.setRecognitionLanguage(newValue)
         }
         .onChange(of: targetLanguage, initial: false) { _, newValue in
             transcriptionManager.setTargetLanguage(newValue)
+            frameManager.setTargetLanguage(newValue)
         }
         .onChange(of: transcriptionManager.renderedText, initial: false) { _, newValue in
-            scheduleDebouncedHUDSideEffects(for: newValue)
+            if !shouldUseFrameMic {
+                scheduleDebouncedHUDSideEffects(for: newValue, mirrorToFrame: true)
+            }
         }
-        .onChange(of: bluetoothManager.state, initial: false) { _, newState in
-            if !isTransceiverConnected(state: newState) {
+        .onChange(of: frameManager.renderedText, initial: false) { _, newValue in
+            if shouldUseFrameMic {
+                scheduleDebouncedHUDSideEffects(for: newValue, mirrorToFrame: false)
+            }
+        }
+        .onChange(of: frameManager.state, initial: false) { _, newState in
+            if !isFrameConnected(state: newState) {
                 lastSentBLEText = ""
             }
         }
@@ -68,13 +79,25 @@ struct HUDLiveView: View {
                 suggestionManager.clearSuggestion()
             }
         }
+        .onChange(of: suggestionManager.suggestionPhonetic, initial: false) { _, newPhonetic in
+            guard shouldUseFrameMic, isFrameConnected, !isListening else { return }
+            let trimmed = newPhonetic.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                frameManager.clearSuggestionOnFrame()
+            } else {
+                frameManager.sendSuggestionToFrame(trimmed)
+            }
+        }
         .onDisappear {
             renderedTextDebounceTask?.cancel()
             renderedTextDebounceTask = nil
-            if transcriptionManager.isTranscribing {
+            if isListening {
                 persistConversationSnapshotIfNonEmpty()
             }
             transcriptionManager.stop()
+            if frameManager.isStreaming {
+                frameManager.stopListening()
+            }
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
             }
@@ -161,7 +184,7 @@ struct HUDLiveView: View {
                         value: listeningLanguageLabel(for: listeningLanguageCode),
                         icon: "globe.badge.chevron.backward",
                         selection: $listeningLanguageCode,
-                        options: installedLanguages
+                        options: listeningLanguageOptions
                     )
 
                     languagePickerCard(
@@ -177,13 +200,13 @@ struct HUDLiveView: View {
                     toggleListening()
                 } label: {
                     HStack(spacing: 10) {
-                        Image(systemName: transcriptionManager.isTranscribing ? "stop.fill" : "mic.fill")
-                        Text(transcriptionManager.isTranscribing ? "Stop Listening" : "Start Listening")
+                        Image(systemName: isListening ? "stop.fill" : "mic.fill")
+                        Text(isListening ? "Stop Listening" : "Start Listening")
                     }
                 }
                 .buttonStyle(
                     HUDPrimaryButtonStyle(
-                        tint: transcriptionManager.isTranscribing ? HUDTheme.rose : HUDTheme.ink
+                        tint: isListening ? HUDTheme.rose : HUDTheme.ink
                     )
                 )
             }
@@ -199,17 +222,29 @@ struct HUDLiveView: View {
                         .foregroundStyle(HUDTheme.ink)
                     Spacer()
                     HUDStatusPill(
-                        text: isTransceiverConnected ? "Ready to send" : "Not connected",
-                        tint: isTransceiverConnected ? HUDTheme.mint : HUDTheme.amber,
+                        text: isFrameConnected ? "Ready to send" : "Not connected",
+                        tint: isFrameConnected ? HUDTheme.mint : HUDTheme.amber,
                         icon: "antenna.radiowaves.left.and.right"
                     )
                 }
 
-                Text(isTransceiverConnected
-                     ? "Translated output is mirrored to the BLE transceiver automatically whenever the rendered text changes."
-                     : "Connect the HUD transceiver from Settings > Bluetooth to send rendered output to the device.")
+                Text(isFrameConnected
+                     ? "Translated output is mirrored to the Frame glasses automatically whenever the rendered text changes."
+                     : "Connect the Frame glasses from Settings > Bluetooth to send rendered output to the device.")
                     .font(.system(.body, design: .rounded))
                     .foregroundStyle(HUDTheme.inkMuted)
+
+                if isFrameConnected {
+                    Button {
+                        frameManager.resetFrame()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.counterclockwise")
+                            Text("Reset Frame")
+                        }
+                    }
+                    .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.amber))
+                }
             }
         }
     }
@@ -260,7 +295,8 @@ struct HUDLiveView: View {
     }
 
     private var hudDisplayText: String {
-        let raw = transcriptionManager.renderedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceText = shouldUseFrameMic ? frameManager.renderedText : transcriptionManager.renderedText
+        let raw = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return "" }
         if raw.count > hudCharacterLimit {
             return String(raw.suffix(hudCharacterLimit))
@@ -268,52 +304,83 @@ struct HUDLiveView: View {
         return raw
     }
 
+    private var activeTranscriptText: String {
+        shouldUseFrameMic ? frameManager.liveTranscript : transcriptionManager.transcript
+    }
+
+    private var activeRenderedText: String {
+        shouldUseFrameMic ? frameManager.renderedText : transcriptionManager.renderedText
+    }
+
+    private var shouldUseFrameMic: Bool {
+        isFrameConnected
+    }
+
+    private var isListening: Bool {
+        shouldUseFrameMic ? frameManager.isStreaming : transcriptionManager.isTranscribing
+    }
+
     private func toggleListening() {
-        if transcriptionManager.isTranscribing {
+        if isListening {
+            let finalText = activeRenderedText
             persistConversationSnapshotIfNonEmpty()
-            transcriptionManager.stop()
+            if shouldUseFrameMic {
+                frameManager.stopListening()
+            } else {
+                transcriptionManager.stop()
+            }
             renderedTextDebounceTask?.cancel()
             renderedTextDebounceTask = nil
+            if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
+                suggestionManager.refreshSuggestion(for: finalText, languageCode: listeningLanguageCode)
+            }
+        } else {
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
             }
-        } else {
-            transcriptionManager.startTranscribing(
-                listeningLanguage: listeningLanguageCode,
-                translatingTo: Self.hudTargetLanguageCode
-            )
+            if shouldUseFrameMic {
+                frameManager.clearSuggestionOnFrame()
+                frameManager.startTranscribing(
+                    listeningLanguage: listeningLanguageCode,
+                    translatingTo: Self.hudTargetLanguageCode
+                )
+            } else {
+                transcriptionManager.startTranscribing(
+                    listeningLanguage: listeningLanguageCode,
+                    translatingTo: Self.hudTargetLanguageCode
+                )
+            }
         }
     }
 
-    private var isTransceiverConnected: Bool {
-        isTransceiverConnected(state: bluetoothManager.state)
+    private var isFrameConnected: Bool {
+        isFrameConnected(state: frameManager.state)
     }
 
-    private func isTransceiverConnected(state: BluetoothDemoManager.ConnectionState) -> Bool {
+    private func isFrameConnected(state: FrameBluetoothManager.ConnectionState) -> Bool {
         if case .connected = state { return true }
         return false
     }
 
-    private func scheduleDebouncedHUDSideEffects(for text: String) {
+    private func scheduleDebouncedHUDSideEffects(for text: String, mirrorToFrame: Bool) {
         renderedTextDebounceTask?.cancel()
         let delay = Self.renderedTextDebounceNanoseconds
         renderedTextDebounceTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
-            if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
-                suggestionManager.refreshSuggestion(for: text, languageCode: Self.hudTargetLanguageCode)
+            if mirrorToFrame {
+                pushTranslatedTextToFrameIfNeeded(text)
             }
-            pushTranslatedTextToTransceiverIfNeeded(text)
         }
     }
 
-    private func pushTranslatedTextToTransceiverIfNeeded(_ text: String) {
+    private func pushTranslatedTextToFrameIfNeeded(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        guard isTransceiverConnected else { return }
+        guard isFrameConnected else { return }
         guard trimmed != lastSentBLEText else { return }
         lastSentBLEText = trimmed
-        bluetoothManager.sendHUDTextToTransceiver(trimmed, updateStatus: false)
+        frameManager.sendHUDTextToFrame(trimmed, isPartial: false, updateStatus: false)
     }
 
     private var targetLanguageLabel: String {
@@ -322,23 +389,38 @@ struct HUDLiveView: View {
     }
 
     private func listeningLanguageLabel(for code: String) -> String {
-        installedLanguages.first(where: { $0.code == code })?.name ?? TranslationLanguages.displayName(for: code)
+        listeningLanguageOptions.first(where: { $0.code == code })?.name ?? TranslationLanguages.displayName(for: code)
     }
 
-    private func loadInstalledLanguages() async {
-        let installed = await TranslationLanguages.installedTargetOptions()
-        installedLanguages = installed
-        if !installed.contains(where: { $0.code == listeningLanguageCode }) {
-            listeningLanguageCode = installed.first?.code ?? Self.hudTargetLanguageCode
+    private func loadListeningLanguages() {
+        listeningLanguageOptions = TranslationLanguages.supported
+        if !listeningLanguageOptions.contains(where: { $0.code == listeningLanguageCode }) {
+            listeningLanguageCode = TranslationLanguages.defaultListeningLanguageCode
         }
         targetLanguage = Self.hudTargetLanguageCode
     }
 
+    private func applyInitialLanguageConfiguration() {
+        let resolvedListeningCode: String
+        if listeningLanguageOptions.contains(where: { $0.code == storedListeningLanguageCode }) {
+            resolvedListeningCode = storedListeningLanguageCode
+        } else {
+            resolvedListeningCode = listeningLanguageCode
+        }
+
+        listeningLanguageCode = resolvedListeningCode
+        storedListeningLanguageCode = resolvedListeningCode
+        transcriptionManager.setListeningLanguage(resolvedListeningCode)
+        frameManager.setRecognitionLanguage(resolvedListeningCode)
+        transcriptionManager.setTargetLanguage(targetLanguage)
+        frameManager.setTargetLanguage(targetLanguage)
+    }
+
     /// Saves the current HUD translation when a listening session ends (stop button or leaving Live while mic is on).
     private func persistConversationSnapshotIfNonEmpty() {
-        let translated = transcriptionManager.renderedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let translated = activeRenderedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !translated.isEmpty else { return }
-        let source = transcriptionManager.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = activeTranscriptText.trimmingCharacters(in: .whitespacesAndNewlines)
         let entry = HUDConversationHistoryEntry(
             id: UUID(),
             createdAt: Date(),
@@ -354,26 +436,7 @@ struct HUDLiveView: View {
 #Preview {
     NavigationStack {
         HUDLiveView()
-            .environmentObject(BluetoothDemoManager())
+            .environmentObject(FrameBluetoothManager())
             .environmentObject(HUDConversationHistoryStore())
-    }
-}
-
-private extension HUDLiveView {
-    static var defaultListeningLanguageCode: String {
-        if #available(iOS 16.0, *) {
-            if let current = Locale.current.language.languageCode?.identifier,
-               TranslationLanguages.supported.contains(where: { $0.code == current }) {
-                return current
-            }
-        }
-
-        let identifier = Locale.current.identifier
-        if let prefix = identifier.split(separator: "_").first,
-           TranslationLanguages.supported.contains(where: { $0.code == String(prefix) }) {
-            return String(prefix)
-        }
-
-        return "en"
     }
 }

@@ -1,21 +1,71 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <U8g2lib.h>
+#include "esp_log.h"
+#include <BLE2902.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
 
 namespace {
 
-constexpr uint8_t PIN_CS = 17;
-constexpr uint8_t PIN_DC = 16;
-constexpr uint8_t PIN_RST = 20;
+constexpr int PIN_DISPLAY_MOSI = 23;
+constexpr int PIN_DISPLAY_CLK = 18;
+constexpr int PIN_DISPLAY_CS = 5;
+constexpr int PIN_DISPLAY_DC = 21;
+constexpr int PIN_DISPLAY_RST = 22;
 
 constexpr size_t MAX_TEXT_LEN = 160;
 constexpr uint8_t LINE_HEIGHT = 10;
 constexpr uint8_t MAX_LINES = 6;
 
-U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI display(U8G2_R0, PIN_CS, PIN_DC, PIN_RST);
+BLEUUID SERVICE_UUID("9A1D0001-7E54-4B1A-8B64-3A8F2C1D0001");
+BLEUUID AUDIO_DATA_UUID("9A1D0002-7E54-4B1A-8B64-3A8F2C1D0001");
+BLEUUID CONTROL_UUID("9A1D0003-7E54-4B1A-8B64-3A8F2C1D0001");
+BLEUUID STATUS_UUID("9A1D0004-7E54-4B1A-8B64-3A8F2C1D0001");
 
-String inputLine;
-String currentText = "Type text in serial monitor";
+U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI display(U8G2_R2, PIN_DISPLAY_CS, PIN_DISPLAY_DC, PIN_DISPLAY_RST);
+
+BLECharacteristic *audioDataCharacteristic = nullptr;
+BLECharacteristic *statusCharacteristic = nullptr;
+
+volatile bool deviceConnected = false;
+std::string inboundTextBuffer;
+String currentDisplayText = "Waiting for phone mic text";
+String pendingDisplayText;
+volatile bool displayDirty = false;
+portMUX_TYPE displayMux = portMUX_INITIALIZER_UNLOCKED;
+
+void queueDisplayText(const String &text) {
+  String trimmed = text;
+  trimmed.trim();
+  if (trimmed.isEmpty()) {
+    trimmed = " ";
+  }
+
+  if (trimmed.length() > MAX_TEXT_LEN) {
+    trimmed.remove(MAX_TEXT_LEN);
+  }
+
+  portENTER_CRITICAL(&displayMux);
+  pendingDisplayText = trimmed;
+  displayDirty = true;
+  portEXIT_CRITICAL(&displayMux);
+}
+
+bool notificationsEnabled(BLECharacteristic *characteristic) {
+  if (characteristic == nullptr) {
+    return false;
+  }
+
+  BLEDescriptor *cccd = characteristic->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
+  if (cccd == nullptr) {
+    return false;
+  }
+
+  BLE2902 *descriptor2902 = static_cast<BLE2902 *>(cccd);
+  return descriptor2902->getNotifications();
+}
 
 void drawWrappedText(const String &text) {
   display.clearBuffer();
@@ -55,63 +105,159 @@ void drawWrappedText(const String &text) {
 }
 
 void showBootScreen() {
+  SPI.begin(PIN_DISPLAY_CLK, -1, PIN_DISPLAY_MOSI, PIN_DISPLAY_CS);
   display.begin();
   display.clearBuffer();
   display.setFont(u8g2_font_5x7_tf);
-  display.drawStr(0, 8, "HUDini display test");
-  display.drawStr(0, 18, "Pico 2 W ready");
-  display.drawStr(0, 28, "Send a line over USB");
+  display.drawStr(0, 8, "HUDini BLE display");
+  display.drawStr(0, 18, "ESP32 ready");
+  display.drawStr(0, 28, "Waiting for app text");
+  display.drawStr(0, 38, "DIN23 CLK18");
+  display.drawStr(0, 48, "CS5 DC21 RST22");
   display.sendBuffer();
 }
 
-void handleCompletedLine(String line) {
-  line.trim();
-  if (line.isEmpty()) {
+void flushDisplayIfNeeded() {
+  if (!displayDirty) {
     return;
   }
 
-  if (line.length() > MAX_TEXT_LEN) {
-    line.remove(MAX_TEXT_LEN);
-  }
+  String nextText;
+  portENTER_CRITICAL(&displayMux);
+  nextText = pendingDisplayText;
+  displayDirty = false;
+  portEXIT_CRITICAL(&displayMux);
 
-  currentText = line;
-  drawWrappedText(currentText);
-
-  Serial.print("Displayed: ");
-  Serial.println(currentText);
+  currentDisplayText = nextText;
+  drawWrappedText(currentDisplayText);
 }
 
-void pollSerial() {
-  while (Serial.available()) {
-    const char c = static_cast<char>(Serial.read());
+void publishStatus(const char *text) {
+  if (statusCharacteristic == nullptr) {
+    return;
+  }
 
-    if (c == '\r') {
-      continue;
+  statusCharacteristic->setValue(text);
+  if (deviceConnected && notificationsEnabled(statusCharacteristic)) {
+    statusCharacteristic->notify();
+  }
+}
+
+class DisplayServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer *server) override {
+    (void)server;
+    deviceConnected = true;
+    publishStatus("Connected");
+    queueDisplayText("BLE connected");
+  }
+
+  void onDisconnect(BLEServer *server) override {
+    deviceConnected = false;
+    publishStatus("Disconnected");
+    queueDisplayText("BLE disconnected");
+    server->startAdvertising();
+  }
+};
+
+class ControlCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *characteristic) override {
+    std::string value = characteristic->getValue();
+    if (value.empty()) {
+      return;
     }
 
-    if (c == '\n') {
-      handleCompletedLine(inputLine);
-      inputLine = "";
-      continue;
+    std::string upperValue = value;
+    for (char &ch : upperValue) {
+      ch = static_cast<char>(toupper(static_cast<unsigned char>(ch)));
     }
 
-    if (inputLine.length() < MAX_TEXT_LEN) {
-      inputLine += c;
+    if (upperValue == "START") {
+      publishStatus("Display ready");
+      Serial.println("[BLE RX] START");
+    } else if (upperValue == "STOP") {
+      publishStatus("Idle");
+      Serial.println("[BLE RX] STOP");
+    } else if (upperValue.rfind("TEXT_BEGIN", 0) == 0) {
+      inboundTextBuffer.clear();
+      Serial.println("[BLE RX] TEXT_BEGIN");
+    } else if (upperValue.rfind("TEXT_CHUNK:", 0) == 0) {
+      inboundTextBuffer += value.substr(11);
+    } else if (upperValue.rfind("TEXT_END", 0) == 0) {
+      Serial.println("[BLE RX] TEXT_END");
+      Serial.print("[BLE RX] ");
+      Serial.println(inboundTextBuffer.c_str());
+      queueDisplayText(String(inboundTextBuffer.c_str()));
+      publishStatus("Rendered text");
+    } else if (upperValue.rfind("TEXT:", 0) == 0) {
+      const String text = String(value.substr(5).c_str());
+      Serial.print("[BLE RX] ");
+      Serial.println(text);
+      queueDisplayText(text);
+      publishStatus("Rendered text");
     }
   }
+};
+
+void setupBLE() {
+  BLEDevice::init("HUDini-Display");
+  BLEDevice::setMTU(185);
+
+  BLEServer *server = BLEDevice::createServer();
+  server->setCallbacks(new DisplayServerCallbacks());
+
+  BLEService *service = server->createService(SERVICE_UUID);
+
+  audioDataCharacteristic = service->createCharacteristic(
+      AUDIO_DATA_UUID,
+      BLECharacteristic::PROPERTY_NOTIFY);
+  audioDataCharacteristic->addDescriptor(new BLE2902());
+
+  BLECharacteristic *controlCharacteristic = service->createCharacteristic(
+      CONTROL_UUID,
+      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+  controlCharacteristic->setCallbacks(new ControlCallbacks());
+
+  statusCharacteristic = service->createCharacteristic(
+      STATUS_UUID,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  statusCharacteristic->addDescriptor(new BLE2902());
+  statusCharacteristic->setValue("Idle");
+
+  service->start();
+
+  BLEAdvertising *advertising = BLEDevice::getAdvertising();
+  advertising->addServiceUUID(SERVICE_UUID);
+  advertising->setScanResponse(true);
+  advertising->setMinPreferred(0x06);
+  advertising->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+}
+
+void setupFirmware() {
+  Serial.begin(115200);
+  delay(300);
+  esp_log_level_set("BLECharacteristic", ESP_LOG_NONE);
+  esp_log_level_set("BLE2902", ESP_LOG_NONE);
+
+  showBootScreen();
+  setupBLE();
+  queueDisplayText(currentDisplayText);
+
+  Serial.println("HUDini BLE display ready");
+  Serial.println("Connect from the app and send TEXT packets over the control characteristic");
+}
+
+void loopFirmware() {
+  flushDisplayIfNeeded();
+  delay(10);
 }
 
 }  // namespace
 
 void setup() {
-  Serial.begin(115200);
-  delay(500);
-
-  showBootScreen();
-  Serial.println("HUDini display test ready");
-  Serial.println("Send one line over serial to render it on the OLED");
+  setupFirmware();
 }
 
 void loop() {
-  pollSerial();
+  loopFirmware();
 }

@@ -23,6 +23,10 @@ enum APIConfig {
         URL(string: "\(baseURL)/auth/google")
     }
 
+    static var authMeURL: URL? {
+        URL(string: "\(baseURL)/auth/me")
+    }
+
     static var googleClientID: String? {
         Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String
     }
@@ -47,5 +51,6 @@ enum APIConfig {
     /// `AppStorage` / `UserDefaults` keys (avoid scattering string literals).
     enum AppStorageKey {
         static let hudSuggestionEnabled = "hudSuggestionEnabled"
+        static let hudListeningLanguageCode = "hudListeningLanguageCode"
     }
 }

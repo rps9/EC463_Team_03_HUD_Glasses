@@ -1,0 +1,13 @@
+{
+  "language": "ar",
+  "required_rule_families": ["greeting", "politeness", "academic", "technology", "abjad_fallback"],
+  "thresholds": {"minimum_holdout_cases": 2, "max_exception_dependency_rate": 0.8},
+  "cases": [
+    {"text": "مرحبا", "expected": "mar-HAH-bah", "rule_family": "greeting", "split": "train"},
+    {"text": "شكرا", "expected": "SHOOK-rahn", "rule_family": "politeness", "split": "train"},
+    {"text": "جامعة", "expected": "JAH-mee-ah", "rule_family": "academic", "split": "train"},
+    {"text": "حاسوب", "expected": "HAH-soob", "rule_family": "technology", "split": "train"},
+    {"text": "مدرسة", "expected": "mah-dah-RAH-sah", "rule_family": "abjad_fallback", "split": "holdout"},
+    {"text": "مكتبة", "expected": "mah-kah-TAH-bah", "rule_family": "abjad_fallback", "split": "holdout"}
+  ]
+}

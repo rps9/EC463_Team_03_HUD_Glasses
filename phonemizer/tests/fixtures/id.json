@@ -1,0 +1,7 @@
+[
+  {"text": "halo", "expected": "HAH-loh"},
+  {"text": "terima kasih", "expected": "tuh-REE-mah KAH-see"},
+  {"text": "selamat pagi", "expected": "suh-LAH-maht PAH-gee"},
+  {"text": "universitas", "expected": "oo-nee-vehr-see-TAHS"},
+  {"text": "komputer", "expected": "kohm-PYOO-tehr"}
+]

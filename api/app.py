@@ -1,4 +1,4 @@
-import re, json, hashlib, hmac, jwt, os, secrets
+import re, json, hashlib, hmac, jwt, os, secrets, httpx
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
@@ -152,6 +152,10 @@ def sign_in(body: SignInCreds):
         raise
     except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="signin failed")
+
+@app.get("/hudini/auth/me", status_code=status.HTTP_200_OK)
+def auth_me(user = Depends(current_user)):
+    return {"email": user["email"], "role": user["role"]}
 
 def _verify_redirect_or_json(url: str | None, status_code: int, payload: dict):
     if url:
@@ -351,4 +355,64 @@ def reset_password(body: RequestResetPassword):
             "ok": True,
             "message": "If the email exists, then we will send an email to reset your password."
         }
-    
+
+
+# ── AI suggestion proxy (admin-only) ─────────────────────────────────────────
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
+
+class SuggestionBody(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    language_code: str = Field(min_length=2, max_length=10)
+
+@app.post("/hudini/ai/suggestion", dependencies=[Depends(current_admin)], status_code=status.HTTP_200_OK)
+async def ai_suggestion(body: SuggestionBody):
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OpenAI not configured")
+
+    system_prompt = (
+        "You are Ryan, replying to someone in conversation. "
+        "Respond naturally in the user's language, and include a phonetic rewrite.\n"
+        "Respond with JSON ONLY in this exact shape:\n"
+        '{"reply_native":"...", "reply_phonetic":"..."}\n\n'
+        "Requirements:\n"
+        "- reply_native: one friendly sentence in the requested language (standard spelling).\n"
+        "- reply_phonetic: the same text rewritten phonetically using ASCII letters, spaces, "
+        "commas, apostrophes, hyphens, periods, and question marks so an English speaker can read it aloud.\n"
+        "- No explanations, no code fences, no commentary outside the JSON."
+    )
+
+    openai_body = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Language: {body.language_code}\nUser: {body.text}"},
+        ],
+        "max_tokens": 220,
+        "temperature": 0.35,
+    }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+            },
+            json=openai_body,
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"OpenAI error {resp.status_code}")
+
+    try:
+        raw_content = resp.json()["choices"][0]["message"]["content"].strip()
+        parsed = json.loads(raw_content)
+        return {
+            "ok": True,
+            "reply_native": parsed["reply_native"],
+            "reply_phonetic": parsed["reply_phonetic"],
+        }
+    except (KeyError, IndexError, json.JSONDecodeError):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to parse OpenAI response")

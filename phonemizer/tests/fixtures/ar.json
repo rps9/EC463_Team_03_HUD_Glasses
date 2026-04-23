@@ -1,0 +1,7 @@
+[
+  {"text": "مرحبا", "expected": "mar-HAH-bah"},
+  {"text": "شكرا", "expected": "SHOOK-rahn"},
+  {"text": "من فضلك", "expected": "meen FAHD-lik"},
+  {"text": "جامعة", "expected": "JAH-mee-ah"},
+  {"text": "حاسوب", "expected": "HAH-soob"}
+]

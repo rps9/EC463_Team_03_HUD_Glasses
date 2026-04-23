@@ -28,6 +28,6 @@ struct HUDTranslationClient {
             return AppleTranslationService()
         }
 #endif
-        return LibreTranslateService()
+        fatalError("Apple Translation framework is required (iOS 26+)")
     }
 }
