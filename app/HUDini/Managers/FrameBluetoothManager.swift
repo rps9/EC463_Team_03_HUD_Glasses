@@ -145,6 +145,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var lastSentPartialCaption: String = ""
     private var lastSentSuggestion: String = ""
     private var replTextBuffer: String = ""
+    private var lastTapAt: Date = .distantPast
     private var audioEnergyAccumulator: Float = 0
     private var audioEnergySampleCount: Int = 0
     private var debugAudioFileHandle: FileHandle?
@@ -1072,6 +1073,12 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
 
         if payload[0] == Self.tapEvent {
+            let now = Date()
+            guard now.timeIntervalSince(lastTapAt) > 0.3 else {
+                appendDevLog(direction: "IN", message: "TAP ignored (debounce)")
+                return
+            }
+            lastTapAt = now
             appendDevLog(direction: "IN", message: "TAP")
             handleTapToggleListening(desiredEnabled: !isStreaming)
             return
