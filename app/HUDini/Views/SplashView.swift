@@ -110,10 +110,7 @@ struct SplashView: View {
         withAnimation(.spring(response: 0.58, dampingFraction: 0.86)) {
             dragOffset = -420
         }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            onContinue()
-        }
+        onContinue()
     }
 }
 

@@ -166,12 +166,26 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         if let storedIdentifier = UserDefaults.standard.string(forKey: Self.savedPeripheralIDKey),
            let uuid = UUID(uuidString: storedIdentifier) {
             lastConnectedPeripheralID = uuid
-            shouldAttemptReconnect = true
         }
         selectedLanguageCode = TranslationLanguages.preferredListeningLanguageCode()
         recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguageCode))
         central = CBCentralManager(delegate: self, queue: nil)
         handleState(central.state)
+    }
+
+    /// Authorizes auto-reconnect attempts. Called after the splash→signin transition has settled
+    /// so BLE state churn doesn't collide with the entry animation.
+    func unlockAutoReconnect() {
+        guard !shouldAttemptReconnect else { return }
+        shouldAttemptReconnect = lastConnectedPeripheralID != nil
+        if shouldAttemptReconnect, central.state == .poweredOn {
+            attemptReconnectIfNeeded()
+        }
+    }
+
+    /// Pre-warms the translation client so the first user-facing translation isn't cold.
+    /// Safe to call multiple times; the client caches internally.
+    func warmUp() {
         Task { _ = try? await translationClient.translate(text: "hello", source: "en", target: "es") }
     }
 
@@ -1390,5 +1404,31 @@ extension FrameBluetoothManager: CBPeripheralDelegate {
                 peripheralStatus = text
             }
         }
+    }
+}
+
+// MARK: - HUDDeviceManager Conformance
+
+extension FrameBluetoothManager: HUDDeviceManager {
+    var kind: HUDDeviceKind { .frame }
+
+    func startTranscribing(listeningLanguage: String, translatingTo targetLanguage: String) {
+        startTranscribing(listeningLanguage: listeningLanguage, translatingTo: targetLanguage, triggeredByTap: false)
+    }
+
+    func sendHUDText(_ text: String, isPartial: Bool) {
+        sendHUDTextToFrame(text, isPartial: isPartial, updateStatus: false)
+    }
+
+    func clearHUDText() {
+        clearFrameDisplay()
+    }
+
+    func sendSuggestion(_ text: String) {
+        sendSuggestionToFrame(text)
+    }
+
+    func clearSuggestion() {
+        clearSuggestionOnFrame()
     }
 }
