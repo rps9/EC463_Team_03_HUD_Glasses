@@ -145,8 +145,23 @@ struct HUDLiveView: View {
                 sendSuggestionToActiveDevice(trimmed)
             }
         }
-        .onChange(of: isListening, initial: true) { _, listening in
+        .onChange(of: isListening, initial: true) { wasListening, listening in
             pulseAnimating = listening
+            // Fire suggestion + persist history when listening transitions from
+            // true → false, regardless of what triggered the stop (FAB tap,
+            // Frame tap, scene background, etc). The Frame-tap path calls
+            // frameManager.stopListening() directly and never goes through
+            // HUDLiveView.toggleListening(), so centralizing this here keeps
+            // all stop paths consistent.
+            if wasListening, !listening {
+                persistConversationSnapshotIfNonEmpty()
+                if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
+                    let finalText = activeRenderedText
+                    if !finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        suggestionManager.refreshSuggestion(for: finalText, languageCode: listeningLanguageCode)
+                    }
+                }
+            }
         }
         .onDisappear {
             renderedTextDebounceTask?.cancel()
@@ -397,8 +412,6 @@ struct HUDLiveView: View {
 
     private func toggleListening() {
         if isListening {
-            let finalText = activeRenderedText
-            persistConversationSnapshotIfNonEmpty()
             if shouldUseDeviceMic {
                 stopActiveDeviceListening()
             } else {
@@ -406,9 +419,9 @@ struct HUDLiveView: View {
             }
             renderedTextDebounceTask?.cancel()
             renderedTextDebounceTask = nil
-            if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
-                suggestionManager.refreshSuggestion(for: finalText, languageCode: listeningLanguageCode)
-            }
+            // Suggestion refresh + history persistence are handled by the
+            // .onChange(of: isListening) observer so the Frame-tap stop path
+            // (which doesn't come through here) gets the same treatment.
         } else {
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
@@ -618,6 +631,9 @@ private struct DeviceSyncSheet: View {
                     Button("Done") { onDismiss() }
                         .font(.system(.body, design: .rounded, weight: .semibold))
                 }
+            }
+            .onDisappear {
+                stopScan()
             }
         }
     }

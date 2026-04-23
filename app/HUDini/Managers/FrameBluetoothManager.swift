@@ -127,6 +127,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var isAppActive = true
     private var hasReceivedFrameAppHeartbeat = false
     private var frameAppIsCompatible = false
+    private var connectRetryCount = 0
 
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
@@ -173,15 +174,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         handleState(central.state)
     }
 
-    /// Authorizes auto-reconnect attempts. Called after the splash→signin transition has settled
-    /// so BLE state churn doesn't collide with the entry animation.
-    func unlockAutoReconnect() {
-        guard !shouldAttemptReconnect else { return }
-        shouldAttemptReconnect = lastConnectedPeripheralID != nil
-        if shouldAttemptReconnect, central.state == .poweredOn {
-            attemptReconnectIfNeeded()
-        }
-    }
+    /// Auto-reconnect has been removed — connect is always user-initiated from the
+    /// Device Sync sheet's Scan button. Kept as a no-op to preserve the call site.
+    func unlockAutoReconnect() {}
 
     /// Pre-warms the translation client so the first user-facing translation isn't cold.
     /// Safe to call multiple times; the client caches internally.
@@ -216,7 +211,8 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
         stopScanning()
         explicitDisconnectRequested = false
-        shouldAttemptReconnect = true
+        shouldAttemptReconnect = false
+        connectRetryCount = 0
         state = .connecting(device.name)
         connectionDebugStage = "Connect requested"
         statusMessage = "Connecting to \(device.name)…"
@@ -226,6 +222,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     func disconnect() {
         explicitDisconnectRequested = true
         shouldAttemptReconnect = false
+        connectRetryCount = 0
         stopListening()
         guard let peripheral = connectedPeripheral else { return }
         central.cancelPeripheralConnection(peripheral)
@@ -238,8 +235,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             isAppActive = true
             if connectedPeripheral != nil, txChar != nil, hasReceivedFrameAppHeartbeat {
                 bootstrapFrameSession(reason: "App active")
-            } else if shouldAttemptReconnect {
-                attemptReconnectIfNeeded()
             }
         case .inactive:
             break
@@ -431,33 +426,6 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         } else if !lastSentPartialCaption.isEmpty {
             sendRawCommand(["SHOW_CAPTION", "partial", lastSentPartialCaption])
         }
-    }
-
-    private func attemptReconnectIfNeeded() {
-        guard central.state == .poweredOn else { return }
-        guard connectedPeripheral == nil else { return }
-        guard shouldAttemptReconnect, let lastConnectedPeripheralID else { return }
-
-        let knownPeripherals = central.retrievePeripherals(withIdentifiers: [lastConnectedPeripheralID])
-        if let peripheral = knownPeripherals.first {
-            connectionDebugStage = "Reconnecting to known Frame"
-            statusMessage = "Reconnecting to Frame…"
-            explicitDisconnectRequested = false
-            state = .connecting(peripheral.name ?? "Frame")
-            central.connect(peripheral, options: nil)
-            return
-        }
-
-        if case .scanning = state {
-            return
-        }
-        shouldScanWhenReady = false
-        startScan()
-    }
-
-    private func rememberConnectedPeripheral(_ peripheral: CBPeripheral) {
-        lastConnectedPeripheralID = peripheral.identifier
-        UserDefaults.standard.set(peripheral.identifier.uuidString, forKey: Self.savedPeripheralIDKey)
     }
 
     private func clearRememberedPeripheral() {
@@ -1197,23 +1165,14 @@ extension FrameBluetoothManager: CBCentralManagerDelegate {
             }
 
             discoveredDevices.sort { $0.rssi.intValue > $1.rssi.intValue }
-
-            if shouldAttemptReconnect, peripheral.identifier == lastConnectedPeripheralID, connectedPeripheral == nil {
-                stopScanning()
-                explicitDisconnectRequested = false
-                state = .connecting(deviceName)
-                connectionDebugStage = "Reconnecting to known Frame"
-                statusMessage = "Reconnecting to \(deviceName)…"
-                central.connect(peripheral, options: nil)
-            }
         }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         Task { @MainActor in
             explicitDisconnectRequested = false
-            shouldAttemptReconnect = true
-            rememberConnectedPeripheral(peripheral)
+            shouldAttemptReconnect = false
+            connectRetryCount = 0
             connectedPeripheral = peripheral
             peripheral.delegate = self
             state = .connected(peripheral.name ?? "Frame")
@@ -1225,15 +1184,42 @@ extension FrameBluetoothManager: CBCentralManagerDelegate {
 
     nonisolated func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         Task { @MainActor in
+            let errorText = error?.localizedDescription ?? "Unknown error"
+            let isEncryptionTimeout = errorText.lowercased().contains("encrypt") && errorText.lowercased().contains("time")
+            let shouldRetry = isEncryptionTimeout && connectRetryCount < 1
+
+            if shouldRetry {
+                connectRetryCount += 1
+                connectionDebugStage = "Connect failed, retrying"
+                statusMessage = "Frame pairing timed out. Retrying…"
+                appendDevLog(direction: "APP", message: "Connect retry \(connectRetryCount): \(errorText)")
+                let displayName = peripheral.name ?? "Frame"
+                state = .connecting(displayName)
+                try? await Task.sleep(for: .milliseconds(750))
+                guard !explicitDisconnectRequested else {
+                    connectRetryCount = 0
+                    return
+                }
+                central.connect(peripheral, options: nil)
+                return
+            }
+
+            connectRetryCount = 0
             connectionDebugStage = "Connect failed"
-            let message = "Failed to connect: \(error?.localizedDescription ?? "Unknown error")"
-            resetConnectionState(message: message)
+            let hint = isEncryptionTimeout
+                ? " If this keeps happening, unpair Frame in iOS Settings › Bluetooth and try again."
+                : ""
+            statusMessage = "Failed to connect: \(errorText)\(hint)"
+            // Don't call resetConnectionState — it wipes discoveredDevices, forcing a rescan.
+            txChar = nil
+            rxChar = nil
+            connectedPeripheral = nil
+            state = .idle
         }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         Task { @MainActor in
-            let reconnect = !explicitDisconnectRequested
             if let error {
                 connectionDebugStage = "Disconnected with error"
                 resetConnectionState(message: "Disconnected: \(error.localizedDescription)")
@@ -1242,10 +1228,7 @@ extension FrameBluetoothManager: CBCentralManagerDelegate {
                 resetConnectionState(message: "Disconnected")
             }
             explicitDisconnectRequested = false
-            if reconnect {
-                shouldAttemptReconnect = true
-                attemptReconnectIfNeeded()
-            }
+            shouldAttemptReconnect = false
         }
     }
 
@@ -1269,8 +1252,6 @@ extension FrameBluetoothManager: CBCentralManagerDelegate {
             statusMessage = "Bluetooth ready"
             if shouldScanWhenReady {
                 startScan()
-            } else {
-                attemptReconnectIfNeeded()
             }
         case .poweredOff:
             resetConnectionState(message: "Turn on Bluetooth to connect to Frame")

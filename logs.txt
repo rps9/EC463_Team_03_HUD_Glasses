@@ -1,62 +1,222 @@
-15:18:03.450 [APP] statusMessage = Listening language set to English
-15:18:03.450 [APP] statusMessage = Target language set to English
-15:18:10.962 [IN] 
-15:18:10.962 [APP] peripheralStatus = 
-15:18:11.951 [IN] 
-15:18:14.425 [APP] connectionDebugStage = Disconnected with error
-15:18:14.426 [APP] state connected("Frame D7") -> idle
-15:18:14.426 [APP] connectionDebugStage = Disconnected: The connection has timed out unexpectedly.
-15:18:14.426 [APP] statusMessage = Disconnected: The connection has timed out unexpectedly.
-15:18:14.426 [APP] peripheralStatus = 
-15:18:14.426 [APP] stopRecognition invoked
-15:18:14.426 [APP] cancelTranslation invoked
-15:18:14.426 [APP] connectionDebugStage = Reconnecting to known Frame
-15:18:14.426 [APP] statusMessage = Reconnecting to Frame…
-15:18:14.427 [APP] state idle -> connecting("Frame D7")
-15:18:21.350 [APP] connectionDebugStage = Scanning
-15:18:21.351 [APP] state connecting("Frame D7") -> scanning
-15:18:21.351 [APP] statusMessage = Scanning for Frame glasses…
-15:18:21.561 [APP] state scanning -> idle
-15:18:21.562 [APP] state idle -> connecting("Frame D7")
-15:18:21.562 [APP] connectionDebugStage = Reconnecting to known Frame
-15:18:21.562 [APP] statusMessage = Reconnecting to Frame D7…
-15:18:22.609 [APP] state connecting("Frame D7") -> connected("Frame D7")
-15:18:22.609 [APP] connectionDebugStage = Connected, discovering service
-15:18:22.609 [APP] statusMessage = Connected. Discovering Frame service…
-15:18:22.678 [APP] connectionDebugStage = Service found
-15:18:22.678 [APP] statusMessage = Frame service found. Discovering characteristics…
-15:18:22.689 [APP] connectionDebugStage = Characteristics found
-15:18:22.689 [APP] connectionDebugStage = Enabling notifications
-15:18:22.689 [APP] connectionDebugStage = Waiting for Frame event
-15:18:22.689 [APP] statusMessage = Frame connected. Waiting for HUDini app heartbeat…
-15:18:22.689 [OUT] PING
-15:18:22.737 [APP] connectionDebugStage = Notifications enabled
-15:18:22.737 [APP] statusMessage = Notifications enabled. Waiting for Frame app events…
-15:18:22.797 [IN] EVT	READY	v25.080.0838	243	2026.04.09.8
-15:18:22.797 [APP] connectionDebugStage = Frame app responded
-15:18:22.797 [APP] peripheralStatus = Ready on v25.080.0838
-15:18:22.798 [APP] statusMessage = Connected to Frame
-15:18:22.798 [APP] connectionDebugStage = Bootstrapping session
-15:18:22.798 [OUT] SET_PREFS	brightness=0;partials=1
-15:18:22.798 [OUT] SYNC_STATE	0	idle
-15:18:22.828 [IN] EVT	PREFS_SAVED
-15:18:22.828 [APP] statusMessage = Saved preferences on Frame
-15:18:22.877 [IN] EVT	STATUS	idle
-15:18:22.877 [APP] peripheralStatus = idle
-15:18:26.455 [APP] statusMessage = Listening language set to English
-15:18:26.455 [APP] statusMessage = Target language set to English
-15:18:28.288 [IN] 
-15:18:28.288 [APP] peripheralStatus = 
-15:18:28.319 [IN] 
-15:18:28.722 [IN] 
-15:18:28.947 [IN] 
-15:18:29.188 [IN] 
-15:18:29.412 [IN] 
-15:18:29.592 [IN] 
-15:18:29.622 [IN] 
-15:18:29.818 [IN] 
-15:18:30.042 [IN] 
-15:18:30.207 [IN] 
-15:18:30.432 [IN] 
-15:18:30.612 [IN] 
-15:18:30.837 [IN] 
+15:52:50.450 [APP] statusMessage = Waiting for Bluetooth…
+15:52:50.898 [APP] connectionDebugStage = Bluetooth ready
+15:52:50.898 [APP] statusMessage = Bluetooth ready
+15:52:53.527 [APP] statusMessage = Listening language set to Spanish
+15:52:53.528 [APP] statusMessage = Target language set to English
+15:53:01.661 [APP] connectionDebugStage = Scanning
+15:53:01.670 [APP] state idle -> scanning
+15:53:01.671 [APP] statusMessage = Scanning for Frame glasses…
+15:53:02.690 [APP] state scanning -> idle
+15:53:02.695 [APP] state idle -> connecting("Frame D7")
+15:53:02.695 [APP] connectionDebugStage = Connect requested
+15:53:02.695 [APP] statusMessage = Connecting to Frame D7…
+15:53:03.682 [APP] state connecting("Frame D7") -> connected("Frame D7")
+15:53:03.682 [APP] connectionDebugStage = Connected, discovering service
+15:53:03.682 [APP] statusMessage = Connected. Discovering Frame service…
+15:53:03.980 [APP] connectionDebugStage = Service found
+15:53:03.980 [APP] statusMessage = Frame service found. Discovering characteristics…
+15:53:03.985 [APP] connectionDebugStage = Characteristics found
+15:53:03.985 [APP] connectionDebugStage = Enabling notifications
+15:53:03.985 [APP] connectionDebugStage = Waiting for Frame event
+15:53:03.985 [APP] statusMessage = Frame connected. Waiting for HUDini app heartbeat…
+15:53:03.986 [OUT] PING
+15:53:04.023 [APP] connectionDebugStage = Notifications enabled
+15:53:04.023 [APP] statusMessage = Notifications enabled. Waiting for Frame app events…
+15:53:04.066 [IN] EVT	READY	v25.080.0838	243	2026.04.09.8
+15:53:04.066 [APP] connectionDebugStage = Frame app responded
+15:53:04.066 [APP] peripheralStatus = Ready on v25.080.0838
+15:53:04.066 [APP] statusMessage = Connected to Frame
+15:53:04.066 [APP] connectionDebugStage = Bootstrapping session
+15:53:04.066 [OUT] SET_PREFS	brightness=0;partials=1
+15:53:04.066 [OUT] SYNC_STATE	0	idle
+15:53:04.095 [IN] EVT	PREFS_SAVED
+15:53:04.095 [APP] statusMessage = Saved preferences on Frame
+15:53:04.169 [IN] EVT	STATUS	idle
+15:53:04.169 [APP] peripheralStatus = idle
+15:53:05.909 [IN] TAP
+15:53:05.910 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
+15:53:05.915 [APP] statusMessage = Listening language set to Spanish
+15:53:05.915 [APP] statusMessage = Target language set to English
+15:53:05.938 [APP] startRecognition invoked locale=es
+15:53:05.940 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
+15:53:05.940 [APP] setStreamingState(true)
+15:53:05.940 [APP] isStreaming = true
+15:53:05.942 [APP] [AUDIO] debug capture started: frame_audio_1776973985.raw
+15:53:05.942 [OUT] SYNC_STATE	1	listening
+15:53:05.943 [APP] statusMessage = Started from Frame tap
+15:53:05.986 [IN] EVT	STATUS	listening
+15:53:05.986 [APP] peripheralStatus = listening
+15:53:06.554 [IN] TAP
+15:53:06.555 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
+15:53:06.557 [APP] [AUDIO] debug capture saved: frame_audio_1776973985.raw size=0 bytes (~0.0s)
+15:53:06.557 [APP] stopRecognition invoked
+15:53:06.557 [APP] cancelTranslation invoked
+15:53:06.557 [APP] setStreamingState(false)
+15:53:06.557 [APP] isStreaming = false
+15:53:06.557 [OUT] SYNC_STATE	0	idle
+15:53:06.558 [APP] statusMessage = Stopped
+15:53:06.558 [APP] statusMessage = Stopped from Frame tap
+15:53:06.585 [IN] EVT	STATUS	idle
+15:53:06.585 [APP] peripheralStatus = idle
+15:53:07.030 [APP] recognitionTask error: No speech detected
+15:53:08.924 [IN] TAP
+15:53:08.925 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
+15:53:08.929 [APP] statusMessage = Listening language set to Spanish
+15:53:08.929 [APP] statusMessage = Target language set to English
+15:53:08.937 [APP] startRecognition invoked locale=es
+15:53:08.939 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
+15:53:08.939 [APP] setStreamingState(true)
+15:53:08.939 [APP] isStreaming = true
+15:53:08.942 [APP] [AUDIO] debug capture started: frame_audio_1776973988.raw
+15:53:08.942 [OUT] SYNC_STATE	1	listening
+15:53:08.942 [APP] statusMessage = Started from Frame tap
+15:53:08.949 [IN] TAP ignored (debounce)
+15:53:08.985 [IN] EVT	STATUS	listening
+15:53:08.985 [APP] peripheralStatus = listening
+15:53:15.044 [IN] TAP
+15:53:15.044 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
+15:53:15.046 [APP] [AUDIO] debug capture saved: frame_audio_1776973988.raw size=0 bytes (~0.0s)
+15:53:15.046 [APP] stopRecognition invoked
+15:53:15.046 [APP] cancelTranslation invoked
+15:53:15.046 [APP] setStreamingState(false)
+15:53:15.046 [APP] isStreaming = false
+15:53:15.046 [OUT] SYNC_STATE	0	idle
+15:53:15.047 [APP] statusMessage = Stopped
+15:53:15.047 [APP] statusMessage = Stopped from Frame tap
+15:53:15.082 [APP] recognitionTask error: No speech detected
+15:53:15.105 [IN] EVT	STATUS	idle
+15:53:15.105 [APP] peripheralStatus = idle
+15:53:19.936 [APP] statusMessage = Listening language set to Spanish
+15:53:19.937 [APP] statusMessage = Target language set to English
+15:53:27.040 [APP] statusMessage = Listening language set to Spanish
+15:53:27.040 [APP] statusMessage = Target language set to English
+15:53:31.628 [APP] stopRecognition invoked
+15:53:31.628 [APP] cancelTranslation invoked
+15:53:31.629 [APP] setStreamingState(false)
+15:53:31.629 [OUT] SYNC_STATE	0	idle
+15:53:31.629 [APP] statusMessage = Stopped
+15:53:31.629 [OUT] CONTROL 0x04
+15:53:31.630 [APP] statusMessage = Frame reset
+15:53:31.652 [IN] EVT	STATUS	idle
+15:53:32.073 [APP] stopRecognition invoked
+15:53:32.073 [APP] cancelTranslation invoked
+15:53:32.073 [APP] setStreamingState(false)
+15:53:32.074 [OUT] SYNC_STATE	0	idle
+15:53:32.074 [APP] statusMessage = Stopped
+15:53:32.074 [OUT] CONTROL 0x04
+15:53:32.074 [APP] statusMessage = Frame reset
+15:53:32.115 [IN] EVT	STATUS	idle
+15:53:32.242 [APP] stopRecognition invoked
+15:53:32.242 [APP] cancelTranslation invoked
+15:53:32.242 [APP] setStreamingState(false)
+15:53:32.243 [OUT] SYNC_STATE	0	idle
+15:53:32.243 [APP] statusMessage = Stopped
+15:53:32.243 [OUT] CONTROL 0x04
+15:53:32.243 [APP] statusMessage = Frame reset
+15:53:32.265 [IN] EVT	STATUS	idle
+15:53:32.425 [APP] stopRecognition invoked
+15:53:32.425 [APP] cancelTranslation invoked
+15:53:32.426 [APP] setStreamingState(false)
+15:53:32.426 [OUT] SYNC_STATE	0	idle
+15:53:32.426 [APP] statusMessage = Stopped
+15:53:32.426 [OUT] CONTROL 0x04
+15:53:32.426 [APP] statusMessage = Frame reset
+15:53:32.461 [IN] EVT	STATUS	idle
+15:53:32.575 [APP] stopRecognition invoked
+15:53:32.576 [APP] cancelTranslation invoked
+15:53:32.576 [APP] setStreamingState(false)
+15:53:32.576 [OUT] SYNC_STATE	0	idle
+15:53:32.576 [APP] statusMessage = Stopped
+15:53:32.576 [OUT] CONTROL 0x04
+15:53:32.576 [APP] statusMessage = Frame reset
+15:53:32.609 [IN] EVT	STATUS	idle
+15:53:32.742 [APP] stopRecognition invoked
+15:53:32.742 [APP] cancelTranslation invoked
+15:53:32.742 [APP] setStreamingState(false)
+15:53:32.742 [OUT] SYNC_STATE	0	idle
+15:53:32.742 [APP] statusMessage = Stopped
+15:53:32.742 [OUT] CONTROL 0x04
+15:53:32.743 [APP] statusMessage = Frame reset
+15:53:32.790 [IN] EVT	STATUS	idle
+15:53:32.892 [APP] stopRecognition invoked
+15:53:32.892 [APP] cancelTranslation invoked
+15:53:32.892 [APP] setStreamingState(false)
+15:53:32.892 [OUT] SYNC_STATE	0	idle
+15:53:32.892 [APP] statusMessage = Stopped
+15:53:32.892 [OUT] CONTROL 0x04
+15:53:32.893 [APP] statusMessage = Frame reset
+15:53:32.926 [IN] EVT	STATUS	idle
+15:53:33.092 [APP] stopRecognition invoked
+15:53:33.092 [APP] cancelTranslation invoked
+15:53:33.092 [APP] setStreamingState(false)
+15:53:33.092 [OUT] SYNC_STATE	0	idle
+15:53:33.093 [APP] statusMessage = Stopped
+15:53:33.093 [OUT] CONTROL 0x04
+15:53:33.093 [APP] statusMessage = Frame reset
+15:53:33.120 [IN] EVT	STATUS	idle
+15:53:35.672 [APP] stopRecognition invoked
+15:53:35.672 [APP] cancelTranslation invoked
+15:53:35.672 [APP] setStreamingState(false)
+15:53:35.672 [OUT] SYNC_STATE	0	idle
+15:53:35.672 [APP] statusMessage = Stopped
+15:53:35.672 [OUT] CONTROL 0x04
+15:53:35.673 [APP] statusMessage = Frame reset
+15:53:35.714 [IN] EVT	STATUS	idle
+15:53:35.738 [APP] stopRecognition invoked
+15:53:35.738 [APP] cancelTranslation invoked
+15:53:35.738 [APP] setStreamingState(false)
+15:53:35.738 [OUT] SYNC_STATE	0	idle
+15:53:35.738 [APP] statusMessage = Stopped
+15:53:35.738 [OUT] CONTROL 0x04
+15:53:35.739 [APP] statusMessage = Frame reset
+15:53:35.760 [IN] EVT	STATUS	idle
+15:53:35.890 [APP] stopRecognition invoked
+15:53:35.890 [APP] cancelTranslation invoked
+15:53:35.890 [APP] setStreamingState(false)
+15:53:35.890 [OUT] SYNC_STATE	0	idle
+15:53:35.891 [APP] statusMessage = Stopped
+15:53:35.891 [OUT] CONTROL 0x04
+15:53:35.891 [APP] statusMessage = Frame reset
+15:53:35.925 [IN] EVT	STATUS	idle
+15:53:36.056 [APP] stopRecognition invoked
+15:53:36.056 [APP] cancelTranslation invoked
+15:53:36.056 [APP] setStreamingState(false)
+15:53:36.056 [OUT] SYNC_STATE	0	idle
+15:53:36.056 [APP] statusMessage = Stopped
+15:53:36.057 [OUT] CONTROL 0x04
+15:53:36.057 [APP] statusMessage = Frame reset
+15:53:36.104 [IN] EVT	STATUS	idle
+15:53:36.223 [APP] stopRecognition invoked
+15:53:36.223 [APP] cancelTranslation invoked
+15:53:36.223 [APP] setStreamingState(false)
+15:53:36.224 [OUT] SYNC_STATE	0	idle
+15:53:36.224 [APP] statusMessage = Stopped
+15:53:36.224 [OUT] CONTROL 0x04
+15:53:36.224 [APP] statusMessage = Frame reset
+15:53:36.256 [IN] EVT	STATUS	idle
+15:53:58.544 [IN] TAP
+15:53:58.544 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
+15:53:58.548 [APP] statusMessage = Listening language set to Spanish
+15:53:58.548 [APP] statusMessage = Target language set to English
+15:53:58.556 [APP] startRecognition invoked locale=es
+15:53:58.558 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
+15:53:58.558 [APP] setStreamingState(true)
+15:53:58.558 [APP] isStreaming = true
+15:53:58.562 [APP] [AUDIO] debug capture started: frame_audio_1776974038.raw
+15:53:58.562 [OUT] SYNC_STATE	1	listening
+15:53:58.562 [APP] statusMessage = Started from Frame tap
+15:53:58.604 [IN] EVT	STATUS	listening
+15:53:58.604 [APP] peripheralStatus = listening
+15:54:04.919 [IN] TAP
+15:54:04.920 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
+15:54:04.921 [APP] [AUDIO] debug capture saved: frame_audio_1776974038.raw size=0 bytes (~0.0s)
+15:54:04.922 [APP] stopRecognition invoked
+15:54:04.922 [APP] cancelTranslation invoked
+15:54:04.922 [APP] setStreamingState(false)
+15:54:04.922 [APP] isStreaming = false
+15:54:04.922 [OUT] SYNC_STATE	0	idle
+15:54:04.922 [APP] statusMessage = Stopped
+15:54:04.923 [APP] statusMessage = Stopped from Frame tap
+15:54:04.960 [APP] recognitionTask error: No speech detected
+15:54:04.966 [IN] EVT	STATUS	idle
+15:54:04.966 [APP] peripheralStatus = idle
