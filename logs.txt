@@ -1,62 +1,95 @@
-15:18:03.450 [APP] statusMessage = Listening language set to English
-15:18:03.450 [APP] statusMessage = Target language set to English
-15:18:10.962 [IN] 
-15:18:10.962 [APP] peripheralStatus = 
-15:18:11.951 [IN] 
-15:18:14.425 [APP] connectionDebugStage = Disconnected with error
-15:18:14.426 [APP] state connected("Frame D7") -> idle
-15:18:14.426 [APP] connectionDebugStage = Disconnected: The connection has timed out unexpectedly.
-15:18:14.426 [APP] statusMessage = Disconnected: The connection has timed out unexpectedly.
-15:18:14.426 [APP] peripheralStatus = 
-15:18:14.426 [APP] stopRecognition invoked
-15:18:14.426 [APP] cancelTranslation invoked
-15:18:14.426 [APP] connectionDebugStage = Reconnecting to known Frame
-15:18:14.426 [APP] statusMessage = Reconnecting to Frame…
-15:18:14.427 [APP] state idle -> connecting("Frame D7")
-15:18:21.350 [APP] connectionDebugStage = Scanning
-15:18:21.351 [APP] state connecting("Frame D7") -> scanning
-15:18:21.351 [APP] statusMessage = Scanning for Frame glasses…
-15:18:21.561 [APP] state scanning -> idle
-15:18:21.562 [APP] state idle -> connecting("Frame D7")
-15:18:21.562 [APP] connectionDebugStage = Reconnecting to known Frame
-15:18:21.562 [APP] statusMessage = Reconnecting to Frame D7…
-15:18:22.609 [APP] state connecting("Frame D7") -> connected("Frame D7")
-15:18:22.609 [APP] connectionDebugStage = Connected, discovering service
-15:18:22.609 [APP] statusMessage = Connected. Discovering Frame service…
-15:18:22.678 [APP] connectionDebugStage = Service found
-15:18:22.678 [APP] statusMessage = Frame service found. Discovering characteristics…
-15:18:22.689 [APP] connectionDebugStage = Characteristics found
-15:18:22.689 [APP] connectionDebugStage = Enabling notifications
-15:18:22.689 [APP] connectionDebugStage = Waiting for Frame event
-15:18:22.689 [APP] statusMessage = Frame connected. Waiting for HUDini app heartbeat…
-15:18:22.689 [OUT] PING
-15:18:22.737 [APP] connectionDebugStage = Notifications enabled
-15:18:22.737 [APP] statusMessage = Notifications enabled. Waiting for Frame app events…
-15:18:22.797 [IN] EVT	READY	v25.080.0838	243	2026.04.09.8
-15:18:22.797 [APP] connectionDebugStage = Frame app responded
-15:18:22.797 [APP] peripheralStatus = Ready on v25.080.0838
-15:18:22.798 [APP] statusMessage = Connected to Frame
-15:18:22.798 [APP] connectionDebugStage = Bootstrapping session
-15:18:22.798 [OUT] SET_PREFS	brightness=0;partials=1
-15:18:22.798 [OUT] SYNC_STATE	0	idle
-15:18:22.828 [IN] EVT	PREFS_SAVED
-15:18:22.828 [APP] statusMessage = Saved preferences on Frame
-15:18:22.877 [IN] EVT	STATUS	idle
-15:18:22.877 [APP] peripheralStatus = idle
-15:18:26.455 [APP] statusMessage = Listening language set to English
-15:18:26.455 [APP] statusMessage = Target language set to English
-15:18:28.288 [IN] 
-15:18:28.288 [APP] peripheralStatus = 
-15:18:28.319 [IN] 
-15:18:28.722 [IN] 
-15:18:28.947 [IN] 
-15:18:29.188 [IN] 
-15:18:29.412 [IN] 
-15:18:29.592 [IN] 
-15:18:29.622 [IN] 
-15:18:29.818 [IN] 
-15:18:30.042 [IN] 
-15:18:30.207 [IN] 
-15:18:30.432 [IN] 
-15:18:30.612 [IN] 
-15:18:30.837 [IN] 
+Brownout detector was triggered
+
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:1184
+load:0x40078000,len:13232
+load:0x40080400,len:3028
+entry 0x400805e4
+Starting BLE mic + HUD display streamer
+
+Brownout detector was triggered
+
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:1184
+load:0x40078000,len:13232
+load:0x40080400,len:3028
+entry 0x400805e4
+Starting BLE mic + HUD display streamer
+
+Brownout detector was triggered
+
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:1184
+load:0x40078000,len:13232
+load:0x40080400,len:3028
+entry 0x400805e4
+Starting BLE mic + HUD display streamer
+
+Brownout detector was triggered
+
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:1184
+load:0x40078000,len:13232
+load:0x40080400,len:3028
+entry 0x400805e4
+Starting BLE mic + HUD display streamer
+
+Brownout detector was triggered
+
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:1184
+load:0x40078000,len:13232
+load:0x40080400,len:3028
+entry 0x400805e4
+Starting BLE mic + HUD display streamer
+
+Brownout detector was triggered
+
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:1184
+load:0x40078000,len:13232
+load:0x40080400,len:3028
+entry 0x400805e4
+Starting BLE mic + HUD display streamer
+
+Brownout detector was triggered
+
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:1184
+load:0x40078000,len:13232
+load:0x40080400,len:3028

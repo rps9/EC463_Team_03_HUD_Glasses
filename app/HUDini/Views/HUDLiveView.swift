@@ -1,10 +1,14 @@
 import SwiftUI
+import UIKit
 
 struct HUDLiveView: View {
     @EnvironmentObject private var frameManager: FrameBluetoothManager
+    @EnvironmentObject private var esp32Manager: ESP32BluetoothManager
     @EnvironmentObject private var conversationHistoryStore: HUDConversationHistoryStore
     @AppStorage(wrappedValue: true, APIConfig.AppStorageKey.hudSuggestionEnabled) private var suggestionEnabled: Bool
     @AppStorage(wrappedValue: TranslationLanguages.defaultListeningLanguageCode, APIConfig.AppStorageKey.hudListeningLanguageCode) private var storedListeningLanguageCode: String
+    @AppStorage("hudini.preferredDevice") private var preferredDeviceRaw: String = HUDDeviceKind.frame.rawValue
+    @AppStorage("hudini.bluetoothEnabled") private var bluetoothEnabled: Bool = true
     @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var suggestionManager = HUDSuggestionManager()
     @State private var targetLanguage: String = "en"
@@ -12,6 +16,8 @@ struct HUDLiveView: View {
     @State private var listeningLanguageOptions: [TranslationLanguageOption] = TranslationLanguages.supported
     @State private var renderedTextDebounceTask: Task<Void, Never>?
     @State private var lastSentBLEText: String = ""
+    @State private var isDeviceSheetPresented: Bool = false
+    @State private var pulseAnimating: Bool = false
 
     private let hudCharacterLimit: Int = 260
     private static let renderedTextDebounceNanoseconds: UInt64 = 450_000_000
@@ -20,19 +26,32 @@ struct HUDLiveView: View {
         TranslationLanguages.supported.filter { $0.code == hudTargetLanguageCode }
     }
 
+    private var preferredDevice: HUDDeviceKind {
+        HUDDeviceKind(rawValue: preferredDeviceRaw) ?? .frame
+    }
+
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                displayCard
-                if APIConfig.isSuggestionFeatureEnabled {
-                    suggestionCard
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
+                topChipBar
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+                    .padding(.bottom, 12)
+
+                VStack(spacing: 16) {
+                    translationHero
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    if APIConfig.isSuggestionFeatureEnabled {
+                        suggestionCard
+                    }
                 }
-                controlsCard
-                connectionCard
+                .padding(.horizontal, 20)
+                .padding(.bottom, 120)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 30)
+
+            micFAB
+                .padding(.bottom, 28)
         }
         .hudScreen()
         .navigationBarTitleDisplayMode(.inline)
@@ -43,31 +62,69 @@ struct HUDLiveView: View {
                     .foregroundStyle(HUDTheme.ink)
             }
         }
+        .sheet(isPresented: $isDeviceSheetPresented) {
+            DeviceSyncSheet(
+                bluetoothEnabled: $bluetoothEnabled,
+                preferredDeviceRaw: $preferredDeviceRaw,
+                onDismiss: { isDeviceSheetPresented = false }
+            )
+            .environmentObject(frameManager)
+            .environmentObject(esp32Manager)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .task {
             await transcriptionManager.requestPermissions()
-            loadListeningLanguages()
+            await loadListeningLanguages()
             applyInitialLanguageConfiguration()
+            frameManager.warmUp()
+            esp32Manager.warmUp()
         }
         .onChange(of: listeningLanguageCode, initial: false) { _, newValue in
             transcriptionManager.setListeningLanguage(newValue)
             frameManager.setRecognitionLanguage(newValue)
+            esp32Manager.setRecognitionLanguage(newValue)
         }
         .onChange(of: targetLanguage, initial: false) { _, newValue in
             transcriptionManager.setTargetLanguage(newValue)
             frameManager.setTargetLanguage(newValue)
+            esp32Manager.setTargetLanguage(newValue)
         }
         .onChange(of: transcriptionManager.renderedText, initial: false) { _, newValue in
-            if !shouldUseFrameMic {
-                scheduleDebouncedHUDSideEffects(for: newValue, mirrorToFrame: true)
+            if !shouldUseDeviceMic {
+                scheduleDebouncedHUDSideEffects(for: newValue, mirrorToDevice: true)
             }
         }
         .onChange(of: frameManager.renderedText, initial: false) { _, newValue in
-            if shouldUseFrameMic {
-                scheduleDebouncedHUDSideEffects(for: newValue, mirrorToFrame: false)
+            if shouldUseDeviceMic, preferredDevice == .frame {
+                scheduleDebouncedHUDSideEffects(for: newValue, mirrorToDevice: false)
             }
         }
-        .onChange(of: frameManager.state, initial: false) { _, newState in
-            if !isFrameConnected(state: newState) {
+        .onChange(of: esp32Manager.renderedText, initial: false) { _, newValue in
+            if shouldUseDeviceMic, preferredDevice == .esp32 {
+                scheduleDebouncedHUDSideEffects(for: newValue, mirrorToDevice: false)
+            }
+        }
+        .onChange(of: frameManager.state, initial: false) { _, _ in
+            if preferredDevice == .frame, !isDeviceConnected {
+                lastSentBLEText = ""
+            }
+        }
+        .onChange(of: esp32Manager.state, initial: false) { _, _ in
+            if preferredDevice == .esp32, !isDeviceConnected {
+                lastSentBLEText = ""
+            }
+        }
+        .onChange(of: preferredDeviceRaw, initial: false) { _, _ in
+            lastSentBLEText = ""
+            disconnectInactiveDevice()
+        }
+        .onChange(of: bluetoothEnabled, initial: false) { _, enabled in
+            if !enabled {
+                if frameManager.isStreaming { frameManager.stopListening() }
+                if esp32Manager.isStreaming { esp32Manager.stopListening() }
+                frameManager.disconnect()
+                esp32Manager.disconnect()
                 lastSentBLEText = ""
             }
         }
@@ -80,12 +137,30 @@ struct HUDLiveView: View {
             }
         }
         .onChange(of: suggestionManager.suggestionPhonetic, initial: false) { _, newPhonetic in
-            guard shouldUseFrameMic, isFrameConnected, !isListening else { return }
+            guard shouldUseDeviceMic, isDeviceConnected, !isListening else { return }
             let trimmed = newPhonetic.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
-                frameManager.clearSuggestionOnFrame()
+                sendClearSuggestionToActiveDevice()
             } else {
-                frameManager.sendSuggestionToFrame(trimmed)
+                sendSuggestionToActiveDevice(trimmed)
+            }
+        }
+        .onChange(of: isListening, initial: true) { wasListening, listening in
+            pulseAnimating = listening
+            // Fire suggestion + persist history when listening transitions from
+            // true → false, regardless of what triggered the stop (FAB tap,
+            // Frame tap, scene background, etc). The Frame-tap path calls
+            // frameManager.stopListening() directly and never goes through
+            // HUDLiveView.toggleListening(), so centralizing this here keeps
+            // all stop paths consistent.
+            if wasListening, !listening {
+                persistConversationSnapshotIfNonEmpty()
+                if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
+                    let finalText = activeRenderedText
+                    if !finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        suggestionManager.refreshSuggestion(for: finalText, languageCode: listeningLanguageCode)
+                    }
+                }
             }
         }
         .onDisappear {
@@ -95,208 +170,210 @@ struct HUDLiveView: View {
                 persistConversationSnapshotIfNonEmpty()
             }
             transcriptionManager.stop()
-            if frameManager.isStreaming {
-                frameManager.stopListening()
-            }
+            if frameManager.isStreaming { frameManager.stopListening() }
+            if esp32Manager.isStreaming { esp32Manager.stopListening() }
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
             }
         }
     }
 
-    private var displayCard: some View {
-        HUDCard(padding: 18) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("Translated Output")
-                        .font(.system(.headline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(HUDTheme.ink)
+    // MARK: - Top chip bar
 
-                    Spacer()
+    private var topChipBar: some View {
+        HStack(spacing: 10) {
+            languageChip(
+                icon: "ear",
+                label: listeningLanguageLabel(for: listeningLanguageCode),
+                selection: $listeningLanguageCode,
+                options: listeningLanguageOptions
+            )
 
-                    HUDStatusPill(
-                        text: "\(hudDisplayText.count) chars",
-                        tint: HUDTheme.accent
-                    )
-                }
+            Spacer(minLength: 0)
 
-                Text(hudDisplayText.isEmpty ? "Translation output appears here as speech is processed." : hudDisplayText)
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.58)
-                    .lineLimit(hudDisplayText.isEmpty ? 4 : 6)
-                    .foregroundStyle(HUDTheme.ink)
-                    .frame(maxWidth: .infinity, minHeight: 220, alignment: .center)
-                    .multilineTextAlignment(.center)
-                    .padding(24)
-                    .background(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.98), HUDTheme.backgroundTop.opacity(0.9)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .stroke(HUDTheme.strokeStrong.opacity(0.7), lineWidth: 1)
-                    }
-            }
+            deviceStatusChip
         }
     }
 
+    private var deviceStatusChip: some View {
+        Button {
+            isDeviceSheetPresented = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: deviceStatusIcon)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(deviceStatusLabel)
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(deviceStatusTint)
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(deviceStatusTint.opacity(0.12), in: Capsule())
+            .overlay {
+                Capsule().stroke(deviceStatusTint.opacity(0.35), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.2), value: isDeviceConnected)
+        .animation(.easeOut(duration: 0.2), value: bluetoothEnabled)
+    }
+
+    private var deviceStatusLabel: String {
+        if !bluetoothEnabled { return "Phone mic" }
+        if isDeviceConnected { return "\(preferredDevice.displayName)" }
+        return "Not connected"
+    }
+
+    private var deviceStatusIcon: String {
+        if !bluetoothEnabled { return "iphone" }
+        if isDeviceConnected { return "antenna.radiowaves.left.and.right" }
+        return "antenna.radiowaves.left.and.right.slash"
+    }
+
+    private var deviceStatusTint: Color {
+        if !bluetoothEnabled { return HUDTheme.accent }
+        return isDeviceConnected ? HUDTheme.mint : HUDTheme.amber
+    }
+
+    // MARK: - Translation hero
+
+    private var translationHero: some View {
+        Text(hudDisplayText.isEmpty ? "Translation appears here as you speak." : hudDisplayText)
+            .font(.system(size: 34, weight: .bold, design: .rounded))
+            .minimumScaleFactor(0.55)
+            .lineLimit(hudDisplayText.isEmpty ? 3 : 10)
+            .foregroundStyle(hudDisplayText.isEmpty ? HUDTheme.inkMuted : HUDTheme.ink)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .multilineTextAlignment(.center)
+            .padding(32)
+            .background(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.98), HUDTheme.backgroundTop.opacity(0.9)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 32, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 32, style: .continuous)
+                    .stroke(HUDTheme.strokeStrong.opacity(0.7), lineWidth: 1)
+            }
+            .shadow(color: HUDTheme.shadow, radius: 22, x: 0, y: 12)
+    }
+
+    // MARK: - Suggestion card
+
     private var suggestionCard: some View {
         HUDCard {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("Suggested Reply")
-                        .font(.system(.headline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(HUDTheme.ink)
-
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(HUDTheme.inkMuted)
                     Spacer()
-
                     Image(systemName: "quote.bubble")
                         .foregroundStyle(HUDTheme.inkMuted)
                 }
 
-                Text(suggestionManager.suggestionPhonetic.isEmpty ? "Suggestions appear while the live stream is running." : suggestionManager.suggestionPhonetic)
-                    .font(.system(size: 24, weight: .semibold, design: .rounded))
-                    .foregroundStyle(HUDTheme.ink)
-
-                if !suggestionManager.suggestionEnglish.isEmpty {
-                    Text(suggestionManager.suggestionEnglish)
+                if suggestionManager.suggestionPhonetic.isEmpty && suggestionManager.suggestionEnglish.isEmpty {
+                    Text("Stop listening to generate a reply suggestion.")
                         .font(.system(.body, design: .rounded))
                         .foregroundStyle(HUDTheme.inkMuted)
-                }
-            }
-        }
-    }
+                } else {
+                    if !suggestionManager.suggestionPhonetic.isEmpty {
+                        Text(suggestionManager.suggestionPhonetic)
+                            .font(.system(size: 22, weight: .semibold, design: .rounded))
+                            .foregroundStyle(HUDTheme.ink)
+                    }
 
-    private var controlsCard: some View {
-        HUDCard {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Session Controls")
-                    .font(.system(.headline, design: .rounded, weight: .semibold))
-                    .foregroundStyle(HUDTheme.ink)
-
-                HStack(spacing: 14) {
-                    languagePickerCard(
-                        title: "Listening Language",
-                        value: listeningLanguageLabel(for: listeningLanguageCode),
-                        icon: "globe.badge.chevron.backward",
-                        selection: $listeningLanguageCode,
-                        options: listeningLanguageOptions
-                    )
-
-                    languagePickerCard(
-                        title: "Display Language",
-                        value: targetLanguageLabel,
-                        icon: "globe.badge.chevron.forward",
-                        selection: $targetLanguage,
-                        options: Self.hudTargetLanguageOptions
-                    )
-                }
-
-                Button {
-                    toggleListening()
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: isListening ? "stop.fill" : "mic.fill")
-                        Text(isListening ? "Stop Listening" : "Start Listening")
+                    if !suggestionManager.suggestionEnglish.isEmpty {
+                        Text(suggestionManager.suggestionEnglish)
+                            .font(.system(.body, design: .rounded))
+                            .foregroundStyle(HUDTheme.inkMuted)
                     }
                 }
-                .buttonStyle(
-                    HUDPrimaryButtonStyle(
-                        tint: isListening ? HUDTheme.rose : HUDTheme.ink
-                    )
-                )
             }
         }
     }
 
-    private var connectionCard: some View {
-        HUDCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Device Sync")
-                        .font(.system(.headline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(HUDTheme.ink)
-                    Spacer()
-                    HUDStatusPill(
-                        text: isFrameConnected ? "Ready to send" : "Not connected",
-                        tint: isFrameConnected ? HUDTheme.mint : HUDTheme.amber,
-                        icon: "antenna.radiowaves.left.and.right"
+    // MARK: - Mic FAB
+
+    private var micFAB: some View {
+        let tint = isListening ? HUDTheme.rose : HUDTheme.ink
+        return Button {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            toggleListening()
+        } label: {
+            ZStack {
+                Circle()
+                    .stroke(tint.opacity(0.4), lineWidth: 2)
+                    .frame(width: 84, height: 84)
+                    .scaleEffect(pulseAnimating ? 1.15 : 1.0)
+                    .opacity(pulseAnimating ? 0 : 0.8)
+                    .animation(
+                        pulseAnimating
+                            ? .easeOut(duration: 1.2).repeatForever(autoreverses: false)
+                            : .default,
+                        value: pulseAnimating
                     )
-                }
 
-                Text(isFrameConnected
-                     ? "Translated output is mirrored to the Frame glasses automatically whenever the rendered text changes."
-                     : "Connect the Frame glasses from Settings > Bluetooth to send rendered output to the device.")
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(HUDTheme.inkMuted)
+                Circle()
+                    .fill(tint)
+                    .frame(width: 68, height: 68)
+                    .shadow(color: tint.opacity(0.35), radius: 16, x: 0, y: 8)
 
-                if isFrameConnected {
-                    Button {
-                        frameManager.resetFrame()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.counterclockwise")
-                            Text("Reset Frame")
-                        }
-                    }
-                    .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.amber))
-                }
+                Image(systemName: isListening ? "stop.fill" : "mic.fill")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(.white)
             }
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isListening ? "Stop Listening" : "Start Listening")
     }
 
-    private func languagePickerCard(
-        title: String,
-        value: String,
+    // MARK: - Language chip helper
+
+    private func languageChip(
         icon: String,
+        label: String,
         selection: Binding<String>,
         options: [TranslationLanguageOption]
     ) -> some View {
         Menu {
-            Picker(title, selection: selection) {
+            Picker("", selection: selection) {
                 ForEach(options) { option in
                     Text(option.name).tag(option.code)
                 }
             }
         } label: {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: icon)
-                    Text(title)
-                }
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(HUDTheme.inkMuted)
-
-                HStack {
-                    Text(value)
-                        .font(.system(.body, design: .rounded, weight: .semibold))
-                        .foregroundStyle(HUDTheme.ink)
-                        .lineLimit(1)
-                    Spacer()
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(HUDTheme.inkMuted)
-                }
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(label)
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .foregroundStyle(HUDTheme.ink)
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(.white.opacity(0.82), in: Capsule())
             .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(HUDTheme.strokeStrong, lineWidth: 1)
+                Capsule().stroke(HUDTheme.strokeStrong, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
         .menuOrder(.fixed)
     }
 
+    // MARK: - Text pipeline helpers
+
     private var hudDisplayText: String {
-        let sourceText = shouldUseFrameMic ? frameManager.renderedText : transcriptionManager.renderedText
-        let raw = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = activeRenderedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return "" }
         if raw.count > hudCharacterLimit {
             return String(raw.suffix(hudCharacterLimit))
@@ -305,45 +382,53 @@ struct HUDLiveView: View {
     }
 
     private var activeTranscriptText: String {
-        shouldUseFrameMic ? frameManager.liveTranscript : transcriptionManager.transcript
+        if !shouldUseDeviceMic { return transcriptionManager.transcript }
+        return preferredDevice == .frame ? frameManager.liveTranscript : esp32Manager.liveTranscript
     }
 
     private var activeRenderedText: String {
-        shouldUseFrameMic ? frameManager.renderedText : transcriptionManager.renderedText
+        if !shouldUseDeviceMic { return transcriptionManager.renderedText }
+        return preferredDevice == .frame ? frameManager.renderedText : esp32Manager.renderedText
     }
 
-    private var shouldUseFrameMic: Bool {
-        isFrameConnected
+    private var shouldUseDeviceMic: Bool { bluetoothEnabled && isDeviceConnected }
+
+    private var activeDeviceState: FrameBluetoothManager.ConnectionState {
+        preferredDevice == .frame ? frameManager.state : esp32Manager.state
+    }
+
+    private var isDeviceConnected: Bool {
+        if case .connected = activeDeviceState { return true }
+        return false
+    }
+
+    private var activeManagerIsStreaming: Bool {
+        preferredDevice == .frame ? frameManager.isStreaming : esp32Manager.isStreaming
     }
 
     private var isListening: Bool {
-        shouldUseFrameMic ? frameManager.isStreaming : transcriptionManager.isTranscribing
+        shouldUseDeviceMic ? activeManagerIsStreaming : transcriptionManager.isTranscribing
     }
 
     private func toggleListening() {
         if isListening {
-            let finalText = activeRenderedText
-            persistConversationSnapshotIfNonEmpty()
-            if shouldUseFrameMic {
-                frameManager.stopListening()
+            if shouldUseDeviceMic {
+                stopActiveDeviceListening()
             } else {
                 transcriptionManager.stop()
             }
             renderedTextDebounceTask?.cancel()
             renderedTextDebounceTask = nil
-            if APIConfig.isSuggestionFeatureEnabled, suggestionEnabled {
-                suggestionManager.refreshSuggestion(for: finalText, languageCode: listeningLanguageCode)
-            }
+            // Suggestion refresh + history persistence are handled by the
+            // .onChange(of: isListening) observer so the Frame-tap stop path
+            // (which doesn't come through here) gets the same treatment.
         } else {
             if APIConfig.isSuggestionFeatureEnabled {
                 suggestionManager.clearSuggestion()
             }
-            if shouldUseFrameMic {
-                frameManager.clearSuggestionOnFrame()
-                frameManager.startTranscribing(
-                    listeningLanguage: listeningLanguageCode,
-                    translatingTo: Self.hudTargetLanguageCode
-                )
+            if shouldUseDeviceMic {
+                sendClearSuggestionToActiveDevice()
+                startActiveDeviceListening()
             } else {
                 transcriptionManager.startTranscribing(
                     listeningLanguage: listeningLanguageCode,
@@ -353,34 +438,75 @@ struct HUDLiveView: View {
         }
     }
 
-    private var isFrameConnected: Bool {
-        isFrameConnected(state: frameManager.state)
+    private func startActiveDeviceListening() {
+        switch preferredDevice {
+        case .frame:
+            frameManager.startTranscribing(
+                listeningLanguage: listeningLanguageCode,
+                translatingTo: Self.hudTargetLanguageCode
+            )
+        case .esp32:
+            esp32Manager.startTranscribing(
+                listeningLanguage: listeningLanguageCode,
+                translatingTo: Self.hudTargetLanguageCode
+            )
+        }
     }
 
-    private func isFrameConnected(state: FrameBluetoothManager.ConnectionState) -> Bool {
-        if case .connected = state { return true }
-        return false
+    private func stopActiveDeviceListening() {
+        switch preferredDevice {
+        case .frame: frameManager.stopListening()
+        case .esp32: esp32Manager.stopListening()
+        }
     }
 
-    private func scheduleDebouncedHUDSideEffects(for text: String, mirrorToFrame: Bool) {
+    private func sendSuggestionToActiveDevice(_ text: String) {
+        switch preferredDevice {
+        case .frame: frameManager.sendSuggestion(text)
+        case .esp32: esp32Manager.sendSuggestion(text)
+        }
+    }
+
+    private func sendClearSuggestionToActiveDevice() {
+        switch preferredDevice {
+        case .frame: frameManager.clearSuggestion()
+        case .esp32: esp32Manager.clearSuggestion()
+        }
+    }
+
+    private func disconnectInactiveDevice() {
+        switch preferredDevice {
+        case .frame:
+            if esp32Manager.isStreaming { esp32Manager.stopListening() }
+            esp32Manager.disconnect()
+        case .esp32:
+            if frameManager.isStreaming { frameManager.stopListening() }
+            frameManager.disconnect()
+        }
+    }
+
+    private func scheduleDebouncedHUDSideEffects(for text: String, mirrorToDevice: Bool) {
         renderedTextDebounceTask?.cancel()
         let delay = Self.renderedTextDebounceNanoseconds
         renderedTextDebounceTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
-            if mirrorToFrame {
-                pushTranslatedTextToFrameIfNeeded(text)
+            if mirrorToDevice {
+                pushTranslatedTextToDeviceIfNeeded(text)
             }
         }
     }
 
-    private func pushTranslatedTextToFrameIfNeeded(_ text: String) {
+    private func pushTranslatedTextToDeviceIfNeeded(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        guard isFrameConnected else { return }
+        guard isDeviceConnected else { return }
         guard trimmed != lastSentBLEText else { return }
         lastSentBLEText = trimmed
-        frameManager.sendHUDTextToFrame(trimmed, isPartial: false, updateStatus: false)
+        switch preferredDevice {
+        case .frame: frameManager.sendHUDText(trimmed, isPartial: false)
+        case .esp32: esp32Manager.sendHUDText(trimmed, isPartial: false)
+        }
     }
 
     private var targetLanguageLabel: String {
@@ -392,9 +518,10 @@ struct HUDLiveView: View {
         listeningLanguageOptions.first(where: { $0.code == code })?.name ?? TranslationLanguages.displayName(for: code)
     }
 
-    private func loadListeningLanguages() {
-        listeningLanguageOptions = TranslationLanguages.supported
-        if !listeningLanguageOptions.contains(where: { $0.code == listeningLanguageCode }) {
+    private func loadListeningLanguages() async {
+        let options = await TranslationLanguages.installedTargetOptions()
+        listeningLanguageOptions = options
+        if !options.contains(where: { $0.code == listeningLanguageCode }) {
             listeningLanguageCode = TranslationLanguages.defaultListeningLanguageCode
         }
         targetLanguage = Self.hudTargetLanguageCode
@@ -412,11 +539,12 @@ struct HUDLiveView: View {
         storedListeningLanguageCode = resolvedListeningCode
         transcriptionManager.setListeningLanguage(resolvedListeningCode)
         frameManager.setRecognitionLanguage(resolvedListeningCode)
+        esp32Manager.setRecognitionLanguage(resolvedListeningCode)
         transcriptionManager.setTargetLanguage(targetLanguage)
         frameManager.setTargetLanguage(targetLanguage)
+        esp32Manager.setTargetLanguage(targetLanguage)
     }
 
-    /// Saves the current HUD translation when a listening session ends (stop button or leaving Live while mic is on).
     private func persistConversationSnapshotIfNonEmpty() {
         let translated = activeRenderedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !translated.isEmpty else { return }
@@ -433,10 +561,239 @@ struct HUDLiveView: View {
     }
 }
 
+// MARK: - Device Sync Sheet
+
+private struct DeviceSyncSheet: View {
+    @Binding var bluetoothEnabled: Bool
+    @Binding var preferredDeviceRaw: String
+    let onDismiss: () -> Void
+
+    @EnvironmentObject private var frameManager: FrameBluetoothManager
+    @EnvironmentObject private var esp32Manager: ESP32BluetoothManager
+
+    private var preferredDevice: HUDDeviceKind {
+        HUDDeviceKind(rawValue: preferredDeviceRaw) ?? .frame
+    }
+
+    private var activeDeviceState: FrameBluetoothManager.ConnectionState {
+        preferredDevice == .frame ? frameManager.state : esp32Manager.state
+    }
+
+    private var activeDeviceStatusMessage: String {
+        preferredDevice == .frame ? frameManager.statusMessage : esp32Manager.statusMessage
+    }
+
+    private var activeDiscoveredDevices: [FrameBluetoothManager.DiscoveredDevice] {
+        preferredDevice == .frame ? frameManager.discoveredDevices : esp32Manager.discoveredDevices
+    }
+
+    private var isDeviceConnected: Bool {
+        if case .connected = activeDeviceState { return true }
+        return false
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Toggle("Use Bluetooth peripheral", isOn: $bluetoothEnabled)
+                        .font(.system(.body, design: .rounded, weight: .semibold))
+                        .tint(HUDTheme.accent)
+                        .padding(16)
+                        .background(.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+                    if bluetoothEnabled {
+                        Picker("Device", selection: $preferredDeviceRaw) {
+                            ForEach(HUDDeviceKind.allCases) { kind in
+                                Text(kind.displayName).tag(kind.rawValue)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        deviceStateBody
+                    } else {
+                        Text("Using the iPhone microphone. Turn on Bluetooth to connect the Frame or ESP32.")
+                            .font(.system(.body, design: .rounded))
+                            .foregroundStyle(HUDTheme.inkMuted)
+                    }
+
+                    Spacer(minLength: 12)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 24)
+            }
+            .hudScreen()
+            .navigationTitle("Device Sync")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { onDismiss() }
+                        .font(.system(.body, design: .rounded, weight: .semibold))
+                }
+            }
+            .onDisappear {
+                stopScan()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var deviceStateBody: some View {
+        switch activeDeviceState {
+        case .idle:
+            idleBody
+        case .scanning:
+            scanningBody
+        case .connecting(let name):
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Connecting to \(name)…")
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(HUDTheme.inkMuted)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        case .connected(let name):
+            connectedBody(name: name)
+        }
+    }
+
+    private var idleBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(activeDeviceStatusMessage.isEmpty
+                 ? "Tap Scan to find your \(preferredDevice.displayName)."
+                 : activeDeviceStatusMessage)
+                .font(.system(.body, design: .rounded))
+                .foregroundStyle(HUDTheme.inkMuted)
+
+            Button {
+                beginScan()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                    Text("Scan")
+                }
+            }
+            .buttonStyle(HUDPrimaryButtonStyle(tint: HUDTheme.accent))
+        }
+    }
+
+    private var scanningBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Scanning for \(preferredDevice.displayName)…")
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(HUDTheme.inkMuted)
+            }
+
+            ForEach(activeDiscoveredDevices) { device in
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(device.name)
+                            .font(.system(.body, design: .rounded, weight: .semibold))
+                            .foregroundStyle(HUDTheme.ink)
+                        Text("RSSI \(device.rssi.intValue) dBm")
+                            .font(.system(.caption, design: .rounded))
+                            .foregroundStyle(HUDTheme.inkMuted)
+                    }
+                    Spacer()
+                    Button("Connect") {
+                        connect(device)
+                    }
+                    .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.accent))
+                    .frame(width: 110)
+                }
+                .padding(12)
+                .background(.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+
+            Button("Stop") {
+                stopScan()
+            }
+            .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.ink))
+        }
+    }
+
+    private func connectedBody(name: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(HUDTheme.mint)
+                Text("Connected to \(name)")
+                    .font(.system(.body, design: .rounded, weight: .semibold))
+                    .foregroundStyle(HUDTheme.ink)
+                Spacer()
+            }
+            .padding(14)
+            .background(HUDTheme.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            Text("Translated output mirrors to the device automatically.")
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(HUDTheme.inkMuted)
+
+            HStack(spacing: 10) {
+                Button {
+                    disconnect()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "xmark.circle")
+                        Text("Disconnect")
+                    }
+                }
+                .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.rose))
+
+                if preferredDevice == .frame {
+                    Button {
+                        frameManager.resetFrame()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.counterclockwise")
+                            Text("Reset")
+                        }
+                    }
+                    .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.amber))
+                }
+            }
+        }
+    }
+
+    private func beginScan() {
+        switch preferredDevice {
+        case .frame: frameManager.beginScanning()
+        case .esp32: esp32Manager.beginScanning()
+        }
+    }
+
+    private func stopScan() {
+        switch preferredDevice {
+        case .frame: frameManager.stopScanning()
+        case .esp32: esp32Manager.stopScanning()
+        }
+    }
+
+    private func connect(_ device: FrameBluetoothManager.DiscoveredDevice) {
+        switch preferredDevice {
+        case .frame: frameManager.connect(to: device)
+        case .esp32: esp32Manager.connect(to: device)
+        }
+    }
+
+    private func disconnect() {
+        switch preferredDevice {
+        case .frame: frameManager.disconnect()
+        case .esp32: esp32Manager.disconnect()
+        }
+    }
+}
+
 #Preview {
     NavigationStack {
         HUDLiveView()
             .environmentObject(FrameBluetoothManager())
+            .environmentObject(ESP32BluetoothManager())
             .environmentObject(HUDConversationHistoryStore())
     }
 }

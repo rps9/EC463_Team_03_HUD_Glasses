@@ -4,6 +4,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var authManager = AuthenticationManager()
     @StateObject private var frameManager = FrameBluetoothManager()
+    @StateObject private var esp32Manager = ESP32BluetoothManager()
     @StateObject private var conversationHistoryStore = HUDConversationHistoryStore()
     @StateObject private var suggestionProfileStore = SuggestionProfileStore()
     @State private var hasEnteredApp = false
@@ -32,6 +33,17 @@ struct RootView: View {
         .preferredColorScheme(.light)
         .onChange(of: scenePhase, initial: true) { _, newPhase in
             frameManager.handleScenePhaseChange(newPhase)
+            esp32Manager.handleScenePhaseChange(newPhase)
+            if newPhase == .active {
+                authManager.ensureTokenValid()
+            }
+        }
+        .onChange(of: hasEnteredApp, initial: false) { _, entered in
+            guard entered else { return }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                frameManager.unlockAutoReconnect()
+            }
         }
         .task {
             if authManager.isAuthenticated {
@@ -41,55 +53,43 @@ struct RootView: View {
     }
 
     private var mainContentView: some View {
-        TabView {
-            NavigationStack {
-                HUDLiveView()
-                    .environmentObject(frameManager)
-                    .environmentObject(conversationHistoryStore)
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
-                                    showAppMenu.toggle()
-                                }
-                            } label: {
-                                HamburgerButton(isOpen: showAppMenu)
+        NavigationStack {
+            HUDLiveView()
+                .environmentObject(frameManager)
+                .environmentObject(esp32Manager)
+                .environmentObject(conversationHistoryStore)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                                showAppMenu.toggle()
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(showAppMenu ? "Close Menu" : "Open Menu")
+                        } label: {
+                            HamburgerButton(isOpen: showAppMenu)
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(showAppMenu ? "Close Menu" : "Open Menu")
                     }
-                    .overlay(alignment: .topTrailing) {
-                        if showAppMenu {
-                            ZStack(alignment: .topTrailing) {
-                                Color.black.opacity(0.001)
-                                    .ignoresSafeArea()
-                                    .onTapGesture {
-                                        withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
-                                            showAppMenu = false
-                                        }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if showAppMenu {
+                        ZStack(alignment: .topTrailing) {
+                            Color.black.opacity(0.001)
+                                .ignoresSafeArea()
+                                .onTapGesture {
+                                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                                        showAppMenu = false
                                     }
+                                }
 
-                                appMenu
-                                    .padding(.top, 12)
-                                    .padding(.trailing, 20)
-                                    .transition(.asymmetric(insertion: .scale(scale: 0.92, anchor: .topTrailing).combined(with: .opacity), removal: .scale(scale: 0.96, anchor: .topTrailing).combined(with: .opacity)))
-                                    .zIndex(2)
-                            }
+                            appMenu
+                                .padding(.top, 12)
+                                .padding(.trailing, 20)
+                                .transition(.asymmetric(insertion: .scale(scale: 0.92, anchor: .topTrailing).combined(with: .opacity), removal: .scale(scale: 0.96, anchor: .topTrailing).combined(with: .opacity)))
+                                .zIndex(2)
                         }
                     }
-            }
-            .tabItem {
-                Label("Live", systemImage: "dot.radiowaves.left.and.right")
-            }
-
-            NavigationStack {
-                ConversationHistoryView()
-                    .environmentObject(conversationHistoryStore)
-            }
-            .tabItem {
-                Label("History", systemImage: "clock.arrow.circlepath")
-            }
+                }
         }
         .tint(HUDTheme.accent)
         .environmentObject(authManager)
@@ -107,6 +107,18 @@ struct RootView: View {
                     .environmentObject(conversationHistoryStore)
             } label: {
                 menuRow(title: "Settings", icon: "slider.horizontal.3")
+            }
+            .simultaneousGesture(TapGesture().onEnded {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                    showAppMenu = false
+                }
+            })
+
+            NavigationLink {
+                ConversationHistoryView()
+                    .environmentObject(conversationHistoryStore)
+            } label: {
+                menuRow(title: "History", icon: "clock.arrow.circlepath")
             }
             .simultaneousGesture(TapGesture().onEnded {
                 withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {

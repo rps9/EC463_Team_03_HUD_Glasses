@@ -67,12 +67,33 @@ class AuthenticationManager: ObservableObject {
     }
     
     init() {
-        isAuthenticated = KeychainHelper.loadToken() != nil
+        if let token = KeychainHelper.loadToken() {
+            if JWTHelper.isExpired(token) {
+                KeychainHelper.deleteToken()
+                isAuthenticated = false
+            } else {
+                isAuthenticated = true
+            }
+        } else {
+            isAuthenticated = false
+        }
         currentRole = UserDefaults.standard.string(forKey: userRoleKey) ?? "user"
         if isAuthenticated {
             Task { @MainActor [weak self] in
                 await self?.refreshCurrentUserRole()
             }
+        }
+    }
+
+    /// Re-validates the stored token; signs out on expiry. Called on scene foreground.
+    @MainActor
+    func ensureTokenValid() {
+        guard let token = KeychainHelper.loadToken() else {
+            if isAuthenticated { signOut() }
+            return
+        }
+        if JWTHelper.isExpired(token) {
+            signOut()
         }
     }
 
@@ -394,7 +415,8 @@ class AuthenticationManager: ObservableObject {
             throw AuthError.message("Invalid response from server.")
         }
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw AuthError.message(parseAPIError(data: data) ?? "Request failed with status \(httpResponse.statusCode).")
+            let message = parseAPIError(data: data) ?? "Request failed with status \(httpResponse.statusCode)."
+            throw AuthError.http(status: httpResponse.statusCode, message: message)
         }
 
         do {
@@ -454,7 +476,10 @@ class AuthenticationManager: ObservableObject {
                 UserDefaults.standard.set(response.email, forKey: userEmailKey)
             }
         } catch {
-            // Keep the last known role; admin tools are additive and should fail closed.
+            if let authError = error as? AuthError, authError.httpStatus == 401 {
+                signOut()
+            }
+            // Otherwise keep the last known role; admin tools are additive and fail closed.
         }
     }
 
@@ -481,12 +506,20 @@ class AuthenticationManager: ObservableObject {
 
 private enum AuthError: LocalizedError {
     case message(String)
+    case http(status: Int, message: String)
 
     var errorDescription: String? {
         switch self {
         case .message(let message):
             return message
+        case .http(_, let message):
+            return message
         }
+    }
+
+    var httpStatus: Int? {
+        if case .http(let status, _) = self { return status }
+        return nil
     }
 }
 

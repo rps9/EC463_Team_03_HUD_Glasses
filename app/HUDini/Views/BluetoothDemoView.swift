@@ -57,64 +57,7 @@ struct BluetoothDemoView: View {
                         .foregroundStyle(HUDTheme.accent)
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Discovered Devices")
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(HUDTheme.ink)
-
-                    if manager.discoveredDevices.isEmpty {
-                        Text("No devices discovered yet. Tap Scan to find the Frame glasses.")
-                            .font(.system(.body, design: .rounded))
-                            .foregroundStyle(HUDTheme.inkMuted)
-                    } else {
-                        VStack(spacing: 12) {
-                            ForEach(manager.discoveredDevices) { device in
-                                HStack(spacing: 14) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(HUDTheme.accent.opacity(0.12))
-                                            .frame(width: 42, height: 42)
-                                        Image(systemName: "eyeglasses")
-                                            .foregroundStyle(HUDTheme.accent)
-                                    }
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(device.name)
-                                            .font(.system(.body, design: .rounded, weight: .semibold))
-                                            .foregroundStyle(HUDTheme.ink)
-                                        Text("RSSI \(device.rssi.intValue) dBm")
-                                            .font(.system(.caption, design: .rounded))
-                                            .foregroundStyle(HUDTheme.inkMuted)
-                                    }
-
-                                    Spacer()
-
-                                    Button("Connect") {
-                                        manager.connect(to: device)
-                                    }
-                                    .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.accent))
-                                    .frame(width: 124)
-                                }
-                                .padding(14)
-                                .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                            }
-                        }
-                    }
-                }
-
-                HStack(spacing: 12) {
-                    Button("Scan") {
-                        manager.beginScanning()
-                    }
-                    .buttonStyle(HUDPrimaryButtonStyle(tint: HUDTheme.ink))
-
-                    Button("Stop") {
-                        manager.stopScanning()
-                    }
-                    .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.ink))
-                }
-
-                if case .connected = manager.state {
+                if isConnected {
                     HStack(spacing: 12) {
                         Button("Ping") {
                             manager.ping()
@@ -126,11 +69,10 @@ struct BluetoothDemoView: View {
                         }
                         .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.amber))
                     }
-
-                    Button("Disconnect") {
-                        manager.disconnect()
-                    }
-                    .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.rose))
+                } else {
+                    Text("Connect from Live › Device Sync to enable Ping and Reset.")
+                        .font(.system(.footnote, design: .rounded))
+                        .foregroundStyle(HUDTheme.inkMuted)
                 }
             }
         }
