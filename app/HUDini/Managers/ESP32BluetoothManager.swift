@@ -320,6 +320,8 @@ final class ESP32BluetoothManager: NSObject, ObservableObject {
     private func writeControl(_ command: String, char: CBCharacteristic) {
         guard let peripheral = connectedPeripheral, let data = command.data(using: .utf8) else { return }
         let writeType: CBCharacteristicWriteType = char.properties.contains(.write) ? .withResponse : .withoutResponse
+        let logPayload = command.count > 60 ? String(command.prefix(60)) + "…" : command
+        print("[ESP32 TX] \(logPayload) (\(data.count)B, \(writeType == .withResponse ? "wResp" : "noResp"))")
         peripheral.writeValue(data, for: char, type: writeType)
     }
 
