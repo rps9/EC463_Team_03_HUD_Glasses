@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict md65x0ShbS2LeCwCh37wOo1fnF3CSknTKtQvxVGSTWHhxvLfgIFJ344dRmAvLnc
+\restrict 1mSOjhAqcINlO9is807cKRoqmJL9GlcSGWuG3Cw6ASMFTpHzomrdKpCYnzfOgko
 
 -- Dumped from database version 17.8 (130b160)
 -- Dumped by pg_dump version 18.3
@@ -20,20 +20,18 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: user_data; Type: SCHEMA; Schema: -; Owner: neondb_owner
+-- Name: user_data; Type: SCHEMA; Schema: -; Owner: -
 --
 
 CREATE SCHEMA user_data;
 
-
-ALTER SCHEMA user_data OWNER TO neondb_owner;
 
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
 
 --
--- Name: email_verifications; Type: TABLE; Schema: public; Owner: neondb_owner
+-- Name: email_verifications; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.email_verifications (
@@ -46,10 +44,8 @@ CREATE TABLE public.email_verifications (
 );
 
 
-ALTER TABLE public.email_verifications OWNER TO neondb_owner;
-
 --
--- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
+-- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.users_id_seq
@@ -60,10 +56,8 @@ CREATE SEQUENCE public.users_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.users_id_seq OWNER TO neondb_owner;
-
 --
--- Name: users; Type: TABLE; Schema: public; Owner: neondb_owner
+-- Name: users; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.users (
@@ -77,10 +71,8 @@ CREATE TABLE public.users (
 );
 
 
-ALTER TABLE public.users OWNER TO neondb_owner;
-
 --
--- Name: conversations; Type: TABLE; Schema: user_data; Owner: neondb_owner
+-- Name: conversations; Type: TABLE; Schema: user_data; Owner: -
 --
 
 CREATE TABLE user_data.conversations (
@@ -95,10 +87,8 @@ CREATE TABLE user_data.conversations (
 );
 
 
-ALTER TABLE user_data.conversations OWNER TO neondb_owner;
-
 --
--- Name: conversations_id_seq; Type: SEQUENCE; Schema: user_data; Owner: neondb_owner
+-- Name: conversations_id_seq; Type: SEQUENCE; Schema: user_data; Owner: -
 --
 
 ALTER TABLE user_data.conversations ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
@@ -112,7 +102,7 @@ ALTER TABLE user_data.conversations ALTER COLUMN id ADD GENERATED ALWAYS AS IDEN
 
 
 --
--- Name: email_verifications email_verifications_pkey; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
+-- Name: email_verifications email_verifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.email_verifications
@@ -120,7 +110,7 @@ ALTER TABLE ONLY public.email_verifications
 
 
 --
--- Name: users users_email_key; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
+-- Name: users users_email_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.users
@@ -128,7 +118,7 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.users
@@ -136,7 +126,7 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: conversations conversations_pkey; Type: CONSTRAINT; Schema: user_data; Owner: neondb_owner
+-- Name: conversations conversations_pkey; Type: CONSTRAINT; Schema: user_data; Owner: -
 --
 
 ALTER TABLE ONLY user_data.conversations
@@ -144,28 +134,28 @@ ALTER TABLE ONLY user_data.conversations
 
 
 --
--- Name: email_verifications_exp_idx; Type: INDEX; Schema: public; Owner: neondb_owner
+-- Name: email_verifications_exp_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX email_verifications_exp_idx ON public.email_verifications USING btree (expires_at);
 
 
 --
--- Name: email_verifications_user_idx; Type: INDEX; Schema: public; Owner: neondb_owner
+-- Name: email_verifications_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX email_verifications_user_idx ON public.email_verifications USING btree (user_id);
 
 
 --
--- Name: users_google_sub_uniq; Type: INDEX; Schema: public; Owner: neondb_owner
+-- Name: users_google_sub_uniq; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX users_google_sub_uniq ON public.users USING btree (google_sub) WHERE (google_sub IS NOT NULL);
 
 
 --
--- Name: email_verifications email_verifications_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
+-- Name: email_verifications email_verifications_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.email_verifications
@@ -173,22 +163,8 @@ ALTER TABLE ONLY public.email_verifications
 
 
 --
--- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: cloud_admin
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO neon_superuser WITH GRANT OPTION;
-
-
---
--- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: cloud_admin
---
-
-ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON TABLES TO neon_superuser WITH GRANT OPTION;
-
-
---
 -- PostgreSQL database dump complete
 --
 
-\unrestrict md65x0ShbS2LeCwCh37wOo1fnF3CSknTKtQvxVGSTWHhxvLfgIFJ344dRmAvLnc
+\unrestrict 1mSOjhAqcINlO9is807cKRoqmJL9GlcSGWuG3Cw6ASMFTpHzomrdKpCYnzfOgko
 
