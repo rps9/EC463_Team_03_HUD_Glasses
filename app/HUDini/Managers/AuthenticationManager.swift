@@ -9,6 +9,9 @@ import Foundation
 import SwiftUI
 import Combine
 import GoogleSignIn
+import AuthenticationServices
+import CryptoKit
+import Security
 import UIKit
 
 class AuthenticationManager: ObservableObject {
@@ -27,10 +30,12 @@ class AuthenticationManager: ObservableObject {
     private let userEmailKey = "hudini.auth.email"
     private let userPictureURLKey = "hudini.auth.pictureURL"
     private let userRoleKey = "hudini.auth.role"
+    private var currentAppleSignInNonce: String?
 
     private enum AuthProvider: String {
         case password
         case google
+        case apple
     }
 
     private struct CredentialsBody: Encodable {
@@ -45,6 +50,12 @@ class AuthenticationManager: ObservableObject {
 
     private struct GoogleAuthBody: Encodable {
         let credential: String
+    }
+
+    private struct AppleAuthBody: Encodable {
+        let identity_token: String
+        let nonce: String
+        let full_name: String?
     }
 
     private struct AuthSessionResponse: Decodable {
@@ -64,6 +75,11 @@ class AuthenticationManager: ObservableObject {
     private struct CurrentUserResponse: Decodable {
         let email: String
         let role: String
+    }
+
+    private struct APIMessageResponse: Decodable {
+        let ok: Bool?
+        let message: String?
     }
     
     init() {
@@ -108,6 +124,8 @@ class AuthenticationManager: ObservableObject {
         switch UserDefaults.standard.string(forKey: authProviderKey) {
         case AuthProvider.google.rawValue:
             return "Google"
+        case AuthProvider.apple.rawValue:
+            return "Apple"
         case AuthProvider.password.rawValue:
             return "Email & password"
         default:
@@ -290,6 +308,77 @@ class AuthenticationManager: ObservableObject {
 
         isLoading = false
     }
+
+    @MainActor
+    func configureSignInWithAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        let nonce = Self.randomNonceString()
+        currentAppleSignInNonce = nonce
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = Self.sha256(nonce)
+    }
+
+    @MainActor
+    func signInWithApple(result: Result<ASAuthorization, Error>) async {
+        isLoading = true
+        errorMessage = ""
+        statusMessage = ""
+        defer {
+            isLoading = false
+            currentAppleSignInNonce = nil
+        }
+
+        guard let url = APIConfig.appleAuthURL else {
+            errorMessage = "Invalid API configuration."
+            return
+        }
+
+        do {
+            let authorization = try result.get()
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+                throw AuthError.message("Apple sign-in did not return an Apple ID credential.")
+            }
+            guard let identityToken = credential.identityToken,
+                  let identityTokenString = String(data: identityToken, encoding: .utf8),
+                  !identityTokenString.isEmpty else {
+                throw AuthError.message("Apple sign-in did not return an identity token.")
+            }
+            guard let nonce = currentAppleSignInNonce else {
+                throw AuthError.message("Apple sign-in could not be verified. Please try again.")
+            }
+
+            let fullName = credential.fullName.flatMap { components -> String? in
+                let value = PersonNameComponentsFormatter().string(from: components)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return value.isEmpty ? nil : value
+            }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.httpBody = try JSONEncoder().encode(
+                AppleAuthBody(
+                    identity_token: identityTokenString,
+                    nonce: nonce,
+                    full_name: fullName
+                )
+            )
+
+            let authResponse: AuthSessionResponse = try await perform(request)
+            finishAuthentication(
+                with: authResponse,
+                email: authResponse.user?.email ?? credential.email,
+                provider: .apple,
+                profilePhotoURLString: nil
+            )
+        } catch {
+            if isUserCancelledAppleSignIn(error) {
+                errorMessage = ""
+            } else {
+                errorMessage = presentableError(from: error, fallback: "Apple sign-in failed. Please try again.")
+            }
+        }
+    }
     
     private func parseAPIError(data: Data) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
@@ -409,6 +498,12 @@ class AuthenticationManager: ObservableObject {
         return loweredDomain.contains("gid") && loweredDescription.contains("cancel")
     }
 
+    private func isUserCancelledAppleSignIn(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == ASAuthorizationError.errorDomain &&
+            ASAuthorizationError.Code(rawValue: nsError.code) == .canceled
+    }
+
     private func perform<Response: Decodable>(_ request: URLRequest) async throws -> Response {
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -484,6 +579,34 @@ class AuthenticationManager: ObservableObject {
     }
 
     @MainActor
+    func deleteAccount() async -> Bool {
+        isLoading = true
+        errorMessage = ""
+        statusMessage = ""
+        defer { isLoading = false }
+
+        guard let token = KeychainHelper.loadToken(),
+              let url = APIConfig.deleteAccountURL else {
+            errorMessage = "Unable to delete account because the current session is missing."
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        do {
+            let _: APIMessageResponse = try await perform(request)
+            signOut()
+            return true
+        } catch {
+            errorMessage = presentableError(from: error, fallback: "Account deletion failed. Please try again.")
+            return false
+        }
+    }
+
+    @MainActor
     func signOut() {
         KeychainHelper.deleteToken()
         UserDefaults.standard.removeObject(forKey: userEmailKey)
@@ -501,6 +624,34 @@ class AuthenticationManager: ObservableObject {
         isCheckingVerification = false
         errorMessage = ""
         statusMessage = ""
+    }
+
+    private static func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        return hashedData.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        var result = ""
+        var remainingLength = length
+
+        while remainingLength > 0 {
+            var random: UInt8 = 0
+            let status = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
+            if status != errSecSuccess {
+                fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(status)")
+            }
+
+            if random < UInt8(charset.count) {
+                result.append(charset[Int(random)])
+                remainingLength -= 1
+            }
+        }
+
+        return result
     }
 }
 

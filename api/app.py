@@ -19,6 +19,8 @@ VERIFY_REDIRECT_SUCCESS = "https://rps9.net/hudini-verify/success.html"
 VERIFY_REDIRECT_INVALID = "https://rps9.net/hudini-verify/invalid.html"
 VERIFY_REDIRECT_EXPIRED = "https://rps9.net/hudini-verify/expired.html"
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+APPLE_CLIENT_ID = os.environ.get("APPLE_CLIENT_ID", "com.ryansmith.hudini")
+APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
 
 PASSWORD_RE = re.compile(r"^[\x21-\x7E]+$") # Covers all ASCII but space
 
@@ -31,7 +33,7 @@ if ALLOWED_ORIGINS:
         CORSMiddleware,
         allow_origins=ALLOWED_ORIGINS,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
 
@@ -89,6 +91,32 @@ def _verify_google_id_token(credential: str) -> dict:
         )
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid google credential")
+
+def _sha256_hex(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+def _verify_apple_id_token(identity_token: str, raw_nonce: str | None) -> dict:
+    if not APPLE_CLIENT_ID:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="missing APPLE_CLIENT_ID")
+    try:
+        signing_key = jwt.PyJWKClient(APPLE_JWKS_URL).get_signing_key_from_jwt(identity_token).key
+        claims = jwt.decode(
+            identity_token,
+            signing_key,
+            algorithms=["RS256"],
+            audience=APPLE_CLIENT_ID,
+            issuer="https://appleid.apple.com",
+        )
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid apple credential")
+
+    if raw_nonce:
+        expected_nonce = _sha256_hex(raw_nonce)
+        token_nonce = claims.get("nonce")
+        if not token_nonce or not hmac.compare_digest(token_nonce, expected_nonce):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid apple nonce")
+
+    return claims
 
 @app.get("/hudini/db/health", dependencies=[Depends(current_admin)])
 def db_health():
@@ -156,6 +184,15 @@ def sign_in(body: SignInCreds):
 @app.get("/hudini/auth/me", status_code=status.HTTP_200_OK)
 def auth_me(user = Depends(current_user)):
     return {"email": user["email"], "role": user["role"]}
+
+@app.delete("/hudini/auth/account", status_code=status.HTTP_200_OK)
+def delete_account(user = Depends(current_user)):
+    with pool.connection() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM users WHERE email = %s", (user["email"],))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+
+    return {"ok": True, "message": "account deleted"}
 
 def _verify_redirect_or_json(url: str | None, status_code: int, payload: dict):
     if url:
@@ -324,6 +361,97 @@ def auth_google(body: GoogleAuthBody):
     return {
         "ok": True,
         "user": {"email": account_email, "name": name, "picture": picture, "role": role},
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_at": expires_at,
+        "role": role,
+    }
+
+
+class AppleAuthBody(BaseModel):
+    identity_token: str
+    nonce: str | None = None
+    full_name: str | None = None
+
+
+@app.post("/hudini/auth/apple", status_code=status.HTTP_200_OK)
+def auth_apple(body: AppleAuthBody):
+    claims = _verify_apple_id_token(body.identity_token, body.nonce)
+
+    apple_sub = claims.get("sub")
+    email = (claims.get("email") or "").strip().lower()
+    email_verified_claim = claims.get("email_verified")
+    apple_email_verified = email_verified_claim is True or str(email_verified_claim).lower() == "true"
+    name = (body.full_name or "").strip()
+
+    if not apple_sub:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="apple token missing sub")
+    if email and not apple_email_verified:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="apple email is not verified")
+
+    with pool.connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT email, role FROM users WHERE apple_sub = %s",
+            (apple_sub,),
+        )
+        row = cur.fetchone()
+
+        if row:
+            account_email = row[0]
+            role = row[1]
+        else:
+            if not email:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="apple credential missing email; remove HUDini from Sign in with Apple settings and try again",
+                )
+
+            cur.execute(
+                "SELECT id, role, apple_sub FROM users WHERE email = %s",
+                (email,),
+            )
+            row = cur.fetchone()
+
+            if row:
+                user_id = row[0]
+                role = row[1]
+                existing_apple_sub = row[2]
+
+                if existing_apple_sub and existing_apple_sub != apple_sub:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="email is already linked to a different apple account",
+                    )
+
+                cur.execute(
+                    "UPDATE users SET apple_sub = %s, email_verified = TRUE WHERE id = %s",
+                    (apple_sub, user_id),
+                )
+                account_email = email
+            else:
+                random_pwd = secrets.token_urlsafe(32)
+                pwd_hash = hash_password(random_pwd)
+
+                try:
+                    cur.execute(
+                        """
+                        INSERT INTO users (email, email_verified, password_hash, apple_sub)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (email, True, pwd_hash, apple_sub),
+                    )
+                except UniqueViolation as e:
+                    constraint = e.diag.constraint_name
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"That {constraint} has already been used.")
+
+                account_email = email
+                role = "user"
+
+    token = create_access_token(email=account_email, role=role)
+    expires_at = jwt.decode(token, options={"verify_signature": False})["exp"]
+    return {
+        "ok": True,
+        "user": {"email": account_email, "name": name, "picture": None, "role": role},
         "access_token": token,
         "token_type": "bearer",
         "expires_at": expires_at,

@@ -23,8 +23,16 @@ enum APIConfig {
         URL(string: "\(baseURL)/auth/google")
     }
 
+    static var appleAuthURL: URL? {
+        URL(string: "\(baseURL)/auth/apple")
+    }
+
     static var authMeURL: URL? {
         URL(string: "\(baseURL)/auth/me")
+    }
+
+    static var deleteAccountURL: URL? {
+        URL(string: "\(baseURL)/auth/account")
     }
 
     static var googleClientID: String? {
