@@ -8,6 +8,7 @@ struct AccountSettingsView: View {
     @State private var confirmSignOut = false
     @State private var confirmClearHistory = false
     @State private var confirmResetSuggestionProfile = false
+    @State private var confirmDeleteAccount = false
 
     private var appVersion: String {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -57,6 +58,58 @@ struct AccountSettingsView: View {
                         Text("Your access token is stored in the iOS Keychain on this device. Signing out removes it from this device.")
                             .font(.system(.footnote, design: .rounded))
                             .foregroundStyle(HUDTheme.inkMuted)
+                    }
+                }
+
+                HUDCard(padding: 16) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Account deletion")
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(HUDTheme.ink)
+
+                        Text("Permanently delete your HUDini account and sign out on this device.")
+                            .font(.system(.footnote, design: .rounded))
+                            .foregroundStyle(HUDTheme.inkMuted)
+
+                        if !authManager.errorMessage.isEmpty {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(HUDTheme.rose)
+                                    .padding(.top, 2)
+                                Text(authManager.errorMessage)
+                                    .font(.system(.footnote, design: .rounded))
+                                    .foregroundStyle(HUDTheme.ink)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(12)
+                            .background(HUDTheme.rose.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+
+                        Button(role: .destructive) {
+                            confirmDeleteAccount = true
+                        } label: {
+                            HStack {
+                                if authManager.isLoading {
+                                    ProgressView()
+                                        .tint(HUDTheme.rose)
+                                } else {
+                                    Image(systemName: "person.crop.circle.badge.xmark")
+                                }
+                                Text("Delete account")
+                                Spacer()
+                            }
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(HUDTheme.rose)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(HUDTheme.rose.opacity(0.45), lineWidth: 1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(authManager.isLoading)
                     }
                 }
 
@@ -182,6 +235,20 @@ struct AccountSettingsView: View {
                 suggestionProfileStore.clearProfile()
             }
             Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog("Permanently delete your HUDini account?", isPresented: $confirmDeleteAccount, titleVisibility: .visible) {
+            Button("Delete Account", role: .destructive) {
+                Task {
+                    let deleted = await authManager.deleteAccount()
+                    if deleted {
+                        conversationHistoryStore.removeAll()
+                        suggestionProfileStore.clearProfile()
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This deletes your server account and removes local HUDini data from this device. This action cannot be undone.")
         }
     }
 

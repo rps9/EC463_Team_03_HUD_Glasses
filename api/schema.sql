@@ -67,7 +67,8 @@ CREATE TABLE public.users (
     role text DEFAULT 'user'::text,
     email text,
     email_verified boolean DEFAULT false,
-    google_sub text
+    google_sub text,
+    apple_sub text
 );
 
 
@@ -155,6 +156,13 @@ CREATE UNIQUE INDEX users_google_sub_uniq ON public.users USING btree (google_su
 
 
 --
+-- Name: users_apple_sub_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX users_apple_sub_uniq ON public.users USING btree (apple_sub) WHERE (apple_sub IS NOT NULL);
+
+
+--
 -- Name: email_verifications email_verifications_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -167,4 +175,3 @@ ALTER TABLE ONLY public.email_verifications
 --
 
 \unrestrict 1mSOjhAqcINlO9is807cKRoqmJL9GlcSGWuG3Cw6ASMFTpHzomrdKpCYnzfOgko
-
