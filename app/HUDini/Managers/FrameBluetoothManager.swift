@@ -6,7 +6,7 @@ import Speech
 import SwiftUI
 
 struct FrameDisplayPreferences: Equatable {
-    var brightness: Int = 0
+    var brightness: Int = 2
     var showsLivePartials: Bool = true
 
     func commandPayload() -> String {
@@ -48,8 +48,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let tapEvent: UInt8 = 0x10
     private static let streamSampleRate: Double = 16_000
     private static let streamBitDepth: Int = 8
-    private static let embeddedAppVersion = "2026.04.09.8"
+    private static let embeddedAppVersion = "2026.04.28.3"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
+    private static let centralRestoreIdentifier = "com.hudini.frame.central"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
 
     @Published private(set) var state: ConnectionState = .idle {
@@ -92,6 +93,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     @Published private(set) var frameFirmwareVersion: String = ""
     @Published private(set) var frameAppVersion: String = ""
     @Published private(set) var framePayloadLimit: Int = 0
+    @Published private(set) var frameBatteryLevel: Int? = nil
     @Published private(set) var selectedLanguageCode: String = TranslationLanguages.defaultListeningLanguageCode {
         didSet {
             guard oldValue != selectedLanguageCode else { return }
@@ -147,6 +149,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var lastSentSuggestion: String = ""
     private var replTextBuffer: String = ""
     private var lastTapAt: Date = .distantPast
+    private var keepaliveTask: Task<Void, Never>?
     private var audioEnergyAccumulator: Float = 0
     private var audioEnergySampleCount: Int = 0
     private var debugAudioFileHandle: FileHandle?
@@ -170,7 +173,11 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
         selectedLanguageCode = TranslationLanguages.preferredListeningLanguageCode()
         recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguageCode))
-        central = CBCentralManager(delegate: self, queue: nil)
+        central = CBCentralManager(
+            delegate: self,
+            queue: nil,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: Self.centralRestoreIdentifier]
+        )
         handleState(central.state)
     }
 
@@ -240,9 +247,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             break
         case .background:
             isAppActive = false
-            if isStreaming {
-                stopListening()
-            }
+            // Intentionally keep BLE + listening alive when the app is backgrounded.
+            // The bluetooth-central UIBackgroundMode keeps the central manager
+            // delivering BLE notifications so captions/suggestions on the Frame
+            // continue to work when the phone is locked or in the user's pocket.
         @unknown default:
             break
         }
@@ -426,6 +434,29 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         } else if !lastSentPartialCaption.isEmpty {
             sendRawCommand(["SHOW_CAPTION", "partial", lastSentPartialCaption])
         }
+        startKeepalive()
+    }
+
+    private func startKeepalive() {
+        keepaliveTask?.cancel()
+        keepaliveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                if Task.isCancelled { return }
+                await MainActor.run {
+                    guard let self else { return }
+                    guard self.connectedPeripheral != nil,
+                          self.txChar != nil,
+                          self.hasReceivedFrameAppHeartbeat else { return }
+                    self.sendRawCommand(["PING"], preferredType: .withoutResponse)
+                }
+            }
+        }
+    }
+
+    private func stopKeepalive() {
+        keepaliveTask?.cancel()
+        keepaliveTask = nil
     }
 
     private func clearRememberedPeripheral() {
@@ -844,7 +875,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         frameFirmwareVersion = ""
         frameAppVersion = ""
         framePayloadLimit = 0
+        frameBatteryLevel = nil
         hasReceivedFrameAppHeartbeat = false
+        stopKeepalive()
         frameAppIsCompatible = false
         stopDebugAudioCapture()
         stopRecognition()
@@ -1122,6 +1155,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             installStatus = "Frame crash: \(detail)"
         case "PREFS_SAVED":
             statusMessage = "Saved preferences on Frame"
+        case "BATTERY":
+            if parts.count >= 3, let level = Int(parts[2]) {
+                frameBatteryLevel = max(0, min(100, level))
+            }
         default:
             peripheralStatus = text
         }
@@ -1147,6 +1184,24 @@ extension FrameBluetoothManager: CBCentralManagerDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         Task { @MainActor in
             self.handleState(central.state)
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        let restored = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
+        Task { @MainActor in
+            guard let peripheral = restored.first else {
+                self.appendDevLog(direction: "APP", message: "willRestoreState had no peripherals")
+                return
+            }
+            self.connectedPeripheral = peripheral
+            peripheral.delegate = self
+            self.state = .connected(peripheral.name ?? "Frame")
+            self.connectionDebugStage = "Restored after suspend"
+            self.appendDevLog(direction: "APP", message: "willRestoreState recovered peripheral=\(peripheral.identifier)")
+            if peripheral.state == .connected {
+                peripheral.discoverServices([Self.service])
+            }
         }
     }
 

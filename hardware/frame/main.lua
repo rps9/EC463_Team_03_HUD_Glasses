@@ -1,15 +1,21 @@
 local APP_DIR = "/hudini"
-local APP_VERSION = "2026.04.09.8"
+local APP_VERSION = "2026.04.28.3"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
 local CAPTION_LINE_LIMIT = 30
 local CAPTION_LINE_HISTORY = 50
+local BATTERY_CHECK_INTERVAL = 60   -- seconds between cheap level reads
+local BATTERY_FORCE_INTERVAL = 600  -- seconds between forced re-emits
+local IDLE_TIMEOUT = 60             -- seconds without any inbound command -> deep sleep
+
+-- Forward declaration so handle_command can reference start_mic on SYNC_STATE / RESET
+local start_mic
 
 local state = {
   connected = false,
   status = "idle",
   listening = false,
-  brightness = 0,
+  brightness = 2,
   partials = true,
   needs_render = true,
   suggestion = "",
@@ -18,6 +24,10 @@ local state = {
   caption_buffer = "",
   last_caption_text = "",
   live_partial = "",
+  last_battery_check_at = 0,
+  last_battery_emit_at = 0,
+  last_battery_level = -1,
+  last_message_at = 0,
 }
 
 frame.display.text("HUDini", 220, 116, { color = "WHITE", spacing = 4 })
@@ -94,6 +104,41 @@ end
 local function send_event(parts)
   local payload = table.concat(parts, "\t")
   pcall(frame.bluetooth.send, payload)
+end
+
+local function now_seconds()
+  local ok, value = pcall(frame.time.utc)
+  if ok and type(value) == "number" then
+    return value
+  end
+  return 0
+end
+
+local function read_battery_level()
+  local ok, value = pcall(frame.battery_level)
+  if not ok or type(value) ~= "number" then
+    return nil
+  end
+  if value < 0 then value = 0 end
+  if value > 100 then value = 100 end
+  return math.floor(value + 0.5)
+end
+
+local function maybe_emit_battery(force)
+  if not force and not state.connected then return end
+  local now = now_seconds()
+  if not force and (now - state.last_battery_check_at) < BATTERY_CHECK_INTERVAL then
+    return
+  end
+  state.last_battery_check_at = now
+  local level = read_battery_level()
+  if level == nil then return end
+  local changed = level ~= state.last_battery_level
+  local stale = (now - state.last_battery_emit_at) >= BATTERY_FORCE_INTERVAL
+  if not (force or changed or stale) then return end
+  state.last_battery_level = level
+  state.last_battery_emit_at = now
+  send_event({ "EVT", "BATTERY", tostring(level) })
 end
 
 local function wrap_lines(text, limit, max_lines)
@@ -288,6 +333,7 @@ local function handle_command(payload)
   if command ~= nil then
     state.connected = true
     state.needs_render = true
+    state.last_message_at = now_seconds()
   end
 
   if command == "PING" then
@@ -299,11 +345,12 @@ local function handle_command(payload)
     local was_listening = state.listening
     state.listening = parts[2] == "1"
     state.status = parts[3] or (state.listening and "listening" or "idle")
-    if state.listening then
+    if state.listening and not was_listening then
       state.suggestion = ""
-      if not was_listening then
-        reset_caption_buffer()
-      end
+      reset_caption_buffer()
+      start_mic()
+    elseif was_listening and not state.listening then
+      pcall(frame.microphone.stop)
     end
     state.needs_render = true
     send_event({ "EVT", "STATUS", state.status })
@@ -376,7 +423,7 @@ local function send_data(data)
   end
 end
 
-local function start_mic()
+start_mic = function()
   local ok, err = pcall(frame.microphone.start, { sample_rate = 16000, bit_depth = 8 })
   if ok then
     return true
@@ -404,23 +451,43 @@ local function run_app()
 
   local audio_data_size = math.floor((frame.bluetooth.max_length() - 1) / 2) * 2
 
-  start_mic()
+  state.last_message_at = now_seconds()
+  maybe_emit_battery(true)
 
   while true do
     if state.needs_render then
       render_ui()
     end
 
-    for i = 1, 20 do
-      local audio = frame.microphone.read(audio_data_size)
-      if audio == nil then
-        frame.sleep(0.1)
-        start_mic()
-        break
-      elseif audio ~= "" then
-        pcall(send_data, string.char(0x05) .. audio)
-      else
-        break
+    maybe_emit_battery(false)
+
+    local now = now_seconds()
+    local ok_conn, conn = pcall(frame.bluetooth.is_connected)
+    local connected = ok_conn and conn
+    if not connected or (now - state.last_message_at) > IDLE_TIMEOUT then
+      pcall(frame.microphone.stop)
+      state.listening = false
+      state.connected = false
+      state.suggestion = ""
+      reset_caption_buffer()
+      pcall(frame.display.power_save, true)
+      pcall(frame.display.show)
+      pcall(frame.sleep)
+      state.last_message_at = now_seconds()
+    end
+
+    if state.listening then
+      for i = 1, 20 do
+        local audio = frame.microphone.read(audio_data_size)
+        if audio == nil then
+          frame.sleep(0.1)
+          start_mic()
+          break
+        elseif audio ~= "" then
+          pcall(send_data, string.char(0x05) .. audio)
+        else
+          break
+        end
       end
     end
 

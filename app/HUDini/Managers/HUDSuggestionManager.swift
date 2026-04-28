@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 @MainActor
 final class HUDSuggestionManager: ObservableObject {
@@ -39,8 +40,13 @@ final class HUDSuggestionManager: ObservableObject {
         }
         inFlightSource = (trimmed, languageCode)
 
+        let bgID = UIApplication.shared.beginBackgroundTask(withName: "hudini.suggestion")
+
         task = Task { [weak self] in
             await self?.generateSuggestion(for: trimmed, languageCode: languageCode)
+            if bgID != .invalid {
+                UIApplication.shared.endBackgroundTask(bgID)
+            }
         }
     }
 
@@ -61,8 +67,13 @@ final class HUDSuggestionManager: ObservableObject {
         suggestionPhonetic = ""
         inFlightSource = (trimmed, languageCode)
 
+        let bgID = UIApplication.shared.beginBackgroundTask(withName: "hudini.phonetic")
+
         task = Task { [weak self] in
             await self?.generatePhoneticOnly(for: trimmed, languageCode: languageCode)
+            if bgID != .invalid {
+                UIApplication.shared.endBackgroundTask(bgID)
+            }
         }
     }
 

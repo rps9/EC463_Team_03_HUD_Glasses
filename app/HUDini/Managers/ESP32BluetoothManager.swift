@@ -15,6 +15,7 @@ final class ESP32BluetoothManager: NSObject, ObservableObject {
     private static let streamSampleRate: Double = 8_000
     private static let singleShotTextLimit = 160
     private static let chunkPayloadSize = 150
+    private static let centralRestoreIdentifier = "com.hudini.esp32.central"
 
     @Published private(set) var state: FrameBluetoothManager.ConnectionState = .idle
     @Published private(set) var discoveredDevices: [FrameBluetoothManager.DiscoveredDevice] = []
@@ -59,7 +60,11 @@ final class ESP32BluetoothManager: NSObject, ObservableObject {
         super.init()
         selectedLanguageCode = TranslationLanguages.preferredListeningLanguageCode()
         recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguageCode))
-        central = CBCentralManager(delegate: self, queue: nil)
+        central = CBCentralManager(
+            delegate: self,
+            queue: nil,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: Self.centralRestoreIdentifier]
+        )
     }
 
     // MARK: - Scanning / Connection
@@ -361,7 +366,10 @@ final class ESP32BluetoothManager: NSObject, ObservableObject {
     func handleScenePhaseChange(_ phase: ScenePhase) {
         switch phase {
         case .background:
-            if isStreaming { stopListening() }
+            // Intentionally keep BLE + listening alive when the app is backgrounded.
+            // The bluetooth-central UIBackgroundMode keeps the central manager alive
+            // so audio/captions continue to flow while the phone is locked.
+            break
         default:
             break
         }
@@ -377,6 +385,19 @@ extension ESP32BluetoothManager: HUDDeviceManager {
 // MARK: - CBCentralManagerDelegate
 
 extension ESP32BluetoothManager: CBCentralManagerDelegate {
+    nonisolated func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        let restored = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
+        Task { @MainActor in
+            guard let peripheral = restored.first else { return }
+            self.connectedPeripheral = peripheral
+            peripheral.delegate = self
+            self.state = .connected(peripheral.name ?? "ESP32")
+            if peripheral.state == .connected {
+                peripheral.discoverServices([Self.service])
+            }
+        }
+    }
+
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         Task { @MainActor in
             switch central.state {

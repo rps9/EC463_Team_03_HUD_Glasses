@@ -772,6 +772,15 @@ private struct DeviceSyncSheet: View {
                     .font(.system(.body, design: .rounded, weight: .semibold))
                     .foregroundStyle(HUDTheme.ink)
                 Spacer()
+                if preferredDevice == .frame, let battery = frameManager.frameBatteryLevel {
+                    HStack(spacing: 4) {
+                        Image(systemName: batteryIcon(for: battery))
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("\(battery)%")
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                    }
+                    .foregroundStyle(batteryTint(for: battery))
+                }
             }
             .padding(14)
             .background(HUDTheme.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -832,6 +841,22 @@ private struct DeviceSyncSheet: View {
         case .frame: frameManager.disconnect()
         case .esp32: esp32Manager.disconnect()
         }
+    }
+
+    private func batteryIcon(for level: Int) -> String {
+        switch level {
+        case ..<10: return "battery.0percent"
+        case ..<35: return "battery.25percent"
+        case ..<60: return "battery.50percent"
+        case ..<85: return "battery.75percent"
+        default: return "battery.100percent"
+        }
+    }
+
+    private func batteryTint(for level: Int) -> Color {
+        if level < 15 { return HUDTheme.rose }
+        if level < 30 { return HUDTheme.amber }
+        return HUDTheme.mint
     }
 }
 
