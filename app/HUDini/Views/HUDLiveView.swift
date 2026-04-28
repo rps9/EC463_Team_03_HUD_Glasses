@@ -5,6 +5,7 @@ struct HUDLiveView: View {
     @EnvironmentObject private var frameManager: FrameBluetoothManager
     @EnvironmentObject private var esp32Manager: ESP32BluetoothManager
     @EnvironmentObject private var conversationHistoryStore: HUDConversationHistoryStore
+    @EnvironmentObject private var profileStore: SuggestionProfileStore
     @AppStorage(wrappedValue: true, APIConfig.AppStorageKey.hudSuggestionEnabled) private var suggestionEnabled: Bool
     @AppStorage(wrappedValue: TranslationLanguages.defaultListeningLanguageCode, APIConfig.AppStorageKey.hudListeningLanguageCode) private var storedListeningLanguageCode: String
     @AppStorage("hudini.preferredDevice") private var preferredDeviceRaw: String = HUDDeviceKind.frame.rawValue
@@ -18,6 +19,7 @@ struct HUDLiveView: View {
     @State private var lastSentBLEText: String = ""
     @State private var isDeviceSheetPresented: Bool = false
     @State private var pulseAnimating: Bool = false
+    @State private var isCustomResponsePresented: Bool = false
 
     private let hudCharacterLimit: Int = 260
     private static let renderedTextDebounceNanoseconds: UInt64 = 450_000_000
@@ -79,6 +81,24 @@ struct HUDLiveView: View {
             applyInitialLanguageConfiguration()
             frameManager.warmUp()
             esp32Manager.warmUp()
+        }
+        .onAppear {
+            suggestionManager.setProfileSnapshotProvider { [weak profileStore] in
+                profileStore?.profile?.compactSnapshot()
+            }
+        }
+        .sheet(isPresented: $isCustomResponsePresented) {
+            CustomResponseSheet(
+                targetLanguageCode: listeningLanguageCode,
+                initialEnglishText: ""
+            ) { translatedNative in
+                suggestionManager.setCustomResponse(
+                    translatedNative: translatedNative,
+                    languageCode: listeningLanguageCode
+                )
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .onChange(of: listeningLanguageCode, initial: false) { _, newValue in
             transcriptionManager.setListeningLanguage(newValue)
@@ -267,36 +287,62 @@ struct HUDLiveView: View {
     // MARK: - Suggestion card
 
     private var suggestionCard: some View {
-        HUDCard {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Suggested Reply")
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(HUDTheme.inkMuted)
-                    Spacer()
-                    Image(systemName: "quote.bubble")
-                        .foregroundStyle(HUDTheme.inkMuted)
-                }
-
-                if suggestionManager.suggestionPhonetic.isEmpty && suggestionManager.suggestionEnglish.isEmpty {
-                    Text("Stop listening to generate a reply suggestion.")
-                        .font(.system(.body, design: .rounded))
-                        .foregroundStyle(HUDTheme.inkMuted)
-                } else {
-                    if !suggestionManager.suggestionPhonetic.isEmpty {
-                        Text(suggestionManager.suggestionPhonetic)
-                            .font(.system(size: 22, weight: .semibold, design: .rounded))
-                            .foregroundStyle(HUDTheme.ink)
-                    }
-
-                    if !suggestionManager.suggestionEnglish.isEmpty {
-                        Text(suggestionManager.suggestionEnglish)
-                            .font(.system(.body, design: .rounded))
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            isCustomResponsePresented = true
+        } label: {
+            HUDCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Suggested Reply")
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(HUDTheme.inkMuted)
+                        Spacer()
+                        Image(systemName: "pencil.line")
                             .foregroundStyle(HUDTheme.inkMuted)
                     }
+
+                    if suggestionManager.isGenerating {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(suggestionManager.generationStage.isEmpty ? "Working…" : suggestionManager.generationStage)
+                                .font(.system(.body, design: .rounded))
+                                .foregroundStyle(HUDTheme.inkMuted)
+                        }
+                    } else if suggestionManager.suggestionPhonetic.isEmpty && suggestionManager.suggestionEnglish.isEmpty {
+                        Text("Stop listening to generate a reply, or tap to write your own.")
+                            .font(.system(.body, design: .rounded))
+                            .foregroundStyle(HUDTheme.inkMuted)
+                    } else {
+                        if !suggestionManager.suggestionPhonetic.isEmpty {
+                            Text(suggestionManager.suggestionPhonetic)
+                                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                                .foregroundStyle(HUDTheme.ink)
+                                .multilineTextAlignment(.leading)
+                        }
+
+                        if !suggestionManager.suggestionEnglish.isEmpty {
+                            Text(suggestionManager.suggestionEnglish)
+                                .font(.system(.body, design: .rounded))
+                                .foregroundStyle(HUDTheme.inkMuted)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "hand.tap")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Tap to write your own")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(HUDTheme.inkMuted.opacity(0.8))
+                    .padding(.top, 2)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Mic FAB

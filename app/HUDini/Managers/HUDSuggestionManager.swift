@@ -5,10 +5,21 @@ import Combine
 final class HUDSuggestionManager: ObservableObject {
     @Published var suggestionPhonetic: String = ""
     @Published var suggestionEnglish: String = ""
+    @Published var isGenerating: Bool = false
+    @Published var generationStage: String = ""
 
     private var task: Task<Void, Never>?
     private var inFlightSource: (text: String, language: String)?
     private let service = HUDOpenAISuggestionService()
+    private var profileSnapshot: () -> [String: String]?
+
+    init(profileSnapshot: @escaping () -> [String: String]? = { nil }) {
+        self.profileSnapshot = profileSnapshot
+    }
+
+    func setProfileSnapshotProvider(_ provider: @escaping () -> [String: String]?) {
+        self.profileSnapshot = provider
+    }
 
     func refreshSuggestion(for text: String, languageCode: String) {
         task?.cancel()
@@ -18,6 +29,8 @@ final class HUDSuggestionManager: ObservableObject {
             suggestionPhonetic = ""
             suggestionEnglish = ""
             inFlightSource = nil
+            isGenerating = false
+            generationStage = ""
             return
         }
 
@@ -31,11 +44,35 @@ final class HUDSuggestionManager: ObservableObject {
         }
     }
 
+    func setCustomResponse(translatedNative: String, languageCode: String) {
+        task?.cancel()
+
+        let trimmed = translatedNative.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            suggestionPhonetic = ""
+            suggestionEnglish = ""
+            inFlightSource = nil
+            isGenerating = false
+            generationStage = ""
+            return
+        }
+
+        suggestionEnglish = trimmed
+        suggestionPhonetic = ""
+        inFlightSource = (trimmed, languageCode)
+
+        task = Task { [weak self] in
+            await self?.generatePhoneticOnly(for: trimmed, languageCode: languageCode)
+        }
+    }
+
     func clearSuggestion() {
         task?.cancel()
         suggestionPhonetic = ""
         suggestionEnglish = ""
         inFlightSource = nil
+        isGenerating = false
+        generationStage = ""
     }
 
     deinit {
@@ -49,21 +86,71 @@ final class HUDSuggestionManager: ObservableObject {
                current.language == languageCode {
                 inFlightSource = nil
             }
+            isGenerating = false
+            generationStage = ""
         }
 
         guard !Task.isCancelled else { return }
 
+        isGenerating = true
+        generationStage = "Thinking…"
+
+        let reply: HUDOpenAISuggestionService.ReplyNative
         do {
-            let reply = try await service.suggestion(for: text, languageCode: languageCode)
-            guard !Task.isCancelled else { return }
-            print("[Suggestion] success: phonetic=\(reply.phonetic) english=\(reply.english)")
-            suggestionPhonetic = reply.phonetic
-            suggestionEnglish = reply.english
+            reply = try await service.generateReply(
+                for: text,
+                languageCode: languageCode,
+                profile: profileSnapshot()
+            )
         } catch {
             guard !Task.isCancelled else { return }
-            print("[Suggestion] error: \(error)")
-            suggestionPhonetic = "Error: \(error.localizedDescription)"
+            print("[Suggestion] reply error: \(error)")
             suggestionEnglish = ""
+            suggestionPhonetic = "Error: \(error.localizedDescription)"
+            return
+        }
+
+        guard !Task.isCancelled else { return }
+        suggestionEnglish = reply.text
+        generationStage = "Phonetic…"
+
+        do {
+            let phonetic = try await service.generatePhonetic(for: reply.text, languageCode: languageCode)
+            guard !Task.isCancelled else { return }
+            suggestionPhonetic = phonetic.phonetic
+            print("[Suggestion] success: english=\(reply.text) phonetic=\(phonetic.phonetic)")
+        } catch {
+            guard !Task.isCancelled else { return }
+            print("[Suggestion] phonetic error: \(error)")
+            suggestionPhonetic = "Phonetic unavailable"
+        }
+    }
+
+    private func generatePhoneticOnly(for text: String, languageCode: String) async {
+        defer {
+            if let current = inFlightSource,
+               current.text == text,
+               current.language == languageCode {
+                inFlightSource = nil
+            }
+            isGenerating = false
+            generationStage = ""
+        }
+
+        guard !Task.isCancelled else { return }
+
+        isGenerating = true
+        generationStage = "Phonetic…"
+
+        do {
+            let phonetic = try await service.generatePhonetic(for: text, languageCode: languageCode)
+            guard !Task.isCancelled else { return }
+            suggestionPhonetic = phonetic.phonetic
+            print("[Suggestion] custom phonetic: \(phonetic.phonetic)")
+        } catch {
+            guard !Task.isCancelled else { return }
+            print("[Suggestion] custom phonetic error: \(error)")
+            suggestionPhonetic = "Phonetic unavailable"
         }
     }
 }

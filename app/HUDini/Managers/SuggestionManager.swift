@@ -3,18 +3,60 @@ import Foundation
 final class HUDOpenAISuggestionService {
     private let urlSession: URLSession
 
-    struct Suggestion {
+    struct ReplyNative {
+        let text: String
+    }
+
+    struct PhoneticResult {
         let phonetic: String
-        let english: String
     }
 
     init(urlSession: URLSession = .shared) {
         self.urlSession = urlSession
     }
 
-    func suggestion(for text: String, languageCode: String) async throws -> Suggestion {
-        guard let url = URL(string: "\(APIConfig.baseURL)/ai/suggestion") else {
-            throw TranslationError.other("Invalid suggestion URL")
+    func generateReply(
+        for text: String,
+        languageCode: String,
+        profile: [String: String]?
+    ) async throws -> ReplyNative {
+        struct Body: Encodable {
+            let text: String
+            let language_code: String
+            let profile: [String: String]?
+        }
+        struct Reply: Decodable {
+            let reply_native: String
+        }
+
+        let body = Body(text: text, language_code: languageCode, profile: profile)
+        let reply: Reply = try await postJSON(path: "/ai/suggestion", body: body)
+        return ReplyNative(text: reply.reply_native)
+    }
+
+    func generatePhonetic(
+        for text: String,
+        languageCode: String
+    ) async throws -> PhoneticResult {
+        struct Body: Encodable {
+            let text: String
+            let language_code: String
+        }
+        struct Reply: Decodable {
+            let phonetic: String
+        }
+
+        let body = Body(text: text, language_code: languageCode)
+        let reply: Reply = try await postJSON(path: "/ai/phonetic", body: body)
+        return PhoneticResult(phonetic: HUDPhoneticResponseFormatter.clean(reply.phonetic))
+    }
+
+    private func postJSON<Body: Encodable, Reply: Decodable>(
+        path: String,
+        body: Body
+    ) async throws -> Reply {
+        guard let url = URL(string: "\(APIConfig.baseURL)\(path)") else {
+            throw TranslationError.other("Invalid AI endpoint URL")
         }
         guard let token = KeychainHelper.loadToken() else {
             throw TranslationError.other("Not authenticated")
@@ -22,32 +64,19 @@ final class HUDOpenAISuggestionService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 35
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        struct Body: Encodable {
-            let text: String
-            let language_code: String
-        }
-        request.httpBody = try JSONEncoder().encode(Body(text: text, language_code: languageCode))
+        request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await urlSession.data(for: request)
 
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw TranslationError.other("Suggestion API error \(code): \(body)")
+            let bodyText = String(data: data, encoding: .utf8) ?? ""
+            throw TranslationError.other("AI API error \(code): \(bodyText)")
         }
 
-        struct Reply: Decodable {
-            let reply_native: String
-            let reply_phonetic: String
-        }
-
-        let reply = try JSONDecoder().decode(Reply.self, from: data)
-        return Suggestion(
-            phonetic: HUDPhoneticResponseFormatter.clean(reply.reply_phonetic),
-            english: reply.reply_native
-        )
+        return try JSONDecoder().decode(Reply.self, from: data)
     }
 }

@@ -245,15 +245,17 @@ struct SignInView: View {
             .buttonStyle(HUDSecondaryButtonStyle(tint: HUDTheme.ink))
             .disabled(authManager.isLoading)
 
+#if APPLE_SIGN_IN_ENABLED
             SignInWithAppleButton(.continue) { request in
                 authManager.configureSignInWithAppleRequest(request)
             } onCompletion: { result in
                 signInWithApple(result: result)
             }
-            .signInWithAppleButtonStyle(.black)
+            .signInWithAppleButtonStyle(.whiteOutline)
             .frame(height: 54)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .disabled(authManager.isLoading)
+#endif
         }
     }
 
@@ -367,11 +369,13 @@ struct SignInView: View {
         }
     }
 
+#if APPLE_SIGN_IN_ENABLED
     private func signInWithApple(result: Result<ASAuthorization, Error>) {
         Task {
             await authManager.signInWithApple(result: result)
         }
     }
+#endif
 }
 
 private struct GoogleLogoMark: View {

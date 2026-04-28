@@ -309,6 +309,7 @@ class AuthenticationManager: ObservableObject {
         isLoading = false
     }
 
+#if APPLE_SIGN_IN_ENABLED
     @MainActor
     func configureSignInWithAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
         let nonce = Self.randomNonceString()
@@ -379,7 +380,8 @@ class AuthenticationManager: ObservableObject {
             }
         }
     }
-    
+#endif
+
     private func parseAPIError(data: Data) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         if let detail = json["detail"] as? String { return detail }
@@ -499,9 +501,13 @@ class AuthenticationManager: ObservableObject {
     }
 
     private func isUserCancelledAppleSignIn(_ error: Error) -> Bool {
+#if APPLE_SIGN_IN_ENABLED
         let nsError = error as NSError
         return nsError.domain == ASAuthorizationError.errorDomain &&
             ASAuthorizationError.Code(rawValue: nsError.code) == .canceled
+#else
+        return false
+#endif
     }
 
     private func perform<Response: Decodable>(_ request: URLRequest) async throws -> Response {

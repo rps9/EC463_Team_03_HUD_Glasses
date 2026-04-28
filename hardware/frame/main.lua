@@ -2,16 +2,22 @@ local APP_DIR = "/hudini"
 local APP_VERSION = "2026.04.09.8"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
+local CAPTION_LINE_LIMIT = 30
+local CAPTION_LINE_HISTORY = 50
+
 local state = {
   connected = false,
   status = "idle",
   listening = false,
-  partial_caption = "",
-  final_caption = "",
   brightness = 0,
   partials = true,
   needs_render = true,
   suggestion = "",
+  -- Rolling caption buffer (Noa-style append-and-scroll)
+  caption_lines = {},
+  caption_buffer = "",
+  last_caption_text = "",
+  live_partial = "",
 }
 
 frame.display.text("HUDini", 220, 116, { color = "WHITE", spacing = 4 })
@@ -175,6 +181,66 @@ local function draw_multiline(text, x, y, color, max_chars, max_lines)
   return line_y
 end
 
+local function reset_caption_buffer()
+  state.caption_lines = {}
+  state.caption_buffer = ""
+  state.last_caption_text = ""
+  state.live_partial = ""
+end
+
+local function emit_lines_from_buffer()
+  while string.len(state.caption_buffer) > CAPTION_LINE_LIMIT do
+    local window = string.sub(state.caption_buffer, 1, CAPTION_LINE_LIMIT)
+    local space_pos = nil
+    for i = CAPTION_LINE_LIMIT, 1, -1 do
+      if string.sub(window, i, i) == " " then
+        space_pos = i
+        break
+      end
+    end
+    if space_pos == nil then
+      table.insert(state.caption_lines, string.sub(state.caption_buffer, 1, CAPTION_LINE_LIMIT - 1) .. "-")
+      state.caption_buffer = string.sub(state.caption_buffer, CAPTION_LINE_LIMIT)
+    else
+      table.insert(state.caption_lines, string.sub(state.caption_buffer, 1, space_pos - 1))
+      state.caption_buffer = string.sub(state.caption_buffer, space_pos + 1)
+    end
+    while #state.caption_lines > CAPTION_LINE_HISTORY do
+      table.remove(state.caption_lines, 1)
+    end
+  end
+end
+
+local function flush_caption_text(text, is_partial)
+  text = normalize_display_text(text)
+  if is_partial then
+    if state.partials then
+      state.live_partial = text
+    else
+      state.live_partial = ""
+    end
+    return
+  end
+
+  state.live_partial = ""
+  if text == "" then
+    return
+  end
+
+  local last = state.last_caption_text
+  if last ~= "" and string.sub(text, 1, string.len(last)) == last then
+    local delta = string.sub(text, string.len(last) + 1)
+    if delta ~= "" then
+      state.caption_buffer = state.caption_buffer .. delta
+    end
+  else
+    state.caption_lines = {}
+    state.caption_buffer = text
+  end
+  state.last_caption_text = text
+  emit_lines_from_buffer()
+end
+
 local function render_ui()
   if not state.connected then
     frame.display.power_save(true)
@@ -188,19 +254,23 @@ local function render_ui()
   frame.display.text("Mic:", 24, 52, { color = "WHITE", spacing = 4 })
   frame.display.text(state.listening and "ON" or "OFF", 98, 52, { color = state.listening and "GREEN" or "RED", spacing = 4 })
 
-  local text = state.final_caption
-  if text == "" and state.partials then
-    text = state.partial_caption
+  local visible = {}
+  local n = #state.caption_lines
+  if n >= 2 then table.insert(visible, state.caption_lines[n - 1]) end
+  if n >= 1 then table.insert(visible, state.caption_lines[n]) end
+  if state.live_partial ~= "" then
+    table.insert(visible, string.sub(state.live_partial, 1, CAPTION_LINE_LIMIT))
+  elseif state.caption_buffer ~= "" then
+    table.insert(visible, state.caption_buffer)
+  end
+  while #visible > 3 do
+    table.remove(visible, 1)
   end
 
-  local all_lines = wrap_lines(text, 30, 20)
-  local start_idx = math.max(1, #all_lines - 2)
   local caption_y = 98
-  local lines_drawn = 0
-  for i = start_idx, #all_lines do
-    frame.display.text(all_lines[i], 24, caption_y, { color = "SKYBLUE", spacing = 4 })
+  for _, line in ipairs(visible) do
+    frame.display.text(line, 24, caption_y, { color = "SKYBLUE", spacing = 4 })
     caption_y = caption_y + 45
-    lines_drawn = lines_drawn + 1
   end
 
   if state.suggestion ~= "" then
@@ -226,10 +296,14 @@ local function handle_command(payload)
   end
 
   if command == "SYNC_STATE" then
+    local was_listening = state.listening
     state.listening = parts[2] == "1"
     state.status = parts[3] or (state.listening and "listening" or "idle")
     if state.listening then
       state.suggestion = ""
+      if not was_listening then
+        reset_caption_buffer()
+      end
     end
     state.needs_render = true
     send_event({ "EVT", "STATUS", state.status })
@@ -258,15 +332,7 @@ local function handle_command(payload)
   if command == "SHOW_CAPTION" then
     local caption_kind = parts[2] or "final"
     local text = parts[3] or ""
-    if caption_kind == "partial" then
-      state.partial_caption = trim(text)
-      if not state.partials then
-        state.partial_caption = ""
-      end
-    else
-      state.final_caption = trim(text)
-      state.partial_caption = ""
-    end
+    flush_caption_text(text, caption_kind == "partial")
     state.needs_render = true
     return
   end
@@ -278,8 +344,7 @@ local function handle_command(payload)
   end
 
   if command == "CLEAR_CAPTION" then
-    state.partial_caption = ""
-    state.final_caption = ""
+    reset_caption_buffer()
     state.suggestion = ""
     state.needs_render = true
     return
@@ -287,8 +352,7 @@ local function handle_command(payload)
 
   if command == "RESET" then
     pcall(frame.microphone.stop)
-    state.partial_caption = ""
-    state.final_caption = ""
+    reset_caption_buffer()
     state.listening = false
     state.suggestion = ""
     state.needs_render = true

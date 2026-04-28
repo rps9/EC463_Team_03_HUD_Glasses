@@ -19,7 +19,7 @@ VERIFY_REDIRECT_SUCCESS = "https://rps9.net/hudini-verify/success.html"
 VERIFY_REDIRECT_INVALID = "https://rps9.net/hudini-verify/invalid.html"
 VERIFY_REDIRECT_EXPIRED = "https://rps9.net/hudini-verify/expired.html"
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
-APPLE_CLIENT_ID = os.environ.get("APPLE_CLIENT_ID", "com.ryansmith.hudini")
+APPLE_CLIENT_ID = os.environ.get("APPLE_CLIENT_ID")
 APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
 
 PASSWORD_RE = re.compile(r"^[\x21-\x7E]+$") # Covers all ASCII but space
@@ -488,59 +488,123 @@ def reset_password(body: RequestResetPassword):
 # ── AI suggestion proxy (admin-only) ─────────────────────────────────────────
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
+OPENAI_MODEL = "gpt-5-mini"
+OPENAI_REASONING_EFFORT = "medium"
+OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
-class SuggestionBody(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
-    language_code: str = Field(min_length=2, max_length=10)
 
-@app.post("/hudini/ai/suggestion", dependencies=[Depends(current_admin)], status_code=status.HTTP_200_OK)
-async def ai_suggestion(body: SuggestionBody):
+async def _openai_chat(messages: list[dict], max_completion_tokens: int) -> str:
     if not OPENAI_API_KEY:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OpenAI not configured")
 
-    system_prompt = (
-        "You are Ryan, replying to someone in conversation. "
-        "Respond naturally in the user's language, and include a phonetic rewrite.\n"
-        "Respond with JSON ONLY in this exact shape:\n"
-        '{"reply_native":"...", "reply_phonetic":"..."}\n\n'
-        "Requirements:\n"
-        "- reply_native: one friendly sentence in the requested language (standard spelling).\n"
-        "- reply_phonetic: the same text rewritten phonetically using ASCII letters, spaces, "
-        "commas, apostrophes, hyphens, periods, and question marks so an English speaker can read it aloud.\n"
-        "- No explanations, no code fences, no commentary outside the JSON."
-    )
-
-    openai_body = {
+    payload = {
         "model": OPENAI_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Language: {body.language_code}\nUser: {body.text}"},
-        ],
-        "max_tokens": 220,
-        "temperature": 0.35,
+        "messages": messages,
+        "max_completion_tokens": max_completion_tokens,
+        "reasoning_effort": OPENAI_REASONING_EFFORT,
     }
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
-            "https://api.openai.com/v1/chat/completions",
+            OPENAI_CHAT_URL,
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {OPENAI_API_KEY}",
             },
-            json=openai_body,
+            json=payload,
         )
 
     if resp.status_code != 200:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"OpenAI error {resp.status_code}")
 
     try:
-        raw_content = resp.json()["choices"][0]["message"]["content"].strip()
-        parsed = json.loads(raw_content)
-        return {
-            "ok": True,
-            "reply_native": parsed["reply_native"],
-            "reply_phonetic": parsed["reply_phonetic"],
-        }
-    except (KeyError, IndexError, json.JSONDecodeError):
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to parse OpenAI response")
+
+
+def _parse_json_payload(raw: str, required_keys: list[str]) -> dict:
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to parse OpenAI response")
+    for key in required_keys:
+        if key not in parsed or not isinstance(parsed[key], str):
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to parse OpenAI response")
+    return parsed
+
+
+class SuggestionBody(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    language_code: str = Field(min_length=2, max_length=10)
+    profile: dict[str, str] | None = None
+
+
+SUGGESTION_SYSTEM_PROMPT = (
+    "You are HUDini, an AI co-pilot whispering replies into the user's HUD.\n"
+    "Given the conversation context (what the other person just said) and the user's profile, "
+    "write ONE short, natural reply in the requested language.\n\n"
+    "Rules:\n"
+    "- Reply ONLY with JSON: {\"reply_native\":\"...\"}\n"
+    "- 1-2 sentences, conversational, matches the user's tone preference.\n"
+    "- Use the user's profile to personalize but never mention you're using a profile.\n"
+    "- Never invent personal facts not present in the profile.\n"
+    "- If the user has dietary, health, religious, or \"topics_to_avoid\" entries, never produce a reply that violates them.\n"
+    "- No emojis, no markdown, no code fences, no commentary."
+)
+
+
+@app.post("/hudini/ai/suggestion", dependencies=[Depends(current_admin)], status_code=status.HTTP_200_OK)
+async def ai_suggestion(body: SuggestionBody):
+    profile_payload = json.dumps(body.profile or {}, ensure_ascii=False)
+    user_message = (
+        f"Language: {body.language_code}\n"
+        f"Profile: {profile_payload}\n"
+        f"Heard: {body.text}"
+    )
+
+    raw_content = await _openai_chat(
+        messages=[
+            {"role": "system", "content": SUGGESTION_SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
+        max_completion_tokens=320,
+    )
+    parsed = _parse_json_payload(raw_content, ["reply_native"])
+    return {"ok": True, "reply_native": parsed["reply_native"]}
+
+
+class PhoneticBody(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    language_code: str = Field(min_length=2, max_length=10)
+
+
+PHONETIC_SYSTEM_PROMPT = (
+    "You are a phonetic transliteration specialist. You will be given text in some language "
+    "and must rewrite it so an English-only speaker can pronounce it aloud.\n\n"
+    "Output JSON ONLY: {\"phonetic\":\"...\"}\n\n"
+    "Rules:\n"
+    "- Use only ASCII letters, spaces, commas, apostrophes, hyphens, periods, and question marks.\n"
+    "- Approximate pronunciation as spoken in the requested language (NOT the spelling).\n"
+    "- Mark stressed syllables in long words by separating syllables with hyphens "
+    "(e.g., \"comprehensión\" → \"kom-pren-see-OWN\").\n"
+    "- Do NOT translate. Do NOT add words. Do NOT include the original text.\n"
+    "- For Mandarin, use Pinyin without tone marks (use ASCII only). "
+    "For Japanese, use Hepburn romaji without macrons.\n"
+    "- Keep punctuation positions roughly aligned with the source."
+)
+
+
+@app.post("/hudini/ai/phonetic", dependencies=[Depends(current_admin)], status_code=status.HTTP_200_OK)
+async def ai_phonetic(body: PhoneticBody):
+    user_message = f"Language: {body.language_code}\nText: {body.text}"
+
+    raw_content = await _openai_chat(
+        messages=[
+            {"role": "system", "content": PHONETIC_SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
+        max_completion_tokens=220,
+    )
+    parsed = _parse_json_payload(raw_content, ["phonetic"])
+    return {"ok": True, "phonetic": parsed["phonetic"]}
