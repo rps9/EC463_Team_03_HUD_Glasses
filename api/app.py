@@ -1,4 +1,4 @@
-import re, json, hashlib, hmac, jwt, os, secrets, httpx
+import re, json, hashlib, hmac, jwt, os, secrets, httpx, logging
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
@@ -25,6 +25,8 @@ APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
 PASSWORD_RE = re.compile(r"^[\x21-\x7E]+$") # Covers all ASCII but space
 
 security = HTTPBearer(auto_error=False)
+
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI()
 
@@ -517,7 +519,7 @@ async def _openai_chat(messages: list[dict], max_completion_tokens: int) -> str:
 
     if resp.status_code != 200:
         body_text = resp.text[:500]
-        print(f"[OpenAI] error {resp.status_code}: {body_text}")
+        logger.error("OpenAI error %s: %s", resp.status_code, body_text)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"OpenAI error {resp.status_code}: {body_text}",
@@ -525,7 +527,8 @@ async def _openai_chat(messages: list[dict], max_completion_tokens: int) -> str:
 
     try:
         return resp.json()["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError):
+    except (KeyError, IndexError) as exc:
+        logger.error("OpenAI parse error: %s; body=%s", exc, resp.text[:500])
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to parse OpenAI response")
 
 
