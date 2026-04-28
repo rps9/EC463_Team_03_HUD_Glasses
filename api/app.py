@@ -491,7 +491,7 @@ def reset_password(body: RequestResetPassword):
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = "gpt-5-mini"
-OPENAI_REASONING_EFFORT = "medium"
+OPENAI_REASONING_EFFORT = "low"
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
 
@@ -503,11 +503,12 @@ async def _openai_chat(messages: list[dict], max_completion_tokens: int) -> str:
         "model": OPENAI_MODEL,
         "messages": messages,
         "max_completion_tokens": max_completion_tokens,
+        "response_format": {"type": "json_object"},
     }
     if OPENAI_MODEL.startswith("gpt-5") or OPENAI_MODEL.startswith("o"):
         payload["reasoning_effort"] = OPENAI_REASONING_EFFORT
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
             OPENAI_CHAT_URL,
             headers={
@@ -587,7 +588,7 @@ async def ai_suggestion(body: SuggestionBody):
             {"role": "system", "content": SUGGESTION_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ],
-        max_completion_tokens=320,
+        max_completion_tokens=1500,
     )
     parsed = _parse_json_payload(raw_content, ["reply_native"])
     return {"ok": True, "reply_native": parsed["reply_native"]}
@@ -623,7 +624,7 @@ async def ai_phonetic(body: PhoneticBody):
             {"role": "system", "content": PHONETIC_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ],
-        max_completion_tokens=220,
+        max_completion_tokens=1500,
     )
     parsed = _parse_json_payload(raw_content, ["phonetic"])
     return {"ok": True, "phonetic": parsed["phonetic"]}
