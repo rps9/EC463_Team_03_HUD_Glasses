@@ -526,7 +526,9 @@ async def _openai_chat(messages: list[dict], max_completion_tokens: int) -> str:
         )
 
     try:
-        return resp.json()["choices"][0]["message"]["content"].strip()
+        content = resp.json()["choices"][0]["message"]["content"].strip()
+        logger.info("OpenAI raw content (model=%s): %r", OPENAI_MODEL, content[:500])
+        return content
     except (KeyError, IndexError) as exc:
         logger.error("OpenAI parse error: %s; body=%s", exc, resp.text[:500])
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to parse OpenAI response")
@@ -535,11 +537,19 @@ async def _openai_chat(messages: list[dict], max_completion_tokens: int) -> str:
 def _parse_json_payload(raw: str, required_keys: list[str]) -> dict:
     try:
         parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to parse OpenAI response")
+    except json.JSONDecodeError as exc:
+        logger.error("JSON decode failed: %s; raw=%r", exc, raw[:500])
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to parse OpenAI response: {raw[:200]}",
+        )
     for key in required_keys:
         if key not in parsed or not isinstance(parsed[key], str):
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to parse OpenAI response")
+            logger.error("Missing/invalid key %r in OpenAI response: %r", key, parsed)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"OpenAI response missing key {key!r}: {parsed}",
+            )
     return parsed
 
 
