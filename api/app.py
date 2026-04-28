@@ -497,12 +497,13 @@ async def _openai_chat(messages: list[dict], max_completion_tokens: int) -> str:
     if not OPENAI_API_KEY:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OpenAI not configured")
 
-    payload = {
+    payload: dict = {
         "model": OPENAI_MODEL,
         "messages": messages,
         "max_completion_tokens": max_completion_tokens,
-        "reasoning_effort": OPENAI_REASONING_EFFORT,
     }
+    if OPENAI_MODEL.startswith("gpt-5") or OPENAI_MODEL.startswith("o"):
+        payload["reasoning_effort"] = OPENAI_REASONING_EFFORT
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
@@ -515,7 +516,12 @@ async def _openai_chat(messages: list[dict], max_completion_tokens: int) -> str:
         )
 
     if resp.status_code != 200:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"OpenAI error {resp.status_code}")
+        body_text = resp.text[:500]
+        print(f"[OpenAI] error {resp.status_code}: {body_text}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"OpenAI error {resp.status_code}: {body_text}",
+        )
 
     try:
         return resp.json()["choices"][0]["message"]["content"].strip()
