@@ -95,34 +95,21 @@ final class HUDSuggestionManager: ObservableObject {
         isGenerating = true
         generationStage = "Thinking…"
 
-        let reply: HUDOpenAISuggestionService.ReplyNative
         do {
-            reply = try await service.generateReply(
+            let reply = try await service.generateReply(
                 for: text,
                 languageCode: languageCode,
                 profile: profileSnapshot()
             )
+            guard !Task.isCancelled else { return }
+            suggestionEnglish = reply.native
+            suggestionPhonetic = reply.phonetic
+            print("[Suggestion] success: native=\(reply.native) phonetic=\(reply.phonetic)")
         } catch {
             guard !Task.isCancelled else { return }
-            print("[Suggestion] reply error: \(error)")
+            print("[Suggestion] error: \(error)")
             suggestionEnglish = ""
             suggestionPhonetic = "Error: \(error.localizedDescription)"
-            return
-        }
-
-        guard !Task.isCancelled else { return }
-        suggestionEnglish = reply.text
-        generationStage = "Phonetic…"
-
-        do {
-            let phonetic = try await service.generatePhonetic(for: reply.text, languageCode: languageCode)
-            guard !Task.isCancelled else { return }
-            suggestionPhonetic = phonetic.phonetic
-            print("[Suggestion] success: english=\(reply.text) phonetic=\(phonetic.phonetic)")
-        } catch {
-            guard !Task.isCancelled else { return }
-            print("[Suggestion] phonetic error: \(error)")
-            suggestionPhonetic = "Phonetic unavailable"
         }
     }
 

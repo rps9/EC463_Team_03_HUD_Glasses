@@ -3,8 +3,9 @@ import Foundation
 final class HUDOpenAISuggestionService {
     private let urlSession: URLSession
 
-    struct ReplyNative {
-        let text: String
+    struct SuggestionReply {
+        let native: String
+        let phonetic: String
     }
 
     struct PhoneticResult {
@@ -19,7 +20,7 @@ final class HUDOpenAISuggestionService {
         for text: String,
         languageCode: String,
         profile: [String: String]?
-    ) async throws -> ReplyNative {
+    ) async throws -> SuggestionReply {
         struct Body: Encodable {
             let text: String
             let language_code: String
@@ -27,11 +28,15 @@ final class HUDOpenAISuggestionService {
         }
         struct Reply: Decodable {
             let reply_native: String
+            let reply_phonetic: String
         }
 
         let body = Body(text: text, language_code: languageCode, profile: profile)
         let reply: Reply = try await postJSON(path: "/ai/suggestion", body: body)
-        return ReplyNative(text: reply.reply_native)
+        return SuggestionReply(
+            native: reply.reply_native,
+            phonetic: HUDPhoneticResponseFormatter.clean(reply.reply_phonetic)
+        )
     }
 
     func generatePhonetic(
@@ -64,7 +69,7 @@ final class HUDOpenAISuggestionService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 35
+        request.timeoutInterval = 10
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(body)

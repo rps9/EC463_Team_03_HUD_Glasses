@@ -491,7 +491,7 @@ def reset_password(body: RequestResetPassword):
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = "gpt-5-mini"
-OPENAI_REASONING_EFFORT = "low"
+OPENAI_REASONING_EFFORT = "minimal"
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
 
@@ -508,7 +508,7 @@ async def _openai_chat(messages: list[dict], max_completion_tokens: int) -> str:
     if OPENAI_MODEL.startswith("gpt-5") or OPENAI_MODEL.startswith("o"):
         payload["reasoning_effort"] = OPENAI_REASONING_EFFORT
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
             OPENAI_CHAT_URL,
             headers={
@@ -561,16 +561,23 @@ class SuggestionBody(BaseModel):
 
 
 SUGGESTION_SYSTEM_PROMPT = (
-    "You are HUDini, an AI co-pilot whispering replies into the user's HUD.\n"
-    "Given the conversation context (what the other person just said) and the user's profile, "
-    "write ONE short, natural reply in the requested language.\n\n"
-    "Rules:\n"
-    "- Reply ONLY with JSON: {\"reply_native\":\"...\"}\n"
-    "- 1-2 sentences, conversational, matches the user's tone preference.\n"
-    "- Use the user's profile to personalize but never mention you're using a profile.\n"
-    "- Never invent personal facts not present in the profile.\n"
-    "- If the user has dietary, health, religious, or \"topics_to_avoid\" entries, never produce a reply that violates them.\n"
-    "- No emojis, no markdown, no code fences, no commentary."
+    "You are HUDini, an AI co-pilot whispering a reply into the user's HUD.\n\n"
+    "Step 1 - Reply: Given what the other person just said and the user's profile, "
+    "write the SHORTEST possible natural reply in the requested language that DIRECTLY answers "
+    "what was asked - and nothing more.\n"
+    "- ONE sentence. Under 15 words when possible.\n"
+    "- Answer ONLY what was asked. Do NOT volunteer extra facts (hobbies, job, location, opinions) "
+    "unless they were literally asked about.\n"
+    "- Pull facts from the profile only when they directly answer the question. Never invent facts.\n"
+    "- If profile has dietary, health, religious, or \"topics_to_avoid\" entries, never violate them.\n\n"
+    "Step 2 - Phonetic: Rewrite the reply phonetically so an English-only speaker can read it aloud.\n"
+    "- ASCII letters, spaces, commas, apostrophes, hyphens, periods, and question marks ONLY.\n"
+    "- Approximate pronunciation as spoken in the requested language (NOT the spelling).\n"
+    "- Mark stress in long words with hyphens (e.g., \"comprehension\" -> \"kom-pren-see-OWN\").\n"
+    "- For Mandarin, Pinyin without tone marks. For Japanese, Hepburn without macrons.\n"
+    "- Do NOT translate or add words.\n\n"
+    "Output JSON ONLY: {\"reply_native\":\"...\",\"reply_phonetic\":\"...\"}\n"
+    "No emojis, markdown, code fences, or commentary."
 )
 
 
@@ -588,10 +595,14 @@ async def ai_suggestion(body: SuggestionBody):
             {"role": "system", "content": SUGGESTION_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ],
-        max_completion_tokens=1500,
+        max_completion_tokens=500,
     )
-    parsed = _parse_json_payload(raw_content, ["reply_native"])
-    return {"ok": True, "reply_native": parsed["reply_native"]}
+    parsed = _parse_json_payload(raw_content, ["reply_native", "reply_phonetic"])
+    return {
+        "ok": True,
+        "reply_native": parsed["reply_native"],
+        "reply_phonetic": parsed["reply_phonetic"],
+    }
 
 
 class PhoneticBody(BaseModel):
@@ -624,7 +635,7 @@ async def ai_phonetic(body: PhoneticBody):
             {"role": "system", "content": PHONETIC_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ],
-        max_completion_tokens=1500,
+        max_completion_tokens=400,
     )
     parsed = _parse_json_payload(raw_content, ["phonetic"])
     return {"ok": True, "phonetic": parsed["phonetic"]}
