@@ -158,11 +158,12 @@ struct HUDLiveView: View {
         }
         .onChange(of: suggestionManager.suggestionPhonetic, initial: false) { _, newPhonetic in
             guard shouldUseDeviceMic, isDeviceConnected, !isListening else { return }
-            let trimmed = newPhonetic.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
+            let trimmedPhonetic = newPhonetic.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedEnglish = suggestionManager.suggestionEnglish.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedPhonetic.isEmpty && trimmedEnglish.isEmpty {
                 sendClearSuggestionToActiveDevice()
             } else {
-                sendSuggestionToActiveDevice(trimmed)
+                sendSuggestionToActiveDevice(phonetic: trimmedPhonetic, english: trimmedEnglish)
             }
         }
         .onChange(of: isListening, initial: true) { wasListening, listening in
@@ -310,7 +311,9 @@ struct HUDLiveView: View {
                                 .font(.system(.body, design: .rounded))
                                 .foregroundStyle(HUDTheme.inkMuted)
                         }
-                    } else if suggestionManager.suggestionPhonetic.isEmpty && suggestionManager.suggestionEnglish.isEmpty {
+                    } else if suggestionManager.suggestionPhonetic.isEmpty
+                              && suggestionManager.suggestionEnglish.isEmpty
+                              && suggestionManager.suggestionNative.isEmpty {
                         Text("Stop listening to generate a reply, or tap to write your own.")
                             .font(.system(.body, design: .rounded))
                             .foregroundStyle(HUDTheme.inkMuted)
@@ -322,9 +325,17 @@ struct HUDLiveView: View {
                                 .multilineTextAlignment(.leading)
                         }
 
+                        if !suggestionManager.suggestionNative.isEmpty {
+                            Text(suggestionManager.suggestionNative)
+                                .font(.system(.body, design: .rounded))
+                                .foregroundStyle(HUDTheme.inkMuted)
+                                .multilineTextAlignment(.leading)
+                        }
+
                         if !suggestionManager.suggestionEnglish.isEmpty {
                             Text(suggestionManager.suggestionEnglish)
-                                .font(.system(.body, design: .rounded))
+                                .font(.system(.callout, design: .rounded))
+                                .italic()
                                 .foregroundStyle(HUDTheme.inkMuted)
                                 .multilineTextAlignment(.leading)
                         }
@@ -506,10 +517,10 @@ struct HUDLiveView: View {
         }
     }
 
-    private func sendSuggestionToActiveDevice(_ text: String) {
+    private func sendSuggestionToActiveDevice(phonetic: String, english: String) {
         switch preferredDevice {
-        case .frame: frameManager.sendSuggestion(text)
-        case .esp32: esp32Manager.sendSuggestion(text)
+        case .frame: frameManager.sendSuggestion(phonetic: phonetic, english: english)
+        case .esp32: esp32Manager.sendSuggestion(phonetic: phonetic, english: english)
         }
     }
 

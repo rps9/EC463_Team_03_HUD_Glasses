@@ -5,7 +5,8 @@ import UIKit
 @MainActor
 final class HUDSuggestionManager: ObservableObject {
     @Published var suggestionPhonetic: String = ""
-    @Published var suggestionEnglish: String = ""
+    @Published var suggestionEnglish: String = ""   // natural English meaning
+    @Published var suggestionNative: String = ""    // target-language text (e.g. Spanish)
     @Published var isGenerating: Bool = false
     @Published var generationStage: String = ""
 
@@ -29,6 +30,7 @@ final class HUDSuggestionManager: ObservableObject {
         guard !trimmed.isEmpty else {
             suggestionPhonetic = ""
             suggestionEnglish = ""
+            suggestionNative = ""
             inFlightSource = nil
             isGenerating = false
             generationStage = ""
@@ -57,13 +59,17 @@ final class HUDSuggestionManager: ObservableObject {
         guard !trimmed.isEmpty else {
             suggestionPhonetic = ""
             suggestionEnglish = ""
+            suggestionNative = ""
             inFlightSource = nil
             isGenerating = false
             generationStage = ""
             return
         }
 
-        suggestionEnglish = trimmed
+        // `translatedNative` is target-language text the user typed; we don't
+        // have an English meaning for it (would need a separate translate call).
+        suggestionNative = trimmed
+        suggestionEnglish = ""
         suggestionPhonetic = ""
         inFlightSource = (trimmed, languageCode)
 
@@ -81,6 +87,7 @@ final class HUDSuggestionManager: ObservableObject {
         task?.cancel()
         suggestionPhonetic = ""
         suggestionEnglish = ""
+        suggestionNative = ""
         inFlightSource = nil
         isGenerating = false
         generationStage = ""
@@ -113,12 +120,14 @@ final class HUDSuggestionManager: ObservableObject {
                 profile: profileSnapshot()
             )
             guard !Task.isCancelled else { return }
-            suggestionEnglish = reply.native
+            suggestionNative = reply.native
+            suggestionEnglish = reply.english
             suggestionPhonetic = reply.phonetic
-            print("[Suggestion] success: native=\(reply.native) phonetic=\(reply.phonetic)")
+            print("[Suggestion] success: native=\(reply.native) phonetic=\(reply.phonetic) english=\(reply.english)")
         } catch {
             guard !Task.isCancelled else { return }
             print("[Suggestion] error: \(error)")
+            suggestionNative = ""
             suggestionEnglish = ""
             suggestionPhonetic = "Error: \(error.localizedDescription)"
         }

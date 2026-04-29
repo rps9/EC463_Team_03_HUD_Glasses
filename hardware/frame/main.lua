@@ -1,25 +1,27 @@
+-- this is not what gets put onto the frame, this is just for reference -- 
+
 local APP_DIR = "/hudini"
-local APP_VERSION = "2026.04.28.3"
+local APP_VERSION = "2026.04.28.10"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
 local CAPTION_LINE_LIMIT = 30
 local CAPTION_LINE_HISTORY = 50
 local BATTERY_CHECK_INTERVAL = 60   -- seconds between cheap level reads
 local BATTERY_FORCE_INTERVAL = 600  -- seconds between forced re-emits
-local IDLE_TIMEOUT = 60             -- seconds without any inbound command -> deep sleep
+local IDLE_PRE_SLEEP = 30           -- seconds of message silence before pre-sleep warning
+local IDLE_DEEP_SLEEP = 60          -- seconds of message silence before frame.sleep()
 
 -- Forward declaration so handle_command can reference start_mic on SYNC_STATE / RESET
 local start_mic
 
 local state = {
-  connected = false,
   status = "idle",
   listening = false,
   brightness = 2,
   partials = true,
   needs_render = true,
-  suggestion = "",
-  -- Rolling caption buffer (Noa-style append-and-scroll)
+  suggestion_phonetic = "",
+  suggestion_english = "",
   caption_lines = {},
   caption_buffer = "",
   last_caption_text = "",
@@ -28,11 +30,51 @@ local state = {
   last_battery_emit_at = 0,
   last_battery_level = -1,
   last_message_at = 0,
+  disconnected = false,
+  sleep_started = false,
 }
 
 frame.display.text("HUDini", 220, 116, { color = "WHITE", spacing = 4 })
 frame.display.text("Loading...", 210, 154, { color = "LIGHTGREEN", spacing = 4 })
 frame.display.show()
+
+-- Single-channel chunking accumulator. The Frame firmware strips the iOS
+-- `0x01` "data prefix" byte before delivering to `frame.bluetooth.receive_callback`,
+-- so what we see here is:
+--   first chunk    = [size_hi][size_lo][payload bytes...]
+--   continuation   = [payload bytes...]
+-- Once `recv_bytes >= size` we have the full assembled command payload.
+-- A pending payload sits in `accum.ready` for the main loop to pick up.
+local accum = {
+  chunks = {},
+  num_chunks = 0,
+  size = 0,
+  recv_bytes = 0,
+  ready = nil,
+}
+
+local function on_packet(packet)
+  pcall(function()
+    if accum.num_chunks == 0 then
+      accum.size = (string.byte(packet, 1) << 8) | string.byte(packet, 2)
+      accum.chunks[1] = string.sub(packet, 3)
+      accum.num_chunks = 1
+      accum.recv_bytes = string.len(packet) - 2
+    else
+      accum.num_chunks = accum.num_chunks + 1
+      accum.chunks[accum.num_chunks] = packet
+      accum.recv_bytes = accum.recv_bytes + string.len(packet)
+    end
+
+    if accum.recv_bytes >= accum.size and accum.size > 0 then
+      accum.ready = table.concat(accum.chunks)
+      for k in pairs(accum.chunks) do accum.chunks[k] = nil end
+      accum.num_chunks = 0
+      accum.size = 0
+      accum.recv_bytes = 0
+    end
+  end)
+end
 
 local function ensure_dir()
   pcall(frame.file.mkdir, APP_DIR)
@@ -125,7 +167,10 @@ local function read_battery_level()
 end
 
 local function maybe_emit_battery(force)
-  if not force and not state.connected then return end
+  if not force then
+    local ok_conn, conn = pcall(frame.bluetooth.is_connected)
+    if not ok_conn or not conn then return end
+  end
   local now = now_seconds()
   if not force and (now - state.last_battery_check_at) < BATTERY_CHECK_INTERVAL then
     return
@@ -286,21 +331,40 @@ local function flush_caption_text(text, is_partial)
   emit_lines_from_buffer()
 end
 
+-- Blank the framebuffer without using power_save. Drawing a single space at
+-- (1,1) and showing leaves the rest of the OLED dark. This matches Noa's
+-- approach and avoids the stuck-display-on-wake bug from power_save(true).
+local function blank_display()
+  pcall(frame.display.text, " ", 1, 1)
+  pcall(frame.display.show)
+end
+
+-- Layout (Frame display 640x400), top-down, dynamically packed:
+--   Y 12          mic indicator (left) + status indicator (right)
+--   Y 60+         transcription rows, SKYBLUE, up to 3 lines
+--   next row+     suggestion English meaning, WHITE, up to 2 lines
+--   next row+     suggestion phonetic to speak, YELLOW, up to 2 lines
+-- Each row is 45 px tall; regions abut with no inter-region gap. The 60 px
+-- top offset keeps the first transcription row clear of the mic indicator.
 local function render_ui()
-  if not state.connected then
-    frame.display.power_save(true)
-    state.needs_render = false
-    return
+  state.needs_render = false
+
+  pcall(frame.display.set_brightness, state.brightness)
+
+  frame.display.text("Mic:", 24, 12, { color = "WHITE", spacing = 2 })
+  frame.display.text(state.listening and "ON" or "OFF", 98, 12,
+    { color = state.listening and "GREEN" or "RED", spacing = 2 })
+
+  if state.disconnected then
+    frame.display.text("disconnected", 380, 12, { color = "RED", spacing = 2 })
+  elseif state.sleep_started then
+    frame.display.text("idle", 540, 12, { color = "GRAY", spacing = 2 })
   end
 
-  frame.display.power_save(false)
-  frame.display.set_brightness(state.brightness)
-
-  frame.display.text("Mic:", 24, 52, { color = "WHITE", spacing = 4 })
-  frame.display.text(state.listening and "ON" or "OFF", 98, 52, { color = state.listening and "GREEN" or "RED", spacing = 4 })
-
+  -- Transcription region (top, SKYBLUE) - what the partner said, in English.
   local visible = {}
   local n = #state.caption_lines
+  if n >= 3 then table.insert(visible, state.caption_lines[n - 2]) end
   if n >= 2 then table.insert(visible, state.caption_lines[n - 1]) end
   if n >= 1 then table.insert(visible, state.caption_lines[n]) end
   if state.live_partial ~= "" then
@@ -312,29 +376,34 @@ local function render_ui()
     table.remove(visible, 1)
   end
 
-  local caption_y = 98
+  local y = 60
   for _, line in ipairs(visible) do
-    frame.display.text(line, 24, caption_y, { color = "SKYBLUE", spacing = 4 })
-    caption_y = caption_y + 45
+    frame.display.text(line, 24, y, { color = "SKYBLUE", spacing = 4 })
+    y = y + 45
   end
 
-  if state.suggestion ~= "" then
-    draw_multiline(state.suggestion, 24, caption_y, "YELLOW", 30, 3)
+  -- Suggestion: English meaning (WHITE) above the phonetic to speak (YELLOW),
+  -- both packed immediately below whatever transcription rendered. No "SAY:"
+  -- label; the YELLOW row is the words to actually pronounce.
+  if state.suggestion_english ~= "" then
+    y = draw_multiline(state.suggestion_english, 24, y, "WHITE", CAPTION_LINE_LIMIT, 2)
+  end
+  if state.suggestion_phonetic ~= "" then
+    y = draw_multiline(state.suggestion_phonetic, 24, y, "YELLOW", CAPTION_LINE_LIMIT, 2)
   end
 
   frame.display.show()
-  state.needs_render = false
 end
 
 local function handle_command(payload)
   local parts = split_text(payload, "\t")
   local command = parts[1]
+  if command == nil then return end
 
-  if command ~= nil then
-    state.connected = true
-    state.needs_render = true
-    state.last_message_at = now_seconds()
-  end
+  state.last_message_at = now_seconds()
+  state.sleep_started = false
+  state.disconnected = false
+  state.needs_render = true
 
   if command == "PING" then
     send_event({ "EVT", "READY", frame.FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP_VERSION })
@@ -346,13 +415,13 @@ local function handle_command(payload)
     state.listening = parts[2] == "1"
     state.status = parts[3] or (state.listening and "listening" or "idle")
     if state.listening and not was_listening then
-      state.suggestion = ""
+      state.suggestion_phonetic = ""
+      state.suggestion_english = ""
       reset_caption_buffer()
       start_mic()
     elseif was_listening and not state.listening then
       pcall(frame.microphone.stop)
     end
-    state.needs_render = true
     send_event({ "EVT", "STATUS", state.status })
     return
   end
@@ -371,7 +440,6 @@ local function handle_command(payload)
         end
       end
     end
-    state.needs_render = true
     send_event({ "EVT", "PREFS_SAVED" })
     return
   end
@@ -380,20 +448,19 @@ local function handle_command(payload)
     local caption_kind = parts[2] or "final"
     local text = parts[3] or ""
     flush_caption_text(text, caption_kind == "partial")
-    state.needs_render = true
     return
   end
 
   if command == "SHOW_SUGGESTION" then
-    state.suggestion = trim(parts[2] or "")
-    state.needs_render = true
+    state.suggestion_phonetic = trim(parts[2] or "")
+    state.suggestion_english = trim(parts[3] or "")
     return
   end
 
   if command == "CLEAR_CAPTION" then
     reset_caption_buffer()
-    state.suggestion = ""
-    state.needs_render = true
+    state.suggestion_phonetic = ""
+    state.suggestion_english = ""
     return
   end
 
@@ -401,8 +468,8 @@ local function handle_command(payload)
     pcall(frame.microphone.stop)
     reset_caption_buffer()
     state.listening = false
-    state.suggestion = ""
-    state.needs_render = true
+    state.suggestion_phonetic = ""
+    state.suggestion_english = ""
     frame.sleep(0.05)
     start_mic()
     send_event({ "EVT", "RESET_OK" })
@@ -414,9 +481,9 @@ local function on_tap()
   pcall(frame.bluetooth.send, string.char(0x10))
 end
 
-local function send_data(data)
+local function send_data(payload)
   for _ = 1, 100 do
-    if pcall(frame.bluetooth.send, data) then
+    if pcall(frame.bluetooth.send, payload) then
       return
     end
     frame.sleep(0.001)
@@ -424,11 +491,14 @@ local function send_data(data)
 end
 
 start_mic = function()
+  -- 16 kHz / 8-bit is the validated config for this iOS Speech pipeline.
+  -- Don't switch to noa's empty-table defaults (8 kHz / 8-bit) - recognition fails.
   local ok, err = pcall(frame.microphone.start, { sample_rate = 16000, bit_depth = 8 })
+  local message = tostring(err or "")
+  send_event({ "EVT", "MIC_INIT", ok and "1" or "0", message })
   if ok then
     return true
   end
-  local message = tostring(err or "")
   if string.find(message, "already started", 1, true) ~= nil then
     return true
   end
@@ -437,10 +507,9 @@ start_mic = function()
 end
 
 local function run_app()
-  frame.bluetooth.receive_callback(function(data) handle_command(data) end)
+  frame.bluetooth.receive_callback(on_packet)
   frame.imu.tap_callback(on_tap)
-  frame.display.set_brightness(state.brightness)
-  state.connected = false
+  pcall(frame.display.set_brightness, state.brightness)
   send_event({ "EVT", "BOOT", frame.FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP_VERSION })
 
   local saved_crash = load_saved_crash()
@@ -454,44 +523,96 @@ local function run_app()
   state.last_message_at = now_seconds()
   maybe_emit_battery(true)
 
+  local last_render_at = 0
+  local audio_first_logged = false
+  local mic_nil_streak = 0
+
   while true do
-    if state.needs_render then
+    -- Dispatch a fully-assembled command if the accumulator has one ready.
+    if accum.ready ~= nil then
+      local payload = accum.ready
+      accum.ready = nil
+      pcall(handle_command, payload)
+    end
+
+    -- Match noa: refresh the OLED on a steady cadence so it never appears
+    -- to dim/blank. Also honors immediate state-change requests.
+    local now = now_seconds()
+    if state.needs_render or (now - last_render_at) > 0.5 then
       render_ui()
+      last_render_at = now
     end
 
     maybe_emit_battery(false)
 
-    local now = now_seconds()
     local ok_conn, conn = pcall(frame.bluetooth.is_connected)
     local connected = ok_conn and conn
-    if not connected or (now - state.last_message_at) > IDLE_TIMEOUT then
-      pcall(frame.microphone.stop)
-      state.listening = false
-      state.connected = false
-      state.suggestion = ""
-      reset_caption_buffer()
-      pcall(frame.display.power_save, true)
-      pcall(frame.display.show)
-      pcall(frame.sleep)
-      state.last_message_at = now_seconds()
+
+    -- Disconnect indicator only. Does NOT trigger sleep.
+    if not connected and not state.disconnected then
+      state.disconnected = true
+      state.needs_render = true
+    elseif connected and state.disconnected then
+      state.disconnected = false
+      state.last_message_at = now
+      state.sleep_started = false
+      state.needs_render = true
+    end
+
+    -- Idle sleep is keyed on `last_message_at`. If `now_seconds()` is 0
+    -- (clock not yet synced) we skip these checks to avoid false trips.
+    if state.last_message_at > 0 and now > 0 then
+      if (now - state.last_message_at) > IDLE_PRE_SLEEP
+         and not state.sleep_started
+         and not state.listening then
+        state.sleep_started = true
+        state.needs_render = true
+      end
+
+      if (now - state.last_message_at) > IDLE_DEEP_SLEEP and state.sleep_started then
+        pcall(frame.microphone.stop)
+        state.listening = false
+        state.suggestion_phonetic = ""
+        state.suggestion_english = ""
+        reset_caption_buffer()
+        blank_display()
+        frame.sleep(0.05)
+        pcall(frame.sleep)
+        state.last_message_at = now_seconds()
+        state.sleep_started = false
+        state.needs_render = true
+      end
     end
 
     if state.listening then
-      for i = 1, 20 do
+      for _ = 1, 20 do
         local audio = frame.microphone.read(audio_data_size)
         if audio == nil then
+          mic_nil_streak = mic_nil_streak + 1
+          if mic_nil_streak == 1 or (mic_nil_streak % 50) == 0 then
+            send_event({ "EVT", "MIC_READ_NIL", tostring(mic_nil_streak) })
+          end
           frame.sleep(0.1)
           start_mic()
           break
         elseif audio ~= "" then
+          mic_nil_streak = 0
+          if not audio_first_logged then
+            send_event({ "EVT", "MIC_READ_BYTES", tostring(string.len(audio)) })
+            audio_first_logged = true
+          end
           pcall(send_data, string.char(0x05) .. audio)
         else
           break
         end
       end
+    else
+      audio_first_logged = false
+      mic_nil_streak = 0
     end
 
     frame.sleep(0.001)
+    collectgarbage("collect")
   end
 end
 
@@ -499,7 +620,7 @@ local ok, err = xpcall(run_app, debug.traceback)
 if not ok then
   save_crash(err)
   emit_crash(err)
-  pcall(frame.display.power_save, true)
+  blank_display()
   while true do
     frame.sleep(1)
   end

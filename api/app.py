@@ -576,7 +576,11 @@ SUGGESTION_SYSTEM_PROMPT = (
     "- Mark stress in long words with hyphens (e.g., \"comprehension\" -> \"kom-pren-see-OWN\").\n"
     "- For Mandarin, Pinyin without tone marks. For Japanese, Hepburn without macrons.\n"
     "- Do NOT translate or add words.\n\n"
-    "Output JSON ONLY: {\"reply_native\":\"...\",\"reply_phonetic\":\"...\"}\n"
+    "Step 3 - English meaning: Provide a natural, idiomatic English translation of reply_native.\n"
+    "- Convey the conversational meaning, not a word-for-word literal translation.\n"
+    "- Same length / register as the reply (one short sentence).\n"
+    "- If the reply is already in English, repeat it verbatim.\n\n"
+    "Output JSON ONLY: {\"reply_native\":\"...\",\"reply_phonetic\":\"...\",\"reply_english\":\"...\"}\n"
     "No emojis, markdown, code fences, or commentary."
 )
 
@@ -597,11 +601,12 @@ async def ai_suggestion(body: SuggestionBody):
         ],
         max_completion_tokens=500,
     )
-    parsed = _parse_json_payload(raw_content, ["reply_native", "reply_phonetic"])
+    parsed = _parse_json_payload(raw_content, ["reply_native", "reply_phonetic", "reply_english"])
     return {
         "ok": True,
         "reply_native": parsed["reply_native"],
         "reply_phonetic": parsed["reply_phonetic"],
+        "reply_english": parsed["reply_english"],
     }
 
 

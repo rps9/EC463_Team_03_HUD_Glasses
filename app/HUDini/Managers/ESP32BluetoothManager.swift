@@ -290,8 +290,10 @@ final class ESP32BluetoothManager: NSObject, ObservableObject {
         writeDisplayText(" ")
     }
 
-    func sendSuggestion(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    func sendSuggestion(phonetic: String, english: String) {
+        // ESP32 has only one display field; show the phonetic (the words to
+        // actually speak). The english meaning is Frame-only for now.
+        let trimmed = phonetic.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != lastSentSuggestion else { return }
         lastSentSuggestion = trimmed
         writeDisplayText(trimmed)

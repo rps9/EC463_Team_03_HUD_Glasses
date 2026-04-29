@@ -6,6 +6,7 @@ final class HUDOpenAISuggestionService {
     struct SuggestionReply {
         let native: String
         let phonetic: String
+        let english: String
     }
 
     struct PhoneticResult {
@@ -29,13 +30,15 @@ final class HUDOpenAISuggestionService {
         struct Reply: Decodable {
             let reply_native: String
             let reply_phonetic: String
+            let reply_english: String
         }
 
         let body = Body(text: text, language_code: languageCode, profile: profile)
         let reply: Reply = try await postJSON(path: "/ai/suggestion", body: body)
         return SuggestionReply(
             native: reply.reply_native,
-            phonetic: HUDPhoneticResponseFormatter.clean(reply.reply_phonetic)
+            phonetic: HUDPhoneticResponseFormatter.clean(reply.reply_phonetic),
+            english: reply.reply_english
         )
     }
 

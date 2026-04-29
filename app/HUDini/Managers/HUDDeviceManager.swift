@@ -39,7 +39,7 @@ protocol HUDDeviceManager: AnyObject, ObservableObject {
 
     func sendHUDText(_ text: String, isPartial: Bool)
     func clearHUDText()
-    func sendSuggestion(_ text: String)
+    func sendSuggestion(phonetic: String, english: String)
     func clearSuggestion()
 
     func setRecognitionLanguage(_ code: String)

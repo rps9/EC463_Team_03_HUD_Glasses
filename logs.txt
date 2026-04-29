@@ -1,95 +1,57 @@
-Brownout detector was triggered
-
-ets Jul 29 2019 12:21:46
-
-rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
-configsip: 0, SPIWP:0xee
-clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
-mode:DIO, clock div:2
-load:0x3fff0030,len:1184
-load:0x40078000,len:13232
-load:0x40080400,len:3028
-entry 0x400805e4
-Starting BLE mic + HUD display streamer
-
-Brownout detector was triggered
-
-ets Jul 29 2019 12:21:46
-
-rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
-configsip: 0, SPIWP:0xee
-clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
-mode:DIO, clock div:2
-load:0x3fff0030,len:1184
-load:0x40078000,len:13232
-load:0x40080400,len:3028
-entry 0x400805e4
-Starting BLE mic + HUD display streamer
-
-Brownout detector was triggered
-
-ets Jul 29 2019 12:21:46
-
-rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
-configsip: 0, SPIWP:0xee
-clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
-mode:DIO, clock div:2
-load:0x3fff0030,len:1184
-load:0x40078000,len:13232
-load:0x40080400,len:3028
-entry 0x400805e4
-Starting BLE mic + HUD display streamer
-
-Brownout detector was triggered
-
-ets Jul 29 2019 12:21:46
-
-rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
-configsip: 0, SPIWP:0xee
-clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
-mode:DIO, clock div:2
-load:0x3fff0030,len:1184
-load:0x40078000,len:13232
-load:0x40080400,len:3028
-entry 0x400805e4
-Starting BLE mic + HUD display streamer
-
-Brownout detector was triggered
-
-ets Jul 29 2019 12:21:46
-
-rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
-configsip: 0, SPIWP:0xee
-clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
-mode:DIO, clock div:2
-load:0x3fff0030,len:1184
-load:0x40078000,len:13232
-load:0x40080400,len:3028
-entry 0x400805e4
-Starting BLE mic + HUD display streamer
-
-Brownout detector was triggered
-
-ets Jul 29 2019 12:21:46
-
-rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
-configsip: 0, SPIWP:0xee
-clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
-mode:DIO, clock div:2
-load:0x3fff0030,len:1184
-load:0x40078000,len:13232
-load:0x40080400,len:3028
-entry 0x400805e4
-Starting BLE mic + HUD display streamer
-
-Brownout detector was triggered
-
-ets Jul 29 2019 12:21:46
-
-rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
-configsip: 0, SPIWP:0xee
-clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
-mode:DIO, clock div:2
-load:0x3fff0030,len:1184
-load:0x40078000,len:13232
-load:0x40080400,len:3028
+20:55:37.705 [APP] statusMessage = Listening language set to Spanish
+20:55:37.705 [APP] statusMessage = Target language set to English
+20:55:41.265 [IN] TAP
+20:55:41.266 [APP] handleTapToggleListening desiredEnabled=true isStreaming=false
+20:55:41.270 [APP] statusMessage = Listening language set to Spanish
+20:55:41.270 [APP] statusMessage = Target language set to English
+20:55:41.278 [APP] startRecognition invoked locale=es
+20:55:41.280 [APP] recognitionRequest created shouldReportPartialResults=true taskHint=dictation
+20:55:41.280 [APP] setStreamingState(true)
+20:55:41.280 [APP] isStreaming = true
+20:55:41.283 [APP] [AUDIO] debug capture started: frame_audio_1777424141.raw
+20:55:41.283 [OUT] SYNC_STATE	1	listening
+20:55:41.283 [APP] statusMessage = Started from Frame tap
+20:55:41.312 [IN] EVT	MIC_INIT	1	
+20:55:41.312 [APP] peripheralStatus = EVT	MIC_INIT	1	
+20:55:41.313 [IN] EVT	STATUS	listening
+20:55:41.313 [APP] peripheralStatus = listening
+20:55:42.107 [APP] audioPacket milestone count=100 packets=100
+20:55:42.903 [APP] audioPacket milestone count=200 packets=200
+20:55:43.713 [APP] audioPacket milestone count=300 packets=300
+20:55:44.508 [APP] audioPacket milestone count=400 packets=400
+20:55:45.318 [APP] audioPacket milestone count=500 packets=500
+20:55:45.319 [APP] [AUDIO] energy=606 packets=500
+20:55:46.113 [APP] audioPacket milestone count=600 packets=600
+20:55:46.922 [APP] audioPacket milestone count=700 packets=700
+20:55:47.704 [APP] audioPacket milestone count=800 packets=800
+20:55:48.124 [IN] TAP
+20:55:48.124 [APP] handleTapToggleListening desiredEnabled=false isStreaming=true
+20:55:48.126 [APP] [AUDIO] debug capture saved: frame_audio_1777424141.raw size=54528 bytes (~3.4s)
+20:55:48.126 [APP] stopRecognition invoked
+20:55:48.126 [APP] cancelTranslation invoked
+20:55:48.126 [APP] setStreamingState(false)
+20:55:48.126 [APP] isStreaming = false
+20:55:48.126 [OUT] SYNC_STATE	0	idle
+20:55:48.127 [APP] statusMessage = Stopped
+20:55:48.127 [APP] statusMessage = Stopped from Frame tap
+20:55:48.153 [IN] EVT	STATUS	idle
+20:55:48.153 [APP] peripheralStatus = idle
+20:55:48.160 [APP] recognitionTask error: No speech detected
+20:56:04.874 [OUT] PING
+20:56:04.906 [IN] EVT	READY	v25.080.0838	243	2026.04.28.6
+20:56:04.906 [APP] connectionDebugStage = Frame app responded
+20:56:04.906 [APP] peripheralStatus = Ready on v25.080.0838
+20:56:04.906 [APP] statusMessage = Connected to Frame
+20:56:04.906 [APP] connectionDebugStage = Bootstrapping session
+20:56:04.906 [OUT] SET_PREFS	brightness=2;partials=1
+20:56:04.907 [OUT] SYNC_STATE	0	idle
+20:56:04.936 [IN] EVT	PREFS_SAVED
+20:56:04.937 [APP] statusMessage = Saved preferences on Frame
+20:56:04.966 [IN] EVT	STATUS	idle
+20:56:04.966 [APP] peripheralStatus = idle
+20:56:07.992 [APP] statusMessage = App active
+20:56:07.993 [OUT] SET_PREFS	brightness=2;partials=1
+20:56:07.993 [OUT] SYNC_STATE	0	idle
+20:56:08.041 [IN] EVT	PREFS_SAVED
+20:56:08.041 [APP] statusMessage = Saved preferences on Frame
+20:56:08.071 [IN] EVT	STATUS	idle

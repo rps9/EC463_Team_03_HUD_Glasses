@@ -46,9 +46,12 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let audioDataNonFinal: UInt8 = 0x05
     private static let audioDataFinal: UInt8 = 0x06
     private static let tapEvent: UInt8 = 0x10
+    // Frame mic is configured for 16 kHz / 8-bit signed mono (see start_mic
+    // in main.lua / FrameEmbeddedApp.swift). `appendPCM8` sign-extends each
+    // 8-bit sample into Int16 and feeds the recognizer at 16 kHz.
     private static let streamSampleRate: Double = 16_000
     private static let streamBitDepth: Int = 8
-    private static let embeddedAppVersion = "2026.04.28.3"
+    private static let embeddedAppVersion = "2026.04.28.10"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let centralRestoreIdentifier = "com.hudini.frame.central"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
@@ -491,18 +494,20 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
     }
 
-    func sendSuggestionToFrame(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        guard trimmed != lastSentSuggestion else { return }
-        lastSentSuggestion = trimmed
-        logDecision("sendSuggestionToFrame text=\(trimmed)")
-        sendRawCommand(["SHOW_SUGGESTION", trimmed])
+    func sendSuggestionToFrame(phonetic: String, english: String) {
+        let trimmedPhonetic = phonetic.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEnglish = english.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !(trimmedPhonetic.isEmpty && trimmedEnglish.isEmpty) else { return }
+        let dedupKey = trimmedPhonetic + "\u{1F}" + trimmedEnglish
+        guard dedupKey != lastSentSuggestion else { return }
+        lastSentSuggestion = dedupKey
+        logDecision("sendSuggestionToFrame phonetic=\(trimmedPhonetic) english=\(trimmedEnglish)")
+        sendRawCommand(["SHOW_SUGGESTION", trimmedPhonetic, trimmedEnglish])
     }
 
     func clearSuggestionOnFrame() {
         lastSentSuggestion = ""
-        sendRawCommand(["SHOW_SUGGESTION", ""])
+        sendRawCommand(["SHOW_SUGGESTION", "", ""])
     }
 
     func clearDevLog() {
@@ -539,10 +544,42 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
         guard let textData = payload.data(using: .utf8) else { return }
         appendDevLog(direction: "OUT", message: payload)
-        var data = Data([Self.rawPrefix])
-        data.append(textData)
+
+        // Wire format matches the inlined `data.lua` accumulator on Frame:
+        //   first chunk     = [0x01][size_hi][size_lo][payload bytes...]
+        //   continuations   = [0x01][payload bytes...]
+        // The Frame reassembles when sum(chunk sizes) == size_hi/size_lo length.
+        // 23 is the BLE-spec minimum payload; framePayloadLimit may be 0 before BOOT.
+        let mtu = max(framePayloadLimit, 23)
         let writeType = supportedWriteType(preferred: preferredType, characteristic: txChar)
-        peripheral.writeValue(data, for: txChar, type: writeType)
+        let total = textData.count
+        let totalU16 = UInt16(min(total, 0xFFFF))
+        let sizeHi = UInt8((Int(totalU16) >> 8) & 0xFF)
+        let sizeLo = UInt8(Int(totalU16) & 0xFF)
+        let firstChunkPayloadMax = max(1, mtu - 3)
+        let nextChunkPayloadMax = max(1, mtu - 1)
+
+        if total <= firstChunkPayloadMax {
+            var packet = Data([Self.rawPrefix, sizeHi, sizeLo])
+            packet.append(textData)
+            peripheral.writeValue(packet, for: txChar, type: writeType)
+            return
+        }
+
+        var offset = 0
+        let firstLen = firstChunkPayloadMax
+        var first = Data([Self.rawPrefix, sizeHi, sizeLo])
+        first.append(textData.subdata(in: 0 ..< firstLen))
+        peripheral.writeValue(first, for: txChar, type: writeType)
+        offset += firstLen
+
+        while offset < total {
+            let len = min(nextChunkPayloadMax, total - offset)
+            var packet = Data([Self.rawPrefix])
+            packet.append(textData.subdata(in: offset ..< (offset + len)))
+            peripheral.writeValue(packet, for: txChar, type: writeType)
+            offset += len
+        }
     }
 
     private func supportedWriteType(preferred: CBCharacteristicWriteType?, characteristic: CBCharacteristic) -> CBCharacteristicWriteType {
@@ -1068,10 +1105,15 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             case "\t":
                 result += "\\t"
             default:
-                if scalar.value < 32 || scalar.value > 126 {
-                    result += String(format: "\\%03d", scalar.value)
-                } else {
+                if scalar.value >= 32 && scalar.value <= 126 {
                     result.append(Character(scalar))
+                } else {
+                    // Lua decimal escapes (`\NNN`) only accept 0..255. For any
+                    // codepoint outside that range, emit the UTF-8 bytes one by
+                    // one so the rebuilt string on Frame is byte-identical.
+                    for byte in String(scalar).utf8 {
+                        result += String(format: "\\%03d", byte)
+                    }
                 }
             }
         }
@@ -1460,8 +1502,8 @@ extension FrameBluetoothManager: HUDDeviceManager {
         clearFrameDisplay()
     }
 
-    func sendSuggestion(_ text: String) {
-        sendSuggestionToFrame(text)
+    func sendSuggestion(phonetic: String, english: String) {
+        sendSuggestionToFrame(phonetic: phonetic, english: english)
     }
 
     func clearSuggestion() {
