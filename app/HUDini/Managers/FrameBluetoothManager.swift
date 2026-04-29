@@ -64,7 +64,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     // sample into Int16 and feeds the recognizer at 16 kHz.
     private static let streamSampleRate: Double = 16_000
     private static let streamBitDepth: Int = 8
-    private static let embeddedAppVersion = "2026.04.29.8"
+    private static let embeddedAppVersion = "2026.04.30.2"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let centralRestoreIdentifier = "com.hudini.frame.central"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
@@ -166,8 +166,17 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var replTextBuffer: String = ""
     private var pendingFirstTapAt: Date? = nil
     private var lastTapToggleAt: Date = .distantPast
-    private static let doubleTapWindow: TimeInterval = 0.6
+    // Foreground: tight 600 ms window — accidental head-movement taps
+    // shouldn't trigger. Background: iOS batches BLE notifications when
+    // the app is suspended, so a deliberate double-tap is delivered
+    // spaced 1+ s apart. 2.0 s covers typical iOS deferred delivery.
+    private static let doubleTapWindowForeground: TimeInterval = 0.6
+    private static let doubleTapWindowBackground: TimeInterval = 2.0
     private static let tapPostToggleCooldown: TimeInterval = 0.8
+    // Two taps arriving within this window are *always* a batched
+    // delivery from iOS (no human can physically tap twice this fast),
+    // so they're treated as a double-tap regardless of the active window.
+    private static let tapBurstWindow: TimeInterval = 0.06
     private var keepaliveTask: Task<Void, Never>?
     private var audioEnergyAccumulator: Float = 0
     private var audioEnergySampleCount: Int = 0
@@ -1197,16 +1206,25 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             }
             // Require two taps within the double-tap window. A single
             // accidental tap (adjusting glasses, head movement) does nothing.
-            if let first = pendingFirstTapAt,
-               now.timeIntervalSince(first) <= Self.doubleTapWindow {
-                pendingFirstTapAt = nil
-                lastTapToggleAt = now
-                appendDevLog(direction: "IN", message: "TAP (double)")
-                handleTapToggleListening(desiredEnabled: !isStreaming)
-            } else {
-                pendingFirstTapAt = now
-                appendDevLog(direction: "IN", message: "TAP (1/2 — tap again to toggle)")
+            // Window expands when the app is in background because iOS
+            // batches BLE notification delivery while suspended — the
+            // user's real double-tap can arrive spaced 1+ second apart.
+            // Same-millisecond bursts are unconditionally accepted because
+            // only iOS batching produces them; a human cannot tap that fast.
+            let window = isAppActive ? Self.doubleTapWindowForeground : Self.doubleTapWindowBackground
+            if let first = pendingFirstTapAt {
+                let gap = now.timeIntervalSince(first)
+                if gap <= Self.tapBurstWindow || gap <= window {
+                    pendingFirstTapAt = nil
+                    lastTapToggleAt = now
+                    let label = gap <= Self.tapBurstWindow ? "TAP (double, batched)" : "TAP (double)"
+                    appendDevLog(direction: "IN", message: label)
+                    handleTapToggleListening(desiredEnabled: !isStreaming)
+                    return
+                }
             }
+            pendingFirstTapAt = now
+            appendDevLog(direction: "IN", message: "TAP (1/2 — tap again to toggle)")
             return
         }
 

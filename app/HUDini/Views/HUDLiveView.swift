@@ -323,6 +323,7 @@ struct HUDLiveView: View {
                                 .font(.system(size: 22, weight: .semibold, design: .rounded))
                                 .foregroundStyle(HUDTheme.ink)
                                 .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         if !suggestionManager.suggestionNative.isEmpty {
@@ -330,6 +331,7 @@ struct HUDLiveView: View {
                                 .font(.system(.body, design: .rounded))
                                 .foregroundStyle(HUDTheme.inkMuted)
                                 .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         if !suggestionManager.suggestionEnglish.isEmpty {
@@ -338,6 +340,7 @@ struct HUDLiveView: View {
                                 .italic()
                                 .foregroundStyle(HUDTheme.inkMuted)
                                 .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
 

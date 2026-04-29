@@ -3,7 +3,7 @@ import Foundation
 enum FrameEmbeddedApp {
     static let mainLua = #"""
 local APP_DIR = "/hudini"
-local APP_VERSION = "2026.04.29.8"
+local APP_VERSION = "2026.04.30.2"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
 local CAPTION_LINE_LIMIT = 30
@@ -13,6 +13,11 @@ local BATTERY_FORCE_INTERVAL = 600  -- seconds between forced re-emits
 local IDLE_DEEP_SLEEP = 300         -- seconds of true silence before frame.sleep()
 local ACCUM_TIMEOUT = 10            -- seconds before a stranded chunk slot is dropped
 local FULL_GC_INTERVAL = 5          -- seconds between forced full collections
+local DISPLAY_LINE_HEIGHT = 45      -- pixels per rendered text row
+local DISPLAY_TOP_OFFSET = 60       -- Y of first content row (clears mic indicator)
+local DISPLAY_BOTTOM_LIMIT = 400    -- Frame OLED is 640x400
+local DISPLAY_MAX_LINES = 7         -- floor((400 - 60) / 45) = 7 visible rows
+local SCROLL_LINE_INTERVAL = 3    -- seconds per line of auto-scroll catch-up
 
 -- Flag bytes for the chunked downlink protocol. iOS sends every command as
 -- [0x01][flag][size_hi][size_lo][payload...] for the first chunk and
@@ -47,6 +52,8 @@ local state = {
   last_battery_level = -1,
   last_message_at = 0,
   disconnected = false,
+  scroll_offset = 0,        -- top-of-window line index (0 = no scroll)
+  last_scroll_at = 0,       -- timestamp of the last auto-scroll step
 }
 
 frame.display.text("HUDini", 220, 116, { color = "WHITE", spacing = 4 })
@@ -382,16 +389,85 @@ local function blank_display()
   pcall(frame.display.show)
 end
 
--- Layout (Frame display 640x400), top-down, dynamically packed:
+-- Layout (Frame display 640x400, 45 px line pitch, 60 px top offset = 7
+-- usable rows):
 --   Y 12          mic indicator (left) + status indicator (right)
---   Y 60+         transcription rows, SKYBLUE, up to 3 lines
---   next row+     suggestion English meaning, WHITE, up to 2 lines
---   next row+     suggestion phonetic to speak, YELLOW, up to 2 lines
--- Each row is 45 px tall; regions abut with no inter-region gap. The 60 px
--- top offset keeps the first transcription row clear of the mic indicator.
+--   Y 60+         transcription history (SKYBLUE), then live partial
+--                 (SKYBLUE), then suggestion english (WHITE), then
+--                 suggestion phonetic (YELLOW), all packed contiguously.
+-- No region has a hard line cap; everything is wrapped to CAPTION_LINE_LIMIT
+-- chars and stacked. If the combined content exceeds DISPLAY_MAX_LINES
+-- rows, `state.scroll_offset` advances one row every SCROLL_LINE_INTERVAL
+-- seconds until the most recent line lands at the bottom of the screen.
+-- This is line-discrete (not pixel-smooth) so the OLED only flushes a few
+-- times per second during catch-up — keeps the main loop unblocked.
+local function build_render_lines()
+  local lines = {}
+
+  for _, l in ipairs(state.caption_lines) do
+    table.insert(lines, { text = l, color = "SKYBLUE" })
+  end
+
+  local active_text = ""
+  if state.live_partial ~= "" then
+    active_text = state.live_partial
+  elseif state.caption_buffer ~= "" then
+    active_text = state.caption_buffer
+  end
+  if active_text ~= "" then
+    for _, l in ipairs(wrap_lines(active_text, CAPTION_LINE_LIMIT, 99)) do
+      table.insert(lines, { text = l, color = "SKYBLUE" })
+    end
+  end
+
+  if state.suggestion_phonetic ~= "" then
+    for _, l in ipairs(wrap_lines(state.suggestion_phonetic, CAPTION_LINE_LIMIT, 99)) do
+      table.insert(lines, { text = l, color = "YELLOW" })
+    end
+  end
+  if state.suggestion_english ~= "" then
+    for _, l in ipairs(wrap_lines(state.suggestion_english, CAPTION_LINE_LIMIT, 99)) do
+      table.insert(lines, { text = l, color = "WHITE" })
+    end
+  end
+
+  return lines
+end
+
 local function render_ui()
   if not state.needs_render then return end
-  state.needs_render = false
+
+  local lines = build_render_lines()
+  local total = #lines
+  local target_offset = math.max(0, total - DISPLAY_MAX_LINES)
+  local now = now_seconds()
+
+  -- Content shrank? Snap up immediately so we're not stranded mid-scroll.
+  if state.scroll_offset > target_offset then
+    state.scroll_offset = target_offset
+  end
+
+  -- If content overflows and we haven't reached the bottom yet, gate the
+  -- actual paint on SCROLL_LINE_INTERVAL. Returning early without
+  -- clearing `needs_render` keeps the main loop polling cheaply (~ µs)
+  -- until it's time for the next scroll step. Without this gate we'd
+  -- flush the OLED 200×/sec while waiting.
+  if state.scroll_offset < target_offset then
+    if state.last_scroll_at == 0 and now > 0 then
+      state.last_scroll_at = now
+    end
+    if now > 0 and (now - state.last_scroll_at) >= SCROLL_LINE_INTERVAL then
+      state.scroll_offset = state.scroll_offset + 1
+      state.last_scroll_at = now
+    else
+      -- Not yet time to advance. Keep needs_render set; come back later.
+      return
+    end
+  end
+
+  -- About to paint. Clear the dirty flag, but re-arm if more scroll steps
+  -- are still pending so the next iteration re-enters render_ui.
+  state.needs_render = (state.scroll_offset < target_offset)
 
   pcall(frame.display.set_brightness, state.brightness)
 
@@ -403,35 +479,12 @@ local function render_ui()
     frame.display.text("disconnected", 380, 12, { color = "RED", spacing = 2 })
   end
 
-  -- Transcription region (top, SKYBLUE) - what the partner said, in English.
-  local visible = {}
-  local n = #state.caption_lines
-  if n >= 3 then table.insert(visible, state.caption_lines[n - 2]) end
-  if n >= 2 then table.insert(visible, state.caption_lines[n - 1]) end
-  if n >= 1 then table.insert(visible, state.caption_lines[n]) end
-  if state.live_partial ~= "" then
-    table.insert(visible, string.sub(state.live_partial, 1, CAPTION_LINE_LIMIT))
-  elseif state.caption_buffer ~= "" then
-    table.insert(visible, state.caption_buffer)
-  end
-  while #visible > 3 do
-    table.remove(visible, 1)
-  end
-
-  local y = 60
-  for _, line in ipairs(visible) do
-    frame.display.text(line, 24, y, { color = "SKYBLUE", spacing = 4 })
-    y = y + 45
-  end
-
-  -- Suggestion: English meaning (WHITE) above the phonetic to speak (YELLOW),
-  -- both packed immediately below whatever transcription rendered. No "SAY:"
-  -- label; the YELLOW row is the words to actually pronounce.
-  if state.suggestion_english ~= "" then
-    y = draw_multiline(state.suggestion_english, 24, y, "WHITE", CAPTION_LINE_LIMIT, 2)
-  end
-  if state.suggestion_phonetic ~= "" then
-    y = draw_multiline(state.suggestion_phonetic, 24, y, "YELLOW", CAPTION_LINE_LIMIT, 2)
+  local first_idx = state.scroll_offset + 1
+  local last_idx = math.min(total, state.scroll_offset + DISPLAY_MAX_LINES)
+  local y = DISPLAY_TOP_OFFSET
+  for i = first_idx, last_idx do
+    frame.display.text(lines[i].text, 24, y, { color = lines[i].color, spacing = 4 })
+    y = y + DISPLAY_LINE_HEIGHT
   end
 
   frame.display.show()
@@ -467,6 +520,7 @@ local function handle_command(flag, payload)
       state.suggestion_phonetic = ""
       state.suggestion_english = ""
       reset_caption_buffer()
+      state.scroll_offset = 0
       start_mic()
       state.needs_render = true
     elseif was_listening and not state.listening then
@@ -529,6 +583,7 @@ local function handle_command(flag, payload)
     reset_caption_buffer()
     state.suggestion_phonetic = ""
     state.suggestion_english = ""
+    state.scroll_offset = 0
     if had_content then
       state.needs_render = true
     end
@@ -541,6 +596,7 @@ local function handle_command(flag, payload)
     state.listening = false
     state.suggestion_phonetic = ""
     state.suggestion_english = ""
+    state.scroll_offset = 0
     frame.sleep(0.05)
     start_mic()
     state.needs_render = true
