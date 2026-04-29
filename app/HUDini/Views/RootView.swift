@@ -138,6 +138,18 @@ struct RootView: View {
                         showAppMenu = false
                     }
                 })
+
+                NavigationLink {
+                    AdminTestView()
+                        .environmentObject(frameManager)
+                } label: {
+                    menuRow(title: "Admin Tests", icon: "stethoscope")
+                }
+                .simultaneousGesture(TapGesture().onEnded {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                        showAppMenu = false
+                    }
+                })
             }
 
             Button {

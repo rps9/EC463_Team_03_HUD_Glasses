@@ -3,15 +3,29 @@ import Foundation
 enum FrameEmbeddedApp {
     static let mainLua = #"""
 local APP_DIR = "/hudini"
-local APP_VERSION = "2026.04.28.10"
+local APP_VERSION = "2026.04.29.8"
 local CRASH_PATH = APP_DIR .. "/crash.txt"
 
 local CAPTION_LINE_LIMIT = 30
 local CAPTION_LINE_HISTORY = 50
 local BATTERY_CHECK_INTERVAL = 60   -- seconds between cheap level reads
 local BATTERY_FORCE_INTERVAL = 600  -- seconds between forced re-emits
-local IDLE_PRE_SLEEP = 30           -- seconds of message silence before pre-sleep warning
-local IDLE_DEEP_SLEEP = 60          -- seconds of message silence before frame.sleep()
+local IDLE_DEEP_SLEEP = 300         -- seconds of true silence before frame.sleep()
+local ACCUM_TIMEOUT = 10            -- seconds before a stranded chunk slot is dropped
+local FULL_GC_INTERVAL = 5          -- seconds between forced full collections
+
+-- Flag bytes for the chunked downlink protocol. iOS sends every command as
+-- [0x01][flag][size_hi][size_lo][payload...] for the first chunk and
+-- [0x01][flag][payload...] for continuations. Frame firmware strips the 0x01,
+-- so byte 1 in `on_packet` is always the flag. Each flag has its own
+-- accumulator slot, so a stranded message of one type can't block another.
+local FLAG_PING            = 0x40
+local FLAG_SET_PREFS       = 0x41
+local FLAG_SYNC_STATE      = 0x42
+local FLAG_SHOW_CAPTION    = 0x43
+local FLAG_SHOW_SUGGESTION = 0x44
+local FLAG_CLEAR_CAPTION   = 0x45
+local FLAG_RESET           = 0x46
 
 -- Forward declaration so handle_command can reference start_mic on SYNC_STATE / RESET
 local start_mic
@@ -33,50 +47,11 @@ local state = {
   last_battery_level = -1,
   last_message_at = 0,
   disconnected = false,
-  sleep_started = false,
 }
 
 frame.display.text("HUDini", 220, 116, { color = "WHITE", spacing = 4 })
 frame.display.text("Loading...", 210, 154, { color = "LIGHTGREEN", spacing = 4 })
 frame.display.show()
-
--- Single-channel chunking accumulator. The Frame firmware strips the iOS
--- `0x01` "data prefix" byte before delivering to `frame.bluetooth.receive_callback`,
--- so what we see here is:
---   first chunk    = [size_hi][size_lo][payload bytes...]
---   continuation   = [payload bytes...]
--- Once `recv_bytes >= size` we have the full assembled command payload.
--- A pending payload sits in `accum.ready` for the main loop to pick up.
-local accum = {
-  chunks = {},
-  num_chunks = 0,
-  size = 0,
-  recv_bytes = 0,
-  ready = nil,
-}
-
-local function on_packet(packet)
-  pcall(function()
-    if accum.num_chunks == 0 then
-      accum.size = (string.byte(packet, 1) << 8) | string.byte(packet, 2)
-      accum.chunks[1] = string.sub(packet, 3)
-      accum.num_chunks = 1
-      accum.recv_bytes = string.len(packet) - 2
-    else
-      accum.num_chunks = accum.num_chunks + 1
-      accum.chunks[accum.num_chunks] = packet
-      accum.recv_bytes = accum.recv_bytes + string.len(packet)
-    end
-
-    if accum.recv_bytes >= accum.size and accum.size > 0 then
-      accum.ready = table.concat(accum.chunks)
-      for k in pairs(accum.chunks) do accum.chunks[k] = nil end
-      accum.num_chunks = 0
-      accum.size = 0
-      accum.recv_bytes = 0
-    end
-  end)
-end
 
 local function ensure_dir()
   pcall(frame.file.mkdir, APP_DIR)
@@ -145,9 +120,29 @@ local function normalize_display_text(text)
   return trim(normalized)
 end
 
+-- Bounded BLE send with retry. Returns true if delivered, false if the
+-- queue stayed full for the entire budget. Audio drops on overflow are
+-- recoverable (lossy stream); event drops are not (handshake breaks).
+-- Note: `frame.bluetooth.send` can both throw on a full TX queue AND
+-- return `false` on internal backpressure. `pcall` only catches the
+-- throw, so we explicitly check the return value too — without this, a
+-- false return looks like success and the packet is silently dropped.
+local function ble_send(payload, max_attempts)
+  for _ = 1, max_attempts do
+    local ok, result = pcall(frame.bluetooth.send, payload)
+    if ok and result ~= false then
+      return true
+    end
+    frame.sleep(0.001)
+  end
+  return false
+end
+
 local function send_event(parts)
-  local payload = table.concat(parts, "\t")
-  pcall(frame.bluetooth.send, payload)
+  -- 200 attempts × 1 ms = up to 200 ms blocking. Events MUST reach iOS
+  -- (handshake / status / EVT replies). Audio uses a much smaller budget
+  -- (see send_data) so it can't starve events of TX bandwidth.
+  ble_send(table.concat(parts, "\t"), 200)
 end
 
 local function now_seconds()
@@ -156,6 +151,52 @@ local function now_seconds()
     return value
   end
   return 0
+end
+
+-- Per-flag chunking accumulator. Wire format (after Frame firmware strips
+-- the 0x01 data prefix):
+--   first chunk    = [flag][size_hi][size_lo][payload bytes...]
+--   continuation   = [flag][payload bytes...]
+-- `accum_by_flag[flag]` holds the in-progress slot for one message type;
+-- completed payloads append to `ready_queue` in arrival order so a burst
+-- of same-flag packets (e.g. PING storm) all dispatch instead of
+-- overwriting one another. Modeled on Brilliant Labs' reference at
+-- CitizenOneX/frame_msg/lib/lua/data.lua, with a queue tail to handle
+-- rapid same-flag bursts.
+local accum_by_flag = {}
+local ready_queue = {}
+
+local function on_packet(packet)
+  pcall(function()
+    local len = string.len(packet)
+    if len < 1 then return end
+    local flag = string.byte(packet, 1)
+    local item = accum_by_flag[flag]
+    if item == nil then
+      -- New first chunk. Need at least [flag][size_hi][size_lo] = 3 bytes.
+      if len < 3 then return end
+      item = {
+        chunks = {},
+        num = 1,
+        size = (string.byte(packet, 2) << 8) | string.byte(packet, 3),
+        recv = len - 3,
+        started_at = now_seconds(),
+      }
+      item.chunks[1] = string.sub(packet, 4)
+      accum_by_flag[flag] = item
+    else
+      item.num = item.num + 1
+      item.chunks[item.num] = string.sub(packet, 2)
+      item.recv = item.recv + len - 1
+    end
+    -- Completion: receive count caught up to declared size. Note that
+    -- size == 0 is a legitimate "empty payload" command (PING / RESET /
+    -- CLEAR_CAPTION) and must dispatch on the same packet that opened it.
+    if item.recv >= item.size then
+      table.insert(ready_queue, { flag = flag, payload = table.concat(item.chunks) })
+      accum_by_flag[flag] = nil
+    end
+  end)
 end
 
 local function read_battery_level()
@@ -349,6 +390,7 @@ end
 -- Each row is 45 px tall; regions abut with no inter-region gap. The 60 px
 -- top offset keeps the first transcription row clear of the mic indicator.
 local function render_ui()
+  if not state.needs_render then return end
   state.needs_render = false
 
   pcall(frame.display.set_brightness, state.brightness)
@@ -359,8 +401,6 @@ local function render_ui()
 
   if state.disconnected then
     frame.display.text("disconnected", 380, 12, { color = "RED", spacing = 2 })
-  elseif state.sleep_started then
-    frame.display.text("idle", 540, 12, { color = "GRAY", spacing = 2 })
   end
 
   -- Transcription region (top, SKYBLUE) - what the partner said, in English.
@@ -397,46 +437,58 @@ local function render_ui()
   frame.display.show()
 end
 
-local function handle_command(payload)
-  local parts = split_text(payload, "\t")
-  local command = parts[1]
-  if command == nil then return end
-
+local function handle_command(flag, payload)
   state.last_message_at = now_seconds()
-  state.sleep_started = false
-  state.disconnected = false
-  state.needs_render = true
+  -- Reconnect from a disconnected state IS a visible change (the
+  -- "disconnected" pill goes away). Other commands set `needs_render`
+  -- only when their work actually changes pixels on screen — that way
+  -- routine commands like PING / SET_PREFS don't trigger a 50–150 ms
+  -- OLED flush that blocks the main loop.
+  if state.disconnected then
+    state.disconnected = false
+    state.needs_render = true
+  end
 
-  if command == "PING" then
+  if flag == FLAG_PING then
     send_event({ "EVT", "READY", frame.FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP_VERSION })
     return
   end
 
-  if command == "SYNC_STATE" then
+  if flag == FLAG_SYNC_STATE then
+    local parts = split_text(payload, "\t")
     local was_listening = state.listening
-    state.listening = parts[2] == "1"
-    state.status = parts[3] or (state.listening and "listening" or "idle")
+    state.listening = parts[1] == "1"
+    state.status = parts[2] or (state.listening and "listening" or "idle")
+    -- Emit STATUS *before* mic transitions. Mic start/stop and the
+    -- subsequent audio drain compete for the BLE TX queue; getting STATUS
+    -- onto the wire first guarantees iOS sees the state change promptly.
+    send_event({ "EVT", "STATUS", state.status })
     if state.listening and not was_listening then
       state.suggestion_phonetic = ""
       state.suggestion_english = ""
       reset_caption_buffer()
       start_mic()
+      state.needs_render = true
     elseif was_listening and not state.listening then
       pcall(frame.microphone.stop)
+      state.needs_render = true
     end
-    send_event({ "EVT", "STATUS", state.status })
     return
   end
 
-  if command == "SET_PREFS" then
-    local pairs_list = split_text(parts[2] or "", ";")
+  if flag == FLAG_SET_PREFS then
+    local pairs_list = split_text(payload, ";")
     for _, entry in ipairs(pairs_list) do
       local eq = string.find(entry, "=", 1, true)
       if eq ~= nil then
         local key = string.sub(entry, 1, eq - 1)
         local value = string.sub(entry, eq + 1)
         if key == "brightness" then
-          state.brightness = tonumber(value) or state.brightness
+          local new_brightness = tonumber(value) or state.brightness
+          if new_brightness ~= state.brightness then
+            state.brightness = new_brightness
+            state.needs_render = true
+          end
         elseif key == "partials" then
           state.partials = value == "1"
         end
@@ -446,27 +498,44 @@ local function handle_command(payload)
     return
   end
 
-  if command == "SHOW_CAPTION" then
-    local caption_kind = parts[2] or "final"
-    local text = parts[3] or ""
+  if flag == FLAG_SHOW_CAPTION then
+    local parts = split_text(payload, "\t")
+    local caption_kind = parts[1] or "final"
+    local text = parts[2] or ""
+    -- flush_caption_text mutates caption state; mark dirty.
     flush_caption_text(text, caption_kind == "partial")
+    state.needs_render = true
     return
   end
 
-  if command == "SHOW_SUGGESTION" then
-    state.suggestion_phonetic = trim(parts[2] or "")
-    state.suggestion_english = trim(parts[3] or "")
+  if flag == FLAG_SHOW_SUGGESTION then
+    local parts = split_text(payload, "\t")
+    local new_phonetic = trim(parts[1] or "")
+    local new_english = trim(parts[2] or "")
+    if new_phonetic ~= state.suggestion_phonetic or new_english ~= state.suggestion_english then
+      state.suggestion_phonetic = new_phonetic
+      state.suggestion_english = new_english
+      state.needs_render = true
+    end
     return
   end
 
-  if command == "CLEAR_CAPTION" then
+  if flag == FLAG_CLEAR_CAPTION then
+    local had_content = state.caption_buffer ~= ""
+        or #state.caption_lines > 0
+        or state.live_partial ~= ""
+        or state.suggestion_phonetic ~= ""
+        or state.suggestion_english ~= ""
     reset_caption_buffer()
     state.suggestion_phonetic = ""
     state.suggestion_english = ""
+    if had_content then
+      state.needs_render = true
+    end
     return
   end
 
-  if command == "RESET" then
+  if flag == FLAG_RESET then
     pcall(frame.microphone.stop)
     reset_caption_buffer()
     state.listening = false
@@ -474,6 +543,7 @@ local function handle_command(payload)
     state.suggestion_english = ""
     frame.sleep(0.05)
     start_mic()
+    state.needs_render = true
     send_event({ "EVT", "RESET_OK" })
     return
   end
@@ -484,12 +554,10 @@ local function on_tap()
 end
 
 local function send_data(payload)
-  for _ = 1, 100 do
-    if pcall(frame.bluetooth.send, payload) then
-      return
-    end
-    frame.sleep(0.001)
-  end
+  -- Audio packets: 20 attempts × 1 ms = up to 20 ms blocking, then drop.
+  -- Bounded so a saturated BLE TX queue can't stall the main loop and
+  -- starve send_event of its chance to deliver high-priority events.
+  ble_send(payload, 20)
 end
 
 start_mic = function()
@@ -525,24 +593,39 @@ local function run_app()
   state.last_message_at = now_seconds()
   maybe_emit_battery(true)
 
-  local last_render_at = 0
   local audio_first_logged = false
   local mic_nil_streak = 0
+  local last_full_gc_at = now_seconds()
 
   while true do
-    -- Dispatch a fully-assembled command if the accumulator has one ready.
-    if accum.ready ~= nil then
-      local payload = accum.ready
-      accum.ready = nil
-      pcall(handle_command, payload)
+    -- Drain all fully-assembled commands in arrival order. Per-flag slots
+    -- still isolate a stranded message of one flag from blocking another;
+    -- the queue tail prevents a burst of same-flag completions from
+    -- overwriting each other before dispatch.
+    while ready_queue[1] ~= nil do
+      local item = ready_queue[1]
+      table.remove(ready_queue, 1)
+      pcall(handle_command, item.flag, item.payload)
     end
 
-    -- Match noa: refresh the OLED on a steady cadence so it never appears
-    -- to dim/blank. Also honors immediate state-change requests.
-    local now = now_seconds()
-    if state.needs_render or (now - last_render_at) > 0.5 then
+    -- Repaint only when state changed. The OLED holds its framebuffer; no
+    -- periodic refresh needed.
+    if state.needs_render then
       render_ui()
-      last_render_at = now
+    end
+
+    local now = now_seconds()
+
+    -- Watchdog: drop any per-flag accumulator slot that's been incomplete
+    -- for too long, so a single dropped chunk can't lock out a flag forever.
+    -- Per-flag isolation makes this rare; this just bounds the worst case.
+    if now > 0 then
+      for flag, item in pairs(accum_by_flag) do
+        if item.started_at > 0 and (now - item.started_at) > ACCUM_TIMEOUT then
+          accum_by_flag[flag] = nil
+          send_event({ "EVT", "ACCUM_TIMEOUT", tostring(flag) })
+        end
+      end
     end
 
     maybe_emit_battery(false)
@@ -557,33 +640,24 @@ local function run_app()
     elseif connected and state.disconnected then
       state.disconnected = false
       state.last_message_at = now
-      state.sleep_started = false
       state.needs_render = true
     end
 
-    -- Idle sleep is keyed on `last_message_at`. If `now_seconds()` is 0
-    -- (clock not yet synced) we skip these checks to avoid false trips.
-    if state.last_message_at > 0 and now > 0 then
-      if (now - state.last_message_at) > IDLE_PRE_SLEEP
-         and not state.sleep_started
-         and not state.listening then
-        state.sleep_started = true
-        state.needs_render = true
-      end
-
-      if (now - state.last_message_at) > IDLE_DEEP_SLEEP and state.sleep_started then
-        pcall(frame.microphone.stop)
-        state.listening = false
-        state.suggestion_phonetic = ""
-        state.suggestion_english = ""
-        reset_caption_buffer()
-        blank_display()
-        frame.sleep(0.05)
-        pcall(frame.sleep)
-        state.last_message_at = now_seconds()
-        state.sleep_started = false
-        state.needs_render = true
-      end
+    -- True idle deep-sleep. Fires only after IDLE_DEEP_SLEEP seconds of
+    -- complete silence (no inbound commands, mic off). Tap wakes Frame.
+    if state.last_message_at > 0 and now > 0
+       and not state.listening
+       and (now - state.last_message_at) > IDLE_DEEP_SLEEP then
+      pcall(frame.microphone.stop)
+      state.listening = false
+      state.suggestion_phonetic = ""
+      state.suggestion_english = ""
+      reset_caption_buffer()
+      blank_display()
+      frame.sleep(0.05)
+      pcall(frame.sleep)
+      state.last_message_at = now_seconds()
+      state.needs_render = true
     end
 
     if state.listening then
@@ -614,7 +688,15 @@ local function run_app()
     end
 
     frame.sleep(0.001)
-    collectgarbage("collect")
+    -- Incremental GC each tick keeps the heap walking in small slices
+    -- (~0.1–0.5 ms) instead of paying for a full collect every iteration.
+    -- A full `collect` runs every FULL_GC_INTERVAL seconds to claw back
+    -- anything the incremental sweep missed.
+    collectgarbage("step", 1)
+    if now > 0 and (now - last_full_gc_at) >= FULL_GC_INTERVAL then
+      collectgarbage("collect")
+      last_full_gc_at = now
+    end
   end
 end
 
