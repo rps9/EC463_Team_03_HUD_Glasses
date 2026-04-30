@@ -5,6 +5,7 @@ struct HUDLiveView: View {
     @EnvironmentObject private var frameManager: FrameBluetoothManager
     @EnvironmentObject private var esp32Manager: ESP32BluetoothManager
     @EnvironmentObject private var conversationHistoryStore: HUDConversationHistoryStore
+    @EnvironmentObject private var profileStore: SuggestionProfileStore
     @AppStorage(wrappedValue: true, APIConfig.AppStorageKey.hudSuggestionEnabled) private var suggestionEnabled: Bool
     @AppStorage(wrappedValue: TranslationLanguages.defaultListeningLanguageCode, APIConfig.AppStorageKey.hudListeningLanguageCode) private var storedListeningLanguageCode: String
     @AppStorage("hudini.preferredDevice") private var preferredDeviceRaw: String = HUDDeviceKind.frame.rawValue
@@ -18,6 +19,7 @@ struct HUDLiveView: View {
     @State private var lastSentBLEText: String = ""
     @State private var isDeviceSheetPresented: Bool = false
     @State private var pulseAnimating: Bool = false
+    @State private var isCustomResponsePresented: Bool = false
 
     private let hudCharacterLimit: Int = 260
     private static let renderedTextDebounceNanoseconds: UInt64 = 450_000_000
@@ -80,6 +82,24 @@ struct HUDLiveView: View {
             frameManager.warmUp()
             esp32Manager.warmUp()
         }
+        .onAppear {
+            suggestionManager.setProfileSnapshotProvider { [weak profileStore] in
+                profileStore?.profile?.compactSnapshot()
+            }
+        }
+        .sheet(isPresented: $isCustomResponsePresented) {
+            CustomResponseSheet(
+                targetLanguageCode: listeningLanguageCode,
+                initialEnglishText: ""
+            ) { translatedNative in
+                suggestionManager.setCustomResponse(
+                    translatedNative: translatedNative,
+                    languageCode: listeningLanguageCode
+                )
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .onChange(of: listeningLanguageCode, initial: false) { _, newValue in
             transcriptionManager.setListeningLanguage(newValue)
             frameManager.setRecognitionLanguage(newValue)
@@ -138,11 +158,12 @@ struct HUDLiveView: View {
         }
         .onChange(of: suggestionManager.suggestionPhonetic, initial: false) { _, newPhonetic in
             guard shouldUseDeviceMic, isDeviceConnected, !isListening else { return }
-            let trimmed = newPhonetic.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
+            let trimmedPhonetic = newPhonetic.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedEnglish = suggestionManager.suggestionEnglish.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedPhonetic.isEmpty && trimmedEnglish.isEmpty {
                 sendClearSuggestionToActiveDevice()
             } else {
-                sendSuggestionToActiveDevice(trimmed)
+                sendSuggestionToActiveDevice(phonetic: trimmedPhonetic, english: trimmedEnglish)
             }
         }
         .onChange(of: isListening, initial: true) { wasListening, listening in
@@ -267,36 +288,75 @@ struct HUDLiveView: View {
     // MARK: - Suggestion card
 
     private var suggestionCard: some View {
-        HUDCard {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Suggested Reply")
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(HUDTheme.inkMuted)
-                    Spacer()
-                    Image(systemName: "quote.bubble")
-                        .foregroundStyle(HUDTheme.inkMuted)
-                }
-
-                if suggestionManager.suggestionPhonetic.isEmpty && suggestionManager.suggestionEnglish.isEmpty {
-                    Text("Stop listening to generate a reply suggestion.")
-                        .font(.system(.body, design: .rounded))
-                        .foregroundStyle(HUDTheme.inkMuted)
-                } else {
-                    if !suggestionManager.suggestionPhonetic.isEmpty {
-                        Text(suggestionManager.suggestionPhonetic)
-                            .font(.system(size: 22, weight: .semibold, design: .rounded))
-                            .foregroundStyle(HUDTheme.ink)
-                    }
-
-                    if !suggestionManager.suggestionEnglish.isEmpty {
-                        Text(suggestionManager.suggestionEnglish)
-                            .font(.system(.body, design: .rounded))
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            isCustomResponsePresented = true
+        } label: {
+            HUDCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Suggested Reply")
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(HUDTheme.inkMuted)
+                        Spacer()
+                        Image(systemName: "pencil.line")
                             .foregroundStyle(HUDTheme.inkMuted)
                     }
+
+                    if suggestionManager.isGenerating {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(suggestionManager.generationStage.isEmpty ? "Working…" : suggestionManager.generationStage)
+                                .font(.system(.body, design: .rounded))
+                                .foregroundStyle(HUDTheme.inkMuted)
+                        }
+                    } else if suggestionManager.suggestionPhonetic.isEmpty
+                              && suggestionManager.suggestionEnglish.isEmpty
+                              && suggestionManager.suggestionNative.isEmpty {
+                        Text("Stop listening to generate a reply, or tap to write your own.")
+                            .font(.system(.body, design: .rounded))
+                            .foregroundStyle(HUDTheme.inkMuted)
+                    } else {
+                        if !suggestionManager.suggestionPhonetic.isEmpty {
+                            Text(suggestionManager.suggestionPhonetic)
+                                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                                .foregroundStyle(HUDTheme.ink)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if !suggestionManager.suggestionNative.isEmpty {
+                            Text(suggestionManager.suggestionNative)
+                                .font(.system(.body, design: .rounded))
+                                .foregroundStyle(HUDTheme.inkMuted)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if !suggestionManager.suggestionEnglish.isEmpty {
+                            Text(suggestionManager.suggestionEnglish)
+                                .font(.system(.callout, design: .rounded))
+                                .italic()
+                                .foregroundStyle(HUDTheme.inkMuted)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "hand.tap")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Tap to write your own")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(HUDTheme.inkMuted.opacity(0.8))
+                    .padding(.top, 2)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Mic FAB
@@ -460,10 +520,10 @@ struct HUDLiveView: View {
         }
     }
 
-    private func sendSuggestionToActiveDevice(_ text: String) {
+    private func sendSuggestionToActiveDevice(phonetic: String, english: String) {
         switch preferredDevice {
-        case .frame: frameManager.sendSuggestion(text)
-        case .esp32: esp32Manager.sendSuggestion(text)
+        case .frame: frameManager.sendSuggestion(phonetic: phonetic, english: english)
+        case .esp32: esp32Manager.sendSuggestion(phonetic: phonetic, english: english)
         }
     }
 
@@ -726,6 +786,15 @@ private struct DeviceSyncSheet: View {
                     .font(.system(.body, design: .rounded, weight: .semibold))
                     .foregroundStyle(HUDTheme.ink)
                 Spacer()
+                if preferredDevice == .frame, let battery = frameManager.frameBatteryLevel {
+                    HStack(spacing: 4) {
+                        Image(systemName: batteryIcon(for: battery))
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("\(battery)%")
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                    }
+                    .foregroundStyle(batteryTint(for: battery))
+                }
             }
             .padding(14)
             .background(HUDTheme.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -786,6 +855,22 @@ private struct DeviceSyncSheet: View {
         case .frame: frameManager.disconnect()
         case .esp32: esp32Manager.disconnect()
         }
+    }
+
+    private func batteryIcon(for level: Int) -> String {
+        switch level {
+        case ..<10: return "battery.0percent"
+        case ..<35: return "battery.25percent"
+        case ..<60: return "battery.50percent"
+        case ..<85: return "battery.75percent"
+        default: return "battery.100percent"
+        }
+    }
+
+    private func batteryTint(for level: Int) -> Color {
+        if level < 15 { return HUDTheme.rose }
+        if level < 30 { return HUDTheme.amber }
+        return HUDTheme.mint
     }
 }
 

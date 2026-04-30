@@ -201,19 +201,6 @@ struct ConversationHistoryView: View {
                     .foregroundStyle(HUDTheme.ink)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
-
-                HStack(spacing: 8) {
-                    HUDStatusPill(
-                        text: TranslationLanguages.displayName(for: entry.listeningLanguageCode),
-                        tint: HUDTheme.mint,
-                        icon: "ear"
-                    )
-                    HUDStatusPill(
-                        text: TranslationLanguages.displayName(for: entry.displayLanguageCode),
-                        tint: HUDTheme.accentSoft.opacity(0.9),
-                        icon: "text.bubble"
-                    )
-                }
             }
         }
     }

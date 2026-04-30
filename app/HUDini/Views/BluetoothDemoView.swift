@@ -86,7 +86,6 @@ struct BluetoothDemoView: View {
                     .foregroundStyle(HUDTheme.ink)
 
                 HStack(spacing: 12) {
-                    detailChip(title: "Brightness", value: "\(manager.preferences.brightness)")
                     detailChip(title: "Partials", value: manager.preferences.showsLivePartials ? "On" : "Off")
                 }
 
@@ -116,12 +115,6 @@ struct BluetoothDemoView: View {
                         .padding(12)
                         .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                }
-
-                Stepper(value: $manager.preferences.brightness, in: -2 ... 2) {
-                    Text("Brightness")
-                        .font(.system(.body, design: .rounded, weight: .semibold))
-                        .foregroundStyle(HUDTheme.ink)
                 }
 
                 Toggle("Show live partial captions", isOn: $manager.preferences.showsLivePartials)

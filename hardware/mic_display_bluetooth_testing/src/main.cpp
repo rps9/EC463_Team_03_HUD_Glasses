@@ -299,7 +299,7 @@ void loopFirmware() {
     delay(10);
     return;
   }
-
+  // to do: make this actually workadlkfjai adslkjoljdlakfjjlkjlk
   const int N = 80;
   int32_t i2sSamples[N];
   int16_t pcm16[N];

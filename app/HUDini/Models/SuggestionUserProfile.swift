@@ -123,6 +123,55 @@ enum SuggestionProfileFieldID: String, CaseIterable, Identifiable {
 }
 
 extension SuggestionUserProfile {
+    /// Compact dictionary for sending to the suggestion API.
+    /// Only includes non-empty fields. Values longer than 120 chars are truncated.
+    /// Coordinates are omitted; only the friendly `currentLocationDisplay` is sent.
+    func compactSnapshot() -> [String: String] {
+        var dict: [String: String] = [:]
+
+        func put(_ key: String, _ value: String) {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            if trimmed.count > 120 {
+                let cut = trimmed.prefix(119)
+                dict[key] = String(cut) + "…"
+            } else {
+                dict[key] = trimmed
+            }
+        }
+
+        put("name", name)
+        put("native_language", nativeLanguage)
+        if !otherLanguages.isEmpty {
+            let joined = otherLanguages
+                .map { entry -> String in
+                    let lang = entry.language.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let level = entry.level.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if lang.isEmpty { return "" }
+                    return level.isEmpty ? lang : "\(lang) (\(level))"
+                }
+                .filter { !$0.isEmpty }
+                .joined(separator: ", ")
+            put("other_languages", joined)
+        }
+        put("home_country_city", homeCountryCity)
+        put("dietary_restrictions", dietaryRestrictions)
+        put("health_considerations", healthConsiderations)
+        put("religion_cultural", religionCultural)
+        put("food_preferences", foodPreferences)
+        put("hobbies_interests", hobbiesInterests)
+        put("favorite_topics", favoriteTopics)
+        put("topics_to_avoid", topicsToAvoid)
+        put("tone_preference", tonePreference.displayName)
+        put("personality_style", personalityStyle)
+        put("typical_use_cases", typicalUseCases)
+        put("occupation", occupation)
+        put("never_suggest_involving", neverSuggestInvolving)
+        put("current_location", currentLocationDisplay)
+
+        return dict
+    }
+
     func preview(for field: SuggestionProfileFieldID) -> String {
         switch field {
         case .name: return name

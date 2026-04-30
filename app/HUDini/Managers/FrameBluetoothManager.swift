@@ -6,7 +6,7 @@ import Speech
 import SwiftUI
 
 struct FrameDisplayPreferences: Equatable {
-    var brightness: Int = 0
+    var brightness: Int = 2
     var showsLivePartials: Bool = true
 
     func commandPayload() -> String {
@@ -46,10 +46,27 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private static let audioDataNonFinal: UInt8 = 0x05
     private static let audioDataFinal: UInt8 = 0x06
     private static let tapEvent: UInt8 = 0x10
+    // Per-flag downlink protocol (matches Frame Lua FLAG_* constants in
+    // FrameEmbeddedApp.swift). Each command type has its own accumulator
+    // slot on the Frame, so a stranded chunk of one flag can't block the
+    // others. Wire format on the Frame side (after the firmware strips the
+    // 0x01 prefix): first chunk = [flag][size_hi][size_lo][payload],
+    // continuation = [flag][payload].
+    static let flagPing: UInt8 = 0x40
+    static let flagSetPrefs: UInt8 = 0x41
+    static let flagSyncState: UInt8 = 0x42
+    static let flagShowCaption: UInt8 = 0x43
+    static let flagShowSuggestion: UInt8 = 0x44
+    static let flagClearCaption: UInt8 = 0x45
+    static let flagReset: UInt8 = 0x46
+    // Frame mic is configured for 16 kHz / 8-bit signed mono (see start_mic
+    // in FrameEmbeddedApp.swift). `appendPCM8` sign-extends each 8-bit
+    // sample into Int16 and feeds the recognizer at 16 kHz.
     private static let streamSampleRate: Double = 16_000
     private static let streamBitDepth: Int = 8
-    private static let embeddedAppVersion = "2026.04.09.8"
+    private static let embeddedAppVersion = "2026.04.30.2"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
+    private static let centralRestoreIdentifier = "com.hudini.frame.central"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
 
     @Published private(set) var state: ConnectionState = .idle {
@@ -92,6 +109,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     @Published private(set) var frameFirmwareVersion: String = ""
     @Published private(set) var frameAppVersion: String = ""
     @Published private(set) var framePayloadLimit: Int = 0
+    @Published private(set) var frameBatteryLevel: Int? = nil
     @Published private(set) var selectedLanguageCode: String = TranslationLanguages.defaultListeningLanguageCode {
         didSet {
             guard oldValue != selectedLanguageCode else { return }
@@ -146,7 +164,20 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var lastSentPartialCaption: String = ""
     private var lastSentSuggestion: String = ""
     private var replTextBuffer: String = ""
-    private var lastTapAt: Date = .distantPast
+    private var pendingFirstTapAt: Date? = nil
+    private var lastTapToggleAt: Date = .distantPast
+    // Foreground: tight 600 ms window — accidental head-movement taps
+    // shouldn't trigger. Background: iOS batches BLE notifications when
+    // the app is suspended, so a deliberate double-tap is delivered
+    // spaced 1+ s apart. 2.0 s covers typical iOS deferred delivery.
+    private static let doubleTapWindowForeground: TimeInterval = 0.6
+    private static let doubleTapWindowBackground: TimeInterval = 2.0
+    private static let tapPostToggleCooldown: TimeInterval = 0.8
+    // Two taps arriving within this window are *always* a batched
+    // delivery from iOS (no human can physically tap twice this fast),
+    // so they're treated as a double-tap regardless of the active window.
+    private static let tapBurstWindow: TimeInterval = 0.06
+    private var keepaliveTask: Task<Void, Never>?
     private var audioEnergyAccumulator: Float = 0
     private var audioEnergySampleCount: Int = 0
     private var debugAudioFileHandle: FileHandle?
@@ -170,7 +201,11 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
         selectedLanguageCode = TranslationLanguages.preferredListeningLanguageCode()
         recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguageCode))
-        central = CBCentralManager(delegate: self, queue: nil)
+        central = CBCentralManager(
+            delegate: self,
+            queue: nil,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: Self.centralRestoreIdentifier]
+        )
         handleState(central.state)
     }
 
@@ -240,16 +275,17 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             break
         case .background:
             isAppActive = false
-            if isStreaming {
-                stopListening()
-            }
+            // Intentionally keep BLE + listening alive when the app is backgrounded.
+            // The bluetooth-central UIBackgroundMode keeps the central manager
+            // delivering BLE notifications so captions/suggestions on the Frame
+            // continue to work when the phone is locked or in the user's pocket.
         @unknown default:
             break
         }
     }
 
     func ping() {
-        sendRawCommand(["PING"], preferredType: .withResponse)
+        sendRawCommand(flag: Self.flagPing, preferredType: .withResponse)
     }
 
     func rebootRunningFrameApp() {
@@ -298,7 +334,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     func applyPreferences() {
-        sendRawCommand(["SET_PREFS", preferences.commandPayload()], preferredType: .withResponse)
+        sendRawCommand(flag: Self.flagSetPrefs, fields: [preferences.commandPayload()], preferredType: .withResponse)
     }
 
     func setRecognitionLanguage(_ code: String) {
@@ -373,7 +409,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             }
             self.setStreamingState(true)
             self.startDebugAudioCapture()
-            self.sendRawCommand(["SYNC_STATE", "1", "listening"], preferredType: .withResponse)
+            self.sendRawCommand(flag: Self.flagSyncState, fields: ["1", "listening"], preferredType: .withResponse)
             self.statusMessage = triggeredByTap ? "Started from Frame tap" : "Listening…"
         }
     }
@@ -382,7 +418,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         stopDebugAudioCapture()
         stopRecognition()
         setStreamingState(false)
-        sendRawCommand(["SYNC_STATE", "0", "idle"], preferredType: .withResponse)
+        sendRawCommand(flag: Self.flagSyncState, fields: ["0", "idle"], preferredType: .withResponse)
         statusMessage = "Stopped"
     }
 
@@ -398,7 +434,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     func clearFrameDisplay() {
         lastSentFinalCaption = ""
         lastSentPartialCaption = ""
-        sendRawCommand(["CLEAR_CAPTION"])
+        sendRawCommand(flag: Self.flagClearCaption)
     }
 
     private func setStreamingState(_ enabled: Bool) {
@@ -420,12 +456,35 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         connectionDebugStage = "Bootstrapping session"
         statusMessage = reason
         applyPreferences()
-        sendRawCommand(["SYNC_STATE", isStreaming ? "1" : "0", isStreaming ? "listening" : "idle"], preferredType: .withResponse)
+        sendRawCommand(flag: Self.flagSyncState, fields: [isStreaming ? "1" : "0", isStreaming ? "listening" : "idle"], preferredType: .withResponse)
         if !lastSentFinalCaption.isEmpty {
-            sendRawCommand(["SHOW_CAPTION", "final", lastSentFinalCaption])
+            sendRawCommand(flag: Self.flagShowCaption, fields: ["final", lastSentFinalCaption])
         } else if !lastSentPartialCaption.isEmpty {
-            sendRawCommand(["SHOW_CAPTION", "partial", lastSentPartialCaption])
+            sendRawCommand(flag: Self.flagShowCaption, fields: ["partial", lastSentPartialCaption])
         }
+        startKeepalive()
+    }
+
+    private func startKeepalive() {
+        keepaliveTask?.cancel()
+        keepaliveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                if Task.isCancelled { return }
+                await MainActor.run {
+                    guard let self else { return }
+                    guard self.connectedPeripheral != nil,
+                          self.txChar != nil,
+                          self.hasReceivedFrameAppHeartbeat else { return }
+                    self.sendRawCommand(flag: Self.flagPing, preferredType: .withoutResponse)
+                }
+            }
+        }
+    }
+
+    private func stopKeepalive() {
+        keepaliveTask?.cancel()
+        keepaliveTask = nil
     }
 
     private func clearRememberedPeripheral() {
@@ -444,7 +503,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                 return
             }
             lastSentPartialCaption = trimmed
-            sendRawCommand(["SHOW_CAPTION", "partial", trimmed])
+            sendRawCommand(flag: Self.flagShowCaption, fields: ["partial", trimmed])
         } else {
             guard trimmed != lastSentFinalCaption else {
                 logDecision("sendHUDTextToFrame skipped duplicate final")
@@ -452,7 +511,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             }
             lastSentFinalCaption = trimmed
             lastSentPartialCaption = ""
-            sendRawCommand(["SHOW_CAPTION", "final", trimmed])
+            sendRawCommand(flag: Self.flagShowCaption, fields: ["final", trimmed])
         }
 
         if updateStatus {
@@ -460,18 +519,20 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         }
     }
 
-    func sendSuggestionToFrame(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        guard trimmed != lastSentSuggestion else { return }
-        lastSentSuggestion = trimmed
-        logDecision("sendSuggestionToFrame text=\(trimmed)")
-        sendRawCommand(["SHOW_SUGGESTION", trimmed])
+    func sendSuggestionToFrame(phonetic: String, english: String) {
+        let trimmedPhonetic = phonetic.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEnglish = english.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !(trimmedPhonetic.isEmpty && trimmedEnglish.isEmpty) else { return }
+        let dedupKey = trimmedPhonetic + "\u{1F}" + trimmedEnglish
+        guard dedupKey != lastSentSuggestion else { return }
+        lastSentSuggestion = dedupKey
+        logDecision("sendSuggestionToFrame phonetic=\(trimmedPhonetic) english=\(trimmedEnglish)")
+        sendRawCommand(flag: Self.flagShowSuggestion, fields: [trimmedPhonetic, trimmedEnglish])
     }
 
     func clearSuggestionOnFrame() {
         lastSentSuggestion = ""
-        sendRawCommand(["SHOW_SUGGESTION", ""])
+        sendRawCommand(flag: Self.flagShowSuggestion, fields: ["", ""])
     }
 
     func clearDevLog() {
@@ -500,18 +561,92 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         peripheral.writeValue(data, for: txChar, type: txWriteType)
     }
 
-    private func sendRawCommand(_ fields: [String], preferredType: CBCharacteristicWriteType? = nil) {
+    private func sendRawCommand(flag: UInt8, fields: [String] = [], preferredType: CBCharacteristicWriteType? = .withResponse) {
         guard let peripheral = connectedPeripheral, let txChar else { return }
         let payload = fields
             .map { $0.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ") }
             .joined(separator: "\t")
 
-        guard let textData = payload.data(using: .utf8) else { return }
-        appendDevLog(direction: "OUT", message: payload)
-        var data = Data([Self.rawPrefix])
-        data.append(textData)
+        let textData = payload.data(using: .utf8) ?? Data()
+        appendDevLog(direction: "OUT", message: "0x\(String(format: "%02X", flag))\(payload.isEmpty ? "" : " " + payload)")
+
+        // Per-flag wire format (matches FLAG_* constants in FrameEmbeddedApp.swift):
+        //   first chunk    = [0x01][flag][size_hi][size_lo][payload...]
+        //   continuations  = [0x01][flag][payload...]
+        // Frame firmware strips 0x01 before delivering to on_packet.
+        // 23 is the BLE-spec minimum payload; framePayloadLimit may be 0 before BOOT.
+        let mtu = max(framePayloadLimit, 23)
         let writeType = supportedWriteType(preferred: preferredType, characteristic: txChar)
-        peripheral.writeValue(data, for: txChar, type: writeType)
+        let total = textData.count
+        let totalU16 = UInt16(min(total, 0xFFFF))
+        let sizeHi = UInt8((Int(totalU16) >> 8) & 0xFF)
+        let sizeLo = UInt8(Int(totalU16) & 0xFF)
+        let firstChunkPayloadMax = max(1, mtu - 4) // [0x01][flag][sizeHi][sizeLo]
+        let nextChunkPayloadMax = max(1, mtu - 2)  // [0x01][flag]
+
+        if total <= firstChunkPayloadMax {
+            var packet = Data([Self.rawPrefix, flag, sizeHi, sizeLo])
+            packet.append(textData)
+            peripheral.writeValue(packet, for: txChar, type: writeType)
+            return
+        }
+
+        let firstLen = firstChunkPayloadMax
+        var first = Data([Self.rawPrefix, flag, sizeHi, sizeLo])
+        first.append(textData.subdata(in: 0 ..< firstLen))
+        peripheral.writeValue(first, for: txChar, type: writeType)
+        var offset = firstLen
+
+        while offset < total {
+            let len = min(nextChunkPayloadMax, total - offset)
+            var packet = Data([Self.rawPrefix, flag])
+            packet.append(textData.subdata(in: offset ..< (offset + len)))
+            peripheral.writeValue(packet, for: txChar, type: writeType)
+            offset += len
+        }
+    }
+
+    // MARK: - Admin diagnostic primitives
+
+    /// Public wrapper so the admin test screen can drive `sendRawCommand`.
+    func adminSendCommand(flag: UInt8, fields: [String] = []) {
+        sendRawCommand(flag: flag, fields: fields)
+    }
+
+    /// Send a single deliberately-incomplete first chunk for the given flag:
+    /// writes `[0x01][flag][sizeHi][sizeLo][partial body]` where `declaredSize`
+    /// is what we claim the full payload length is, but only `actualPayload`
+    /// bytes are transmitted. Frame leaves `accum_by_flag[flag]` with
+    /// `size=declaredSize`, `recv=len(actualPayload)`, `num=1`. With the
+    /// per-flag protocol, this only blocks future messages of the same flag —
+    /// other flags continue to dispatch normally.
+    func adminSendStrandedFirstChunk(flag: UInt8, declaredSize: Int, actualPayload: String) {
+        guard let peripheral = connectedPeripheral, let txChar else { return }
+        guard let bytes = actualPayload.data(using: .utf8) else { return }
+        appendDevLog(
+            direction: "TEST",
+            message: "stranded chunk flag=0x\(String(format: "%02X", flag)) declared=\(declaredSize) actual=\(bytes.count) bytes"
+        )
+        let totalU16 = UInt16(min(max(declaredSize, 0), 0xFFFF))
+        let sizeHi = UInt8((Int(totalU16) >> 8) & 0xFF)
+        let sizeLo = UInt8(Int(totalU16) & 0xFF)
+        var packet = Data([Self.rawPrefix, flag, sizeHi, sizeLo])
+        packet.append(bytes)
+        let writeType = supportedWriteType(preferred: nil, characteristic: txChar)
+        peripheral.writeValue(packet, for: txChar, type: writeType)
+    }
+
+    /// Append a log line tagged `[TEST]` so admin tests can interleave
+    /// timestamps with the rest of the dev log.
+    func adminLog(_ message: String) {
+        appendDevLog(direction: "TEST", message: message)
+    }
+
+    /// True when we have a live connection AND the embedded Lua app has
+    /// completed its initial handshake (so PING / EVT plumbing is alive).
+    var adminIsReady: Bool {
+        guard case .connected = state else { return false }
+        return hasReceivedFrameAppHeartbeat
     }
 
     private func supportedWriteType(preferred: CBCharacteristicWriteType?, characteristic: CBCharacteristic) -> CBCharacteristicWriteType {
@@ -844,7 +979,9 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         frameFirmwareVersion = ""
         frameAppVersion = ""
         framePayloadLimit = 0
+        frameBatteryLevel = nil
         hasReceivedFrameAppHeartbeat = false
+        stopKeepalive()
         frameAppIsCompatible = false
         stopDebugAudioCapture()
         stopRecognition()
@@ -1035,10 +1172,15 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             case "\t":
                 result += "\\t"
             default:
-                if scalar.value < 32 || scalar.value > 126 {
-                    result += String(format: "\\%03d", scalar.value)
-                } else {
+                if scalar.value >= 32 && scalar.value <= 126 {
                     result.append(Character(scalar))
+                } else {
+                    // Lua decimal escapes (`\NNN`) only accept 0..255. For any
+                    // codepoint outside that range, emit the UTF-8 bytes one by
+                    // one so the rebuilt string on Frame is byte-identical.
+                    for byte in String(scalar).utf8 {
+                        result += String(format: "\\%03d", byte)
+                    }
                 }
             }
         }
@@ -1056,13 +1198,33 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
 
         if payload[0] == Self.tapEvent {
             let now = Date()
-            guard now.timeIntervalSince(lastTapAt) > 0.3 else {
-                appendDevLog(direction: "IN", message: "TAP ignored (debounce)")
+            // Cooldown after a successful toggle so an over-eager third tap
+            // doesn't immediately re-arm the next double-tap detection.
+            if now.timeIntervalSince(lastTapToggleAt) < Self.tapPostToggleCooldown {
+                appendDevLog(direction: "IN", message: "TAP ignored (post-toggle cooldown)")
                 return
             }
-            lastTapAt = now
-            appendDevLog(direction: "IN", message: "TAP")
-            handleTapToggleListening(desiredEnabled: !isStreaming)
+            // Require two taps within the double-tap window. A single
+            // accidental tap (adjusting glasses, head movement) does nothing.
+            // Window expands when the app is in background because iOS
+            // batches BLE notification delivery while suspended — the
+            // user's real double-tap can arrive spaced 1+ second apart.
+            // Same-millisecond bursts are unconditionally accepted because
+            // only iOS batching produces them; a human cannot tap that fast.
+            let window = isAppActive ? Self.doubleTapWindowForeground : Self.doubleTapWindowBackground
+            if let first = pendingFirstTapAt {
+                let gap = now.timeIntervalSince(first)
+                if gap <= Self.tapBurstWindow || gap <= window {
+                    pendingFirstTapAt = nil
+                    lastTapToggleAt = now
+                    let label = gap <= Self.tapBurstWindow ? "TAP (double, batched)" : "TAP (double)"
+                    appendDevLog(direction: "IN", message: label)
+                    handleTapToggleListening(desiredEnabled: !isStreaming)
+                    return
+                }
+            }
+            pendingFirstTapAt = now
+            appendDevLog(direction: "IN", message: "TAP (1/2 — tap again to toggle)")
             return
         }
 
@@ -1122,6 +1284,10 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             installStatus = "Frame crash: \(detail)"
         case "PREFS_SAVED":
             statusMessage = "Saved preferences on Frame"
+        case "BATTERY":
+            if parts.count >= 3, let level = Int(parts[2]) {
+                frameBatteryLevel = max(0, min(100, level))
+            }
         default:
             peripheralStatus = text
         }
@@ -1147,6 +1313,24 @@ extension FrameBluetoothManager: CBCentralManagerDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         Task { @MainActor in
             self.handleState(central.state)
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        let restored = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
+        Task { @MainActor in
+            guard let peripheral = restored.first else {
+                self.appendDevLog(direction: "APP", message: "willRestoreState had no peripherals")
+                return
+            }
+            self.connectedPeripheral = peripheral
+            peripheral.delegate = self
+            self.state = .connected(peripheral.name ?? "Frame")
+            self.connectionDebugStage = "Restored after suspend"
+            self.appendDevLog(direction: "APP", message: "willRestoreState recovered peripheral=\(peripheral.identifier)")
+            if peripheral.state == .connected {
+                peripheral.discoverServices([Self.service])
+            }
         }
     }
 
@@ -1405,8 +1589,8 @@ extension FrameBluetoothManager: HUDDeviceManager {
         clearFrameDisplay()
     }
 
-    func sendSuggestion(_ text: String) {
-        sendSuggestionToFrame(text)
+    func sendSuggestion(phonetic: String, english: String) {
+        sendSuggestionToFrame(phonetic: phonetic, english: english)
     }
 
     func clearSuggestion() {
