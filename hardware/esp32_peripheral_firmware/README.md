@@ -18,24 +18,30 @@ The ESP32 still:
 - `GND` -> `GND`
 - `SCK` / `BCLK` -> `GPIO26`
 - `WS` / `LRCLK` -> `GPIO25`
-- `SD` / `DOUT` -> `GPIO33`
+- `SD` / `DOUT` -> `GPIO34`
 
 ### OLED HUD display (SSD1306 SPI)
 
 - `VCC` -> `3V3`
 - `GND` -> `GND`
 - `DIN` / `MOSI` -> `GPIO23`
-- `CLK` / `SCK` -> `GPIO18`
-- `CS` -> `GPIO5`
+- `CLK` / `SCK` -> `GPIO17`
+- `CS` -> `GPIO22`
 - `DC` -> `GPIO21`
-- `RST` -> `GPIO22`
+- `RST` -> `GPIO16`
+
+### Record button / indicator
+
+- `BTN_REC` -> `GPIO27`
+- button other side -> `GND`
+- firmware enables the ESP32 internal pull-up, so the button is active-low
+- `REC_LED` -> `GPIO33`
 
 Notes:
 
 - `MISO` is not used by this display.
-- If your OLED has no `CS` pin and is hard-wired for SPI, this target is not the
-  right one without editing the display constructor.
 - Keep the microphone and OLED grounds tied to the same ESP32 ground.
+- `GPIO34` is input-only, which is fine for the I2S mic data line.
 
 ## One-time setup
 

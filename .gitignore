@@ -52,3 +52,6 @@ hardware/**/.venv/
 hardware/**/__pycache__/
 hardware/**/.vscode/
 hardware/**/captures/
+
+agents.md
+logs.txt

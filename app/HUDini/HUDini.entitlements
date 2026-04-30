@@ -2,13 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!--
-	To re-enable Apple Sign-In:
-	  1. Uncomment the two lines below.
-	  2. Xcode → Target HUDini → Build Settings → "Other Swift Flags" → add `-D APPLE_SIGN_IN_ENABLED` to Debug + Release.
-	  3. Sign in to Xcode with the paid Apple Developer team and select it under Signing & Capabilities.
-	-->
-	<!-- <key>com.apple.developer.applesignin</key> -->
-	<!-- <array><string>Default</string></array> -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>
