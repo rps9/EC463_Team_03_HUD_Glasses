@@ -8,6 +8,8 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 
+#include <vector>
+
 namespace {
 
 static const i2s_port_t I2S_PORT = I2S_NUM_0;
@@ -27,9 +29,12 @@ static const int PIN_RECORD_BUTTON = 27;
 static const int PIN_RECORD_LED = 33;
 static const unsigned long BUTTON_DEBOUNCE_MS = 45;
 
-static const size_t MAX_TEXT_LEN = 160;
+static const size_t MAX_FIELD_LEN = 2048;
 static const uint8_t LINE_HEIGHT = 10;
-static const uint8_t MAX_LINES = 6;
+static const uint8_t SCREEN_WIDTH = 128;
+static const uint8_t MAX_VISIBLE_LINES = 6;
+static const unsigned long SCROLL_LINE_INTERVAL_MS = 3000;
+static const unsigned long CHUNK_TIMEOUT_MS = 10000;
 
 static BLEUUID SERVICE_UUID("9A1D0001-7E54-4B1A-8B64-3A8F2C1D0001");
 static BLEUUID AUDIO_DATA_UUID("9A1D0002-7E54-4B1A-8B64-3A8F2C1D0001");
@@ -46,104 +51,306 @@ volatile bool streamEnabled = false;
 uint16_t packetSeq = 0;
 float dcEstimate = 0.0f;
 float smoothedGain = 1.0f;
-std::string inboundTextBuffer;
-String currentDisplayText = "Waiting for BLE text";
-String pendingDisplayText;
-volatile bool displayDirty = false;
+
+// Display state. The mux is held only across set/copy operations — never
+// across U8g2 calls, heap allocations, or paints.
+String captionText;                         // full final caption
+String livePartial;                         // current partial (cleared on final)
+String suggestionPhonetic;                  // "response:" content
+String suggestionEnglish;                   // "response (english):" content
+String statusBanner = "Waiting for BLE";    // shown when no real captions exist
+uint16_t scrollOffset = 0;
+unsigned long lastScrollAtMs = 0;
+volatile bool displayDirty = true;
 portMUX_TYPE displayMux = portMUX_INITIALIZER_UNLOCKED;
+
+// Chunked downlink accumulator. Single slot — concurrent verbs would collide.
+struct ChunkSlot {
+  String verb;
+  std::string buffer;
+  unsigned long lastWriteMs = 0;
+  bool active = false;
+};
+ChunkSlot chunkSlot;
+
 bool lastButtonReading = HIGH;
 bool stableButtonState = HIGH;
 unsigned long lastButtonChangeMs = 0;
 
-void queueDisplayText(const String &text) {
-  String trimmed = text;
-  trimmed.trim();
-  if (trimmed.isEmpty()) {
-    trimmed = " ";
-  }
+// ---- State mutators (caller must NOT hold the mux). ----
 
-  if (trimmed.length() > MAX_TEXT_LEN) {
-    trimmed.remove(MAX_TEXT_LEN);
+void clampToMax(String &s) {
+  if (s.length() > MAX_FIELD_LEN) {
+    s.remove(0, s.length() - MAX_FIELD_LEN);  // keep tail
   }
+}
 
+void setStatusBanner(const String &text) {
+  String t = text;
+  t.trim();
   portENTER_CRITICAL(&displayMux);
-  pendingDisplayText = trimmed;
+  statusBanner = t;
   displayDirty = true;
   portEXIT_CRITICAL(&displayMux);
 }
 
-bool notificationsEnabled(BLECharacteristic *characteristic) {
-  if (characteristic == nullptr) {
-    return false;
-  }
-
-  BLEDescriptor *cccd = characteristic->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
-  if (cccd == nullptr) {
-    return false;
-  }
-
-  BLE2902 *descriptor2902 = static_cast<BLE2902 *>(cccd);
-  return descriptor2902->getNotifications();
+void applyCaptionFinal(const String &raw) {
+  String text = raw;
+  text.trim();
+  clampToMax(text);
+  portENTER_CRITICAL(&displayMux);
+  captionText = text;
+  livePartial = "";
+  scrollOffset = 0;        // reset scroll on new content
+  lastScrollAtMs = 0;
+  displayDirty = true;
+  portEXIT_CRITICAL(&displayMux);
 }
 
-void notifyStatus(const char *status) {
-  if (statusCharacteristic == nullptr) {
-    return;
-  }
-
-  statusCharacteristic->setValue(status);
-  if (notificationsEnabled(statusCharacteristic)) {
-    statusCharacteristic->notify();
-  }
+void applyCaptionPartial(const String &raw) {
+  String text = raw;
+  text.trim();
+  clampToMax(text);
+  portENTER_CRITICAL(&displayMux);
+  livePartial = text;
+  scrollOffset = 0;
+  lastScrollAtMs = 0;
+  displayDirty = true;
+  portEXIT_CRITICAL(&displayMux);
 }
 
-void setStreamEnabled(bool enabled, const char *displayText, const char *statusText) {
-  streamEnabled = enabled;
-  if (enabled) {
-    packetSeq = 0;
-    dcEstimate = 0.0f;
-    smoothedGain = 1.0f;
-  }
-  digitalWrite(PIN_RECORD_LED, enabled ? HIGH : LOW);
-  queueDisplayText(displayText);
-  notifyStatus(statusText);
+void applySuggestionPhonetic(const String &raw) {
+  String text = raw;
+  text.trim();
+  clampToMax(text);
+  portENTER_CRITICAL(&displayMux);
+  suggestionPhonetic = text;
+  scrollOffset = 0;
+  lastScrollAtMs = 0;
+  displayDirty = true;
+  portEXIT_CRITICAL(&displayMux);
 }
 
-void drawWrappedText(const String &text) {
+void applySuggestionEnglish(const String &raw) {
+  String text = raw;
+  text.trim();
+  clampToMax(text);
+  portENTER_CRITICAL(&displayMux);
+  suggestionEnglish = text;
+  scrollOffset = 0;
+  lastScrollAtMs = 0;
+  displayDirty = true;
+  portEXIT_CRITICAL(&displayMux);
+}
+
+void resetCaption() {
+  portENTER_CRITICAL(&displayMux);
+  captionText = "";
+  livePartial = "";
+  scrollOffset = 0;
+  lastScrollAtMs = 0;
+  displayDirty = true;
+  portEXIT_CRITICAL(&displayMux);
+}
+
+void resetSuggestion() {
+  portENTER_CRITICAL(&displayMux);
+  suggestionPhonetic = "";
+  suggestionEnglish = "";
+  scrollOffset = 0;
+  lastScrollAtMs = 0;
+  displayDirty = true;
+  portEXIT_CRITICAL(&displayMux);
+}
+
+void resetAll() {
+  portENTER_CRITICAL(&displayMux);
+  captionText = "";
+  livePartial = "";
+  suggestionPhonetic = "";
+  suggestionEnglish = "";
+  scrollOffset = 0;
+  lastScrollAtMs = 0;
+  displayDirty = true;
+  portEXIT_CRITICAL(&displayMux);
+}
+
+// ---- Word-wrap (Frame-style accumulator, width-driven). ----
+// Caller must NOT hold displayMux — this calls into U8g2.
+
+uint16_t pixelWidth(const String &s) {
+  return display.getStrWidth(s.c_str());
+}
+
+std::vector<String> wrapLines(const String &text, uint16_t screenWidth, size_t maxLines) {
+  std::vector<String> out;
+  if (text.length() == 0 || maxLines == 0) return out;
+
+  String current;
+  bool truncated = false;
+
+  int start = 0;
+  while (start <= (int)text.length()) {
+    int sp = text.indexOf(' ', start);
+    int end = (sp < 0) ? text.length() : sp;
+    String word = text.substring(start, end);
+    start = (sp < 0) ? text.length() + 1 : sp + 1;
+
+    if (word.length() == 0) continue;
+
+    while (pixelWidth(word) > screenWidth) {
+      if (current.length() > 0) {
+        out.push_back(current);
+        current = "";
+        if (out.size() >= maxLines) { truncated = true; break; }
+      }
+      int fit = word.length();
+      while (fit > 1 && pixelWidth(word.substring(0, fit) + "-") > screenWidth) {
+        --fit;
+      }
+      if (fit < 1) fit = 1;
+      out.push_back(word.substring(0, fit) + "-");
+      word = word.substring(fit);
+      if (out.size() >= maxLines) { truncated = true; break; }
+    }
+    if (truncated) break;
+    if (word.length() == 0) continue;
+
+    String candidate = current.length() == 0 ? word : current + " " + word;
+    if (pixelWidth(candidate) <= screenWidth) {
+      current = candidate;
+    } else {
+      if (current.length() > 0) {
+        out.push_back(current);
+        if (out.size() >= maxLines) { truncated = true; break; }
+      }
+      current = word;
+    }
+  }
+
+  if (!truncated && current.length() > 0) {
+    if (out.size() < maxLines) {
+      out.push_back(current);
+    } else {
+      truncated = true;
+    }
+  }
+
+  if (truncated && !out.empty()) {
+    String &last = out.back();
+    while (last.length() > 0 && pixelWidth(last + "...") > screenWidth) {
+      last.remove(last.length() - 1);
+    }
+    last = last + "...";
+  }
+  return out;
+}
+
+// ---- Render path. ----
+
+struct Snapshot {
+  String captionText;
+  String livePartial;
+  String suggestionPhonetic;
+  String suggestionEnglish;
+  String statusBanner;
+  uint16_t scrollOffset;
+  bool dirty;
+};
+
+Snapshot takeSnapshot() {
+  Snapshot s;
+  portENTER_CRITICAL(&displayMux);
+  s.captionText = captionText;
+  s.livePartial = livePartial;
+  s.suggestionPhonetic = suggestionPhonetic;
+  s.suggestionEnglish = suggestionEnglish;
+  s.statusBanner = statusBanner;
+  s.scrollOffset = scrollOffset;
+  s.dirty = displayDirty;
+  displayDirty = false;
+  portEXIT_CRITICAL(&displayMux);
+  return s;
+}
+
+std::vector<String> buildRenderLines(const Snapshot &s) {
+  std::vector<String> out;
+
+  bool hasCaptionContent = s.captionText.length() > 0 || s.livePartial.length() > 0;
+
+  if (hasCaptionContent) {
+    out.push_back("translation:");
+    String active = s.livePartial.length() > 0 ? s.livePartial : s.captionText;
+    auto wrapped = wrapLines(active, SCREEN_WIDTH, 256);
+    for (auto &l : wrapped) out.push_back(l);
+  } else if (s.statusBanner.length() > 0) {
+    auto wrapped = wrapLines(s.statusBanner, SCREEN_WIDTH, MAX_VISIBLE_LINES);
+    for (auto &l : wrapped) out.push_back(l);
+  }
+
+  if (s.suggestionPhonetic.length() > 0) {
+    out.push_back("response:");
+    auto wrapped = wrapLines(s.suggestionPhonetic, SCREEN_WIDTH, 256);
+    for (auto &l : wrapped) out.push_back(l);
+  }
+
+  if (s.suggestionEnglish.length() > 0) {
+    out.push_back("response (english):");
+    auto wrapped = wrapLines(s.suggestionEnglish, SCREEN_WIDTH, 256);
+    for (auto &l : wrapped) out.push_back(l);
+  }
+
+  return out;
+}
+
+void paint(const std::vector<String> &lines, uint16_t offset) {
   display.clearBuffer();
   display.setFont(u8g2_font_5x7_tf);
 
-  String remaining = text;
-  uint8_t y = 8;
-
-  for (uint8_t line = 0; line < MAX_LINES && remaining.length() > 0; ++line) {
-    int split = remaining.length();
-    while (split > 0 && display.getStrWidth(remaining.substring(0, split).c_str()) > 128) {
-      --split;
-    }
-
-    if (split <= 0) {
-      split = 1;
-    }
-
-    int preferredSplit = split;
-    while (preferredSplit > 1 && remaining[preferredSplit - 1] != ' ') {
-      --preferredSplit;
-    }
-    if (preferredSplit > 1) {
-      split = preferredSplit;
-    }
-
-    String lineText = remaining.substring(0, split);
-    lineText.trim();
-    display.drawStr(0, y, lineText.c_str());
+  uint8_t y = LINE_HEIGHT - 2;
+  size_t end = std::min<size_t>(lines.size(), (size_t)offset + MAX_VISIBLE_LINES);
+  for (size_t i = offset; i < end; ++i) {
+    display.drawStr(0, y, lines[i].c_str());
     y += LINE_HEIGHT;
-
-    remaining = remaining.substring(split);
-    remaining.trim();
   }
-
   display.sendBuffer();
+}
+
+void flushDisplayIfNeeded() {
+  Snapshot s = takeSnapshot();
+
+  // Build lines outside any critical section. wrapLines calls U8g2.
+  std::vector<String> lines = buildRenderLines(s);
+  size_t total = lines.size();
+  uint16_t target = total > MAX_VISIBLE_LINES ? (uint16_t)(total - MAX_VISIBLE_LINES) : 0;
+
+  bool needsPaint = s.dirty;
+  unsigned long now = millis();
+
+  // Reconcile scroll under the lock so it stays consistent with target.
+  portENTER_CRITICAL(&displayMux);
+  if (scrollOffset > target) {
+    scrollOffset = target;
+    needsPaint = true;
+  }
+  if (scrollOffset < target) {
+    if (lastScrollAtMs == 0) lastScrollAtMs = now;
+    if (now - lastScrollAtMs >= SCROLL_LINE_INTERVAL_MS) {
+      scrollOffset++;
+      lastScrollAtMs = now;
+      needsPaint = true;
+    }
+    // Keep dirty so the next loop tick re-checks the timer.
+    displayDirty = true;
+  } else {
+    lastScrollAtMs = 0;
+  }
+  uint16_t paintOffset = scrollOffset;
+  portEXIT_CRITICAL(&displayMux);
+
+  if (needsPaint) {
+    paint(lines, paintOffset);
+  }
 }
 
 void showBootScreen() {
@@ -159,71 +366,148 @@ void showBootScreen() {
   display.sendBuffer();
 }
 
-void flushDisplayIfNeeded() {
-  if (!displayDirty) {
-    return;
+// ---- BLE ----
+
+bool notificationsEnabled(BLECharacteristic *characteristic) {
+  if (characteristic == nullptr) return false;
+  BLEDescriptor *cccd = characteristic->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
+  if (cccd == nullptr) return false;
+  BLE2902 *descriptor2902 = static_cast<BLE2902 *>(cccd);
+  return descriptor2902->getNotifications();
+}
+
+void notifyStatus(const char *status) {
+  if (statusCharacteristic == nullptr) return;
+  statusCharacteristic->setValue(status);
+  if (notificationsEnabled(statusCharacteristic)) {
+    statusCharacteristic->notify();
   }
+}
 
-  String nextText;
-  portENTER_CRITICAL(&displayMux);
-  nextText = pendingDisplayText;
-  displayDirty = false;
-  portEXIT_CRITICAL(&displayMux);
-
-  currentDisplayText = nextText;
-  drawWrappedText(currentDisplayText);
+void setStreamEnabled(bool enabled, const char *bannerText, const char *statusText) {
+  streamEnabled = enabled;
+  if (enabled) {
+    packetSeq = 0;
+    dcEstimate = 0.0f;
+    smoothedGain = 1.0f;
+  }
+  digitalWrite(PIN_RECORD_LED, enabled ? HIGH : LOW);
+  setStatusBanner(bannerText);
+  notifyStatus(statusText);
 }
 
 class MicServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *server) override {
     (void)server;
     deviceConnected = true;
-    queueDisplayText("BLE connected");
+    setStatusBanner("BLE connected");
     notifyStatus("Connected");
   }
 
   void onDisconnect(BLEServer *server) override {
     deviceConnected = false;
     setStreamEnabled(false, "BLE disconnected", "Disconnected");
-    queueDisplayText("BLE disconnected");
     server->startAdvertising();
   }
 };
 
+// ---- Command parsing ----
+
+bool startsWith(const std::string &s, const char *prefix) {
+  size_t pl = strlen(prefix);
+  return s.length() >= pl && s.compare(0, pl, prefix) == 0;
+}
+
+void dispatchVerb(const String &verb, const String &payload) {
+  if (verb == "CAPTION:final") {
+    Serial.printf("[BLE RX] CAPTION:final %u chars\n", (unsigned)payload.length());
+    applyCaptionFinal(payload);
+  } else if (verb == "CAPTION:partial") {
+    applyCaptionPartial(payload);
+  } else if (verb == "SUGGEST_PH") {
+    Serial.printf("[BLE RX] SUGGEST_PH %u chars\n", (unsigned)payload.length());
+    applySuggestionPhonetic(payload);
+  } else if (verb == "SUGGEST_EN") {
+    Serial.printf("[BLE RX] SUGGEST_EN %u chars\n", (unsigned)payload.length());
+    applySuggestionEnglish(payload);
+  } else {
+    Serial.print("[BLE RX] unknown verb: ");
+    Serial.println(verb);
+  }
+}
+
 class ControlCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *characteristic) override {
     std::string value = characteristic->getValue();
-    if (value.empty()) {
+    if (value.empty()) return;
+
+    // Drop stranded chunk slot if it's gone stale.
+    if (chunkSlot.active && (millis() - chunkSlot.lastWriteMs) > CHUNK_TIMEOUT_MS) {
+      Serial.println("[BLE RX] chunk slot timeout, dropping");
+      chunkSlot = ChunkSlot{};
+    }
+
+    if (value == "START" || value == "start") {
+      setStreamEnabled(true, "Streaming audio", "Streaming");
+      return;
+    }
+    if (value == "STOP" || value == "stop") {
+      setStreamEnabled(false, "Stream stopped", "Stopped");
       return;
     }
 
-    std::string upperValue = value;
-    for (char &ch : upperValue) {
-      ch = static_cast<char>(toupper(static_cast<unsigned char>(ch)));
+    if (value == "CLEAR:caption") { resetCaption(); return; }
+    if (value == "CLEAR:suggestion") { resetSuggestion(); return; }
+    if (value == "CLEAR:all") { resetAll(); setStatusBanner("Waiting for BLE"); return; }
+
+    auto tryVerb = [&](const char *verbCstr) -> bool {
+      size_t vl = strlen(verbCstr);
+      if (value.length() > vl + 1 && value.compare(0, vl, verbCstr) == 0 && value[vl] == ':') {
+        String payload = String(value.substr(vl + 1).c_str());
+        dispatchVerb(String(verbCstr), payload);
+        return true;
+      }
+      return false;
+    };
+    if (tryVerb("CAPTION:final")) return;
+    if (tryVerb("CAPTION:partial")) return;
+    if (tryVerb("SUGGEST_PH")) return;
+    if (tryVerb("SUGGEST_EN")) return;
+
+    if (startsWith(value, "CHUNK_BEGIN:")) {
+      chunkSlot = ChunkSlot{};
+      chunkSlot.verb = String(value.substr(strlen("CHUNK_BEGIN:")).c_str());
+      chunkSlot.active = true;
+      chunkSlot.lastWriteMs = millis();
+      return;
+    }
+    if (startsWith(value, "CHUNK:")) {
+      if (!chunkSlot.active) {
+        Serial.println("[BLE RX] CHUNK without BEGIN, ignoring");
+        return;
+      }
+      chunkSlot.buffer.append(value.substr(strlen("CHUNK:")));
+      chunkSlot.lastWriteMs = millis();
+      if (chunkSlot.buffer.size() > MAX_FIELD_LEN * 2) {
+        chunkSlot.buffer.resize(MAX_FIELD_LEN * 2);
+      }
+      return;
+    }
+    if (value == "CHUNK_END") {
+      if (!chunkSlot.active) return;
+      String payload = String(chunkSlot.buffer.c_str());
+      String verb = chunkSlot.verb;
+      chunkSlot = ChunkSlot{};
+      dispatchVerb(verb, payload);
+      return;
     }
 
-    if (upperValue == "START") {
-      setStreamEnabled(true, "Streaming audio...", "Streaming");
-    } else if (upperValue == "STOP") {
-      setStreamEnabled(false, "Stream stopped", "Stopped");
-    } else if (upperValue.rfind("TEXT_BEGIN", 0) == 0) {
-      inboundTextBuffer.clear();
-      Serial.println("[BLE RX] TEXT_BEGIN");
-    } else if (upperValue.rfind("TEXT_CHUNK:", 0) == 0) {
-      inboundTextBuffer += value.substr(11);
-    } else if (upperValue.rfind("TEXT_END", 0) == 0) {
-      Serial.println("[BLE RX] TEXT_END");
-      Serial.print("[BLE RX] ");
-      Serial.println(inboundTextBuffer.c_str());
-      queueDisplayText(String(inboundTextBuffer.c_str()));
-    } else if (upperValue.rfind("TEXT:", 0) == 0) {
-      const String text = String(value.substr(5).c_str());
-      Serial.print("[BLE RX] ");
-      Serial.println(text);
-      queueDisplayText(text);
-    }
+    Serial.print("[BLE RX] unknown command: ");
+    Serial.println(value.c_str());
   }
 };
+
+// ---- I/O setup ----
 
 void setupI2S() {
   i2s_config_t i2s_config = {
@@ -325,7 +609,7 @@ void setupFirmware() {
   showBootScreen();
   setupI2S();
   setupBLE();
-  queueDisplayText(currentDisplayText);
+  setStatusBanner("Waiting for BLE");
 }
 
 void loopFirmware() {
@@ -341,7 +625,7 @@ void loopFirmware() {
     delay(10);
     return;
   }
-  // to do: make this actually workadlkfjai adslkjoljdlakfjjlkjlk
+
   const int N = 80;
   int32_t i2sSamples[N];
   int16_t pcm16[N];
@@ -351,24 +635,16 @@ void loopFirmware() {
   i2s_read(I2S_PORT, (void *)i2sSamples, sizeof(i2sSamples), &bytesRead, portMAX_DELAY);
 
   int count = bytesRead / sizeof(int32_t);
-  if (count <= 0) {
-    return;
-  }
-
-  if (count > N) {
-    count = N;
-  }
+  if (count <= 0) return;
+  if (count > N) count = N;
 
   int32_t sumAbs = 0;
   for (int i = 0; i < count; i++) {
     int32_t s24 = i2sSamples[i] >> 8;
     int32_t s16 = s24 >> 8;
 
-    if (s16 > 32767) {
-      s16 = 32767;
-    } else if (s16 < -32768) {
-      s16 = -32768;
-    }
+    if (s16 > 32767) s16 = 32767;
+    else if (s16 < -32768) s16 = -32768;
 
     dcEstimate += 0.01f * ((float)s16 - dcEstimate);
     int32_t hp = (int32_t)((float)s16 - dcEstimate);
@@ -387,8 +663,8 @@ void loopFirmware() {
 
   for (int i = 0; i < count; i++) {
     int32_t amplified = (int32_t)((float)pcm16[i] * smoothedGain);
-    if (amplified > 30000) amplified = 30000;
-    if (amplified < -30000) amplified = -30000;
+    if (amplified > 32767) amplified = 32767;
+    if (amplified < -32768) amplified = -32768;
     pcm16[i] = (int16_t)amplified;
   }
 

@@ -13,7 +13,9 @@ final class ESP32BluetoothManager: NSObject, ObservableObject {
     private static let statusCharacteristic = CBUUID(string: "9A1D0004-7E54-4B1A-8B64-3A8F2C1D0001")
 
     private static let streamSampleRate: Double = 8_000
-    private static let singleShotTextLimit = 160
+    // Firmware MTU is 185 bytes. Leave headroom for the verb prefix and BLE
+    // framing overhead, then round to a safe payload size.
+    private static let singleShotCommandLimit = 170
     private static let chunkPayloadSize = 150
     private static let centralRestoreIdentifier = "com.hudini.esp32.central"
 
@@ -44,8 +46,10 @@ final class ESP32BluetoothManager: NSObject, ObservableObject {
     private let partialTranslationInterval: TimeInterval = 0.10
     private var latestTranscriptSnapshot: String = ""
     private var lastPartialTranslationText: String = ""
-    private var lastSentDisplayText: String = ""
-    private var lastSentSuggestion: String = ""
+    private var lastSentCaptionFinal: String = ""
+    private var lastSentCaptionPartial: String = ""
+    private var lastSentSuggestionPhonetic: String = ""
+    private var lastSentSuggestionEnglish: String = ""
 
     private lazy var streamFormat: AVAudioFormat = {
         AVAudioFormat(
@@ -287,49 +291,86 @@ final class ESP32BluetoothManager: NSObject, ObservableObject {
 
     func sendHUDText(_ text: String, isPartial: Bool) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != lastSentDisplayText else { return }
-        lastSentDisplayText = trimmed
-        writeDisplayText(trimmed)
+        guard !trimmed.isEmpty else { return }
+        if isPartial {
+            guard trimmed != lastSentCaptionPartial else { return }
+            lastSentCaptionPartial = trimmed
+            sendVerb("CAPTION:partial", payload: trimmed)
+        } else {
+            guard trimmed != lastSentCaptionFinal else { return }
+            lastSentCaptionFinal = trimmed
+            lastSentCaptionPartial = ""
+            sendVerb("CAPTION:final", payload: trimmed)
+        }
     }
 
     func clearHUDText() {
-        lastSentDisplayText = ""
-        lastSentSuggestion = ""
-        writeDisplayText(" ")
+        lastSentCaptionFinal = ""
+        lastSentCaptionPartial = ""
+        sendCommand("CLEAR:caption")
     }
 
     func sendSuggestion(phonetic: String, english: String) {
-        // ESP32 has only one display field; show the phonetic (the words to
-        // actually speak). The english meaning is Frame-only for now.
-        let trimmed = phonetic.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != lastSentSuggestion else { return }
-        lastSentSuggestion = trimmed
-        writeDisplayText(trimmed)
+        let trimmedPhonetic = phonetic.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEnglish = english.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedPhonetic.isEmpty, trimmedPhonetic != lastSentSuggestionPhonetic {
+            lastSentSuggestionPhonetic = trimmedPhonetic
+            sendVerb("SUGGEST_PH", payload: trimmedPhonetic)
+        }
+        if !trimmedEnglish.isEmpty, trimmedEnglish != lastSentSuggestionEnglish {
+            lastSentSuggestionEnglish = trimmedEnglish
+            sendVerb("SUGGEST_EN", payload: trimmedEnglish)
+        }
     }
 
     func clearSuggestion() {
-        lastSentSuggestion = ""
+        lastSentSuggestionPhonetic = ""
+        lastSentSuggestionEnglish = ""
+        sendCommand("CLEAR:suggestion")
     }
 
-    private func writeDisplayText(_ text: String) {
-        guard let controlChar, let peripheral = connectedPeripheral else { return }
-        let utf8 = Array(text.utf8)
-        if utf8.count <= Self.singleShotTextLimit - 5 {
-            writeControl("TEXT:\(text)", char: controlChar)
+    private func sendCommand(_ command: String) {
+        guard let controlChar else { return }
+        writeControl(command, char: controlChar)
+    }
+
+    private func sendVerb(_ verb: String, payload: String) {
+        guard let controlChar else { return }
+        let single = "\(verb):\(payload)"
+        if single.utf8.count <= Self.singleShotCommandLimit {
+            writeControl(single, char: controlChar)
             return
         }
-        writeControl("TEXT_BEGIN", char: controlChar)
-        var index = 0
-        while index < utf8.count {
-            let end = min(index + Self.chunkPayloadSize, utf8.count)
-            let slice = Array(utf8[index..<end])
-            if let chunkStr = String(bytes: slice, encoding: .utf8) {
-                writeControl("TEXT_CHUNK:\(chunkStr)", char: controlChar)
-            }
-            index = end
+        writeControl("CHUNK_BEGIN:\(verb)", char: controlChar)
+        for chunk in utf8SafeChunks(payload, maxBytes: Self.chunkPayloadSize) {
+            writeControl("CHUNK:\(chunk)", char: controlChar)
         }
-        writeControl("TEXT_END", char: controlChar)
-        _ = peripheral
+        writeControl("CHUNK_END", char: controlChar)
+    }
+
+    /// Splits `text` into chunks of at most `maxBytes` UTF-8 bytes each,
+    /// without splitting in the middle of a multi-byte scalar.
+    private func utf8SafeChunks(_ text: String, maxBytes: Int) -> [String] {
+        var out: [String] = []
+        let utf8 = text.utf8
+        var idx = utf8.startIndex
+        while idx < utf8.endIndex {
+            var end = utf8.index(idx, offsetBy: maxBytes, limitedBy: utf8.endIndex) ?? utf8.endIndex
+            // Back up while `end` lands on a UTF-8 continuation byte (0b10xx_xxxx).
+            while end > idx, end < utf8.endIndex, (utf8[end] & 0b1100_0000) == 0b1000_0000 {
+                end = utf8.index(before: end)
+            }
+            // Defensive: if backing up consumed the whole window (shouldn't
+            // happen for valid UTF-8 with a sane maxBytes), force one byte
+            // forward to make progress and accept the malformed split.
+            if end == idx {
+                end = utf8.index(after: idx)
+            }
+            let piece = String(decoding: utf8[idx..<end], as: UTF8.self)
+            out.append(piece)
+            idx = end
+        }
+        return out
     }
 
     private func writeControl(_ command: String, char: CBCharacteristic) {
