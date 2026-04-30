@@ -152,6 +152,14 @@ final class ESP32BluetoothManager: NSObject, ObservableObject {
         isStreaming = false
     }
 
+    private func toggleListeningFromPeripheralButton() {
+        if isStreaming {
+            stopListening()
+        } else {
+            startTranscribing(listeningLanguage: selectedLanguageCode, translatingTo: targetLanguageCode)
+        }
+    }
+
     func setRecognitionLanguage(_ code: String) {
         guard !code.isEmpty, code != selectedLanguageCode else { return }
         selectedLanguageCode = code
@@ -520,6 +528,10 @@ extension ESP32BluetoothManager: CBPeripheralDelegate {
                 self.appendAudioPacket(value)
             } else if uuid == Self.statusCharacteristic {
                 if let text = String(data: value, encoding: .utf8) {
+                    if text == "MIC_REQUEST" {
+                        self.toggleListeningFromPeripheralButton()
+                        return
+                    }
                     self.statusMessage = "ESP32: \(text)"
                 }
             }

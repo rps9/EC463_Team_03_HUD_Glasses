@@ -15,13 +15,17 @@ static const int SAMPLE_RATE = 8000;
 
 static const int PIN_I2S_BCLK = 26;
 static const int PIN_I2S_LRCLK = 25;
-static const int PIN_I2S_DIN = 33;
+static const int PIN_I2S_DIN = 34;
 
 static const int PIN_DISPLAY_MOSI = 23;
-static const int PIN_DISPLAY_CLK = 18;
-static const int PIN_DISPLAY_CS = 5;
+static const int PIN_DISPLAY_CLK = 17;
+static const int PIN_DISPLAY_CS = 22;
 static const int PIN_DISPLAY_DC = 21;
-static const int PIN_DISPLAY_RST = 22;
+static const int PIN_DISPLAY_RST = 16;
+
+static const int PIN_RECORD_BUTTON = 27;
+static const int PIN_RECORD_LED = 33;
+static const unsigned long BUTTON_DEBOUNCE_MS = 45;
 
 static const size_t MAX_TEXT_LEN = 160;
 static const uint8_t LINE_HEIGHT = 10;
@@ -47,6 +51,9 @@ String currentDisplayText = "Waiting for BLE text";
 String pendingDisplayText;
 volatile bool displayDirty = false;
 portMUX_TYPE displayMux = portMUX_INITIALIZER_UNLOCKED;
+bool lastButtonReading = HIGH;
+bool stableButtonState = HIGH;
+unsigned long lastButtonChangeMs = 0;
 
 void queueDisplayText(const String &text) {
   String trimmed = text;
@@ -77,6 +84,29 @@ bool notificationsEnabled(BLECharacteristic *characteristic) {
 
   BLE2902 *descriptor2902 = static_cast<BLE2902 *>(cccd);
   return descriptor2902->getNotifications();
+}
+
+void notifyStatus(const char *status) {
+  if (statusCharacteristic == nullptr) {
+    return;
+  }
+
+  statusCharacteristic->setValue(status);
+  if (notificationsEnabled(statusCharacteristic)) {
+    statusCharacteristic->notify();
+  }
+}
+
+void setStreamEnabled(bool enabled, const char *displayText, const char *statusText) {
+  streamEnabled = enabled;
+  if (enabled) {
+    packetSeq = 0;
+    dcEstimate = 0.0f;
+    smoothedGain = 1.0f;
+  }
+  digitalWrite(PIN_RECORD_LED, enabled ? HIGH : LOW);
+  queueDisplayText(displayText);
+  notifyStatus(statusText);
 }
 
 void drawWrappedText(const String &text) {
@@ -123,9 +153,9 @@ void showBootScreen() {
   display.setFont(u8g2_font_5x7_tf);
   display.drawStr(0, 8, "HUDini ESP32 HUD test");
   display.drawStr(0, 18, "BLE mic + display");
-  display.drawStr(0, 28, "Mic: B26 W25 D33");
-  display.drawStr(0, 38, "OLED: S18 M23");
-  display.drawStr(0, 48, "CS5 DC21 RST22");
+  display.drawStr(0, 28, "Mic: B26 W25 D34");
+  display.drawStr(0, 38, "OLED: S17 M23");
+  display.drawStr(0, 48, "CS22 DC21 RST16");
   display.sendBuffer();
 }
 
@@ -149,19 +179,13 @@ class MicServerCallbacks : public BLEServerCallbacks {
     (void)server;
     deviceConnected = true;
     queueDisplayText("BLE connected");
-    if (statusCharacteristic && notificationsEnabled(statusCharacteristic)) {
-      statusCharacteristic->setValue("Connected");
-      statusCharacteristic->notify();
-    }
+    notifyStatus("Connected");
   }
 
   void onDisconnect(BLEServer *server) override {
     deviceConnected = false;
-    streamEnabled = false;
+    setStreamEnabled(false, "BLE disconnected", "Disconnected");
     queueDisplayText("BLE disconnected");
-    if (statusCharacteristic) {
-      statusCharacteristic->setValue("Disconnected");
-    }
     server->startAdvertising();
   }
 };
@@ -179,22 +203,9 @@ class ControlCallbacks : public BLECharacteristicCallbacks {
     }
 
     if (upperValue == "START") {
-      streamEnabled = true;
-      packetSeq = 0;
-      dcEstimate = 0.0f;
-      smoothedGain = 1.0f;
-      queueDisplayText("Streaming audio...");
-      if (statusCharacteristic && notificationsEnabled(statusCharacteristic)) {
-        statusCharacteristic->setValue("Streaming");
-        statusCharacteristic->notify();
-      }
+      setStreamEnabled(true, "Streaming audio...", "Streaming");
     } else if (upperValue == "STOP") {
-      streamEnabled = false;
-      queueDisplayText("Stream stopped");
-      if (statusCharacteristic && notificationsEnabled(statusCharacteristic)) {
-        statusCharacteristic->setValue("Stopped");
-        statusCharacteristic->notify();
-      }
+      setStreamEnabled(false, "Stream stopped", "Stopped");
     } else if (upperValue.rfind("TEXT_BEGIN", 0) == 0) {
       inboundTextBuffer.clear();
       Serial.println("[BLE RX] TEXT_BEGIN");
@@ -239,6 +250,35 @@ void setupI2S() {
   i2s_zero_dma_buffer(I2S_PORT);
 }
 
+void setupRecordControls() {
+  pinMode(PIN_RECORD_BUTTON, INPUT_PULLUP);
+  pinMode(PIN_RECORD_LED, OUTPUT);
+  digitalWrite(PIN_RECORD_LED, LOW);
+  lastButtonReading = digitalRead(PIN_RECORD_BUTTON);
+  stableButtonState = lastButtonReading;
+  lastButtonChangeMs = millis();
+}
+
+void pollRecordButton() {
+  const bool reading = digitalRead(PIN_RECORD_BUTTON);
+  const unsigned long now = millis();
+
+  if (reading != lastButtonReading) {
+    lastButtonReading = reading;
+    lastButtonChangeMs = now;
+  }
+
+  if ((now - lastButtonChangeMs) < BUTTON_DEBOUNCE_MS || reading == stableButtonState) {
+    return;
+  }
+
+  stableButtonState = reading;
+  if (stableButtonState == LOW) {
+    Serial.println("[BUTTON] BTN_REC pressed");
+    notifyStatus("MIC_REQUEST");
+  }
+}
+
 void setupBLE() {
   BLEDevice::init("HUDini-Mic");
   BLEDevice::setMTU(185);
@@ -281,6 +321,7 @@ void setupFirmware() {
   esp_log_level_set("BLECharacteristic", ESP_LOG_NONE);
   esp_log_level_set("BLE2902", ESP_LOG_NONE);
 
+  setupRecordControls();
   showBootScreen();
   setupI2S();
   setupBLE();
@@ -289,6 +330,7 @@ void setupFirmware() {
 
 void loopFirmware() {
   flushDisplayIfNeeded();
+  pollRecordButton();
 
   if (!deviceConnected || !streamEnabled || audioDataCharacteristic == nullptr) {
     delay(10);
