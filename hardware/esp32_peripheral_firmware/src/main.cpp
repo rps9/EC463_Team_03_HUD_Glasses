@@ -17,16 +17,19 @@ static const int SAMPLE_RATE = 8000;
 
 static const int PIN_I2S_BCLK = 26;
 static const int PIN_I2S_LRCLK = 25;
-static const int PIN_I2S_DIN = 34;
+static const int PIN_I2S_DIN = 33;
 
-static const int PIN_DISPLAY_MOSI = 23;
-static const int PIN_DISPLAY_CLK = 17;
-static const int PIN_DISPLAY_CS = 22;
+// Matches the actual wiring on this rig (also matches hardware/display/src/main.cpp,
+// which is the known-working reference for this OLED).
+static const int PIN_DISPLAY_MOSI = 23;  // DIN
+static const int PIN_DISPLAY_CLK = 18;
+static const int PIN_DISPLAY_CS = 5;
 static const int PIN_DISPLAY_DC = 21;
-static const int PIN_DISPLAY_RST = 16;
+static const int PIN_DISPLAY_RST = 22;
 
 static const int PIN_RECORD_BUTTON = 27;
-static const int PIN_RECORD_LED = 33;
+// GPIO 34-39 are input-only on ESP32. Use a real output pin (19 is free).
+static const int PIN_RECORD_LED = 19;
 static const unsigned long BUTTON_DEBOUNCE_MS = 45;
 
 static const size_t MAX_FIELD_LEN = 2048;
@@ -356,13 +359,30 @@ void flushDisplayIfNeeded() {
 void showBootScreen() {
   SPI.begin(PIN_DISPLAY_CLK, -1, PIN_DISPLAY_MOSI, PIN_DISPLAY_CS);
   display.begin();
+  // Drop SPI bus clock for noisy breadboard wiring (default is ~8 MHz).
+  display.setBusClock(1000000);
+
+  // Step 1: fill the entire screen white. If the OLED is alive at all, you
+  // see a fully lit panel for ~600 ms. This rules out "is the panel even
+  // talking SPI?" before we worry about text rendering.
+  display.clearBuffer();
+  display.drawBox(0, 0, 128, 64);
+  display.sendBuffer();
+  delay(600);
+
+  // Step 2: clear it (panel goes black for ~300 ms).
+  display.clearBuffer();
+  display.sendBuffer();
+  delay(300);
+
+  // Step 3: normal boot text.
   display.clearBuffer();
   display.setFont(u8g2_font_5x7_tf);
-  display.drawStr(0, 8, "HUDini ESP32 HUD test");
+  display.drawStr(0, 8, "HUDini ESP32");
   display.drawStr(0, 18, "BLE mic + display");
-  display.drawStr(0, 28, "Mic: B26 W25 D34");
-  display.drawStr(0, 38, "OLED: S17 M23");
-  display.drawStr(0, 48, "CS22 DC21 RST16");
+  display.drawStr(0, 28, "Mic: B26 W25 D33");
+  display.drawStr(0, 38, "OLED: S18 M23 CS5");
+  display.drawStr(0, 48, "DC21 RST22");
   display.sendBuffer();
 }
 
@@ -601,15 +621,21 @@ void setupBLE() {
 void setupFirmware() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("Starting BLE mic + HUD display streamer");
+  Serial.println("[BOOT] Starting BLE mic + HUD display streamer");
   esp_log_level_set("BLECharacteristic", ESP_LOG_NONE);
   esp_log_level_set("BLE2902", ESP_LOG_NONE);
 
+  Serial.println("[BOOT] setupRecordControls...");
   setupRecordControls();
-  showBootScreen();
-  setupI2S();
+  Serial.println("[BOOT] setupBLE...");
   setupBLE();
+  Serial.println("[BOOT] setupI2S...");
+  setupI2S();
+  Serial.println("[BOOT] showBootScreen (display.begin)...");
+  showBootScreen();
+  Serial.println("[BOOT] display ok");
   setStatusBanner("Waiting for BLE");
+  Serial.println("[BOOT] ready");
 }
 
 void loopFirmware() {

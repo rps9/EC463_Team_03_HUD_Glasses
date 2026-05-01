@@ -40,6 +40,13 @@ struct HUDLiveView: View {
                     .padding(.top, 4)
                     .padding(.bottom, 12)
 
+                if frameManager.isWaitingForFrameBoot {
+                    frameBootBanner
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+                        .transition(.opacity)
+                }
+
                 VStack(spacing: 16) {
                     translationHero
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -55,6 +62,7 @@ struct HUDLiveView: View {
             micFAB
                 .padding(.bottom, 28)
         }
+        .animation(.easeInOut(duration: 0.2), value: frameManager.isWaitingForFrameBoot)
         .hudScreen()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -200,6 +208,32 @@ struct HUDLiveView: View {
     }
 
     // MARK: - Top chip bar
+
+    private var frameBootBanner: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(HUDTheme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Frame is starting up…")
+                    .font(.system(.callout, design: .rounded, weight: .semibold))
+                    .foregroundStyle(HUDTheme.ink)
+                Text(frameManager.frameBootSettleRemainingSeconds > 0
+                     ? "Listening will start in \(frameManager.frameBootSettleRemainingSeconds)s. The mic isn't ready until Frame finishes warming up."
+                     : "Listening will start in a moment.")
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(HUDTheme.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(HUDTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(HUDTheme.accent.opacity(0.3), lineWidth: 1)
+        }
+    }
 
     private var topChipBar: some View {
         HStack(spacing: 10) {
