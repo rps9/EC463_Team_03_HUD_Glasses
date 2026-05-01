@@ -64,7 +64,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     // sample into Int16 and feeds the recognizer at 16 kHz.
     private static let streamSampleRate: Double = 16_000
     private static let streamBitDepth: Int = 8
-    private static let embeddedAppVersion = "2026.04.30.2"
+    private static let embeddedAppVersion = "2026.04.30.22"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let centralRestoreIdentifier = "com.hudini.frame.central"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
@@ -110,6 +110,11 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     @Published private(set) var frameAppVersion: String = ""
     @Published private(set) var framePayloadLimit: Int = 0
     @Published private(set) var frameBatteryLevel: Int? = nil
+    // True while a tap-to-listen has been deferred because the boot-settle
+    // window hasn't elapsed yet. Drives the "Frame is starting up…" banner
+    // in HUDLiveView.
+    @Published private(set) var isWaitingForFrameBoot: Bool = false
+    @Published private(set) var frameBootSettleRemainingSeconds: Int = 0
     @Published private(set) var selectedLanguageCode: String = TranslationLanguages.defaultListeningLanguageCode {
         didSet {
             guard oldValue != selectedLanguageCode else { return }
@@ -145,6 +150,16 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     private var isAppActive = true
     private var hasReceivedFrameAppHeartbeat = false
     private var frameAppIsCompatible = false
+    // Tracks when the first EVT READY/BOOT for this BLE connection arrived.
+    // Frame's mic subsystem appears to need ~10 s of settle time after a
+    // fresh boot before mic.read can allocate without OOM. Listening
+    // requests inside this window are deferred via `pendingListenTask`,
+    // not rejected — UX-wise the user just sees a "waiting for Frame to
+    // boot" status until the window elapses, then mic-on fires
+    // automatically.
+    private var frameReadyAt: Date? = nil
+    private static let frameBootSettleSeconds: TimeInterval = 20
+    private var pendingListenTask: Task<Void, Never>? = nil
     private var connectRetryCount = 0
 
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -392,6 +407,12 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
             return
         }
 
+        // Boot-settle gate removed. 10 s and 20 s waits both failed to
+        // prevent the OOM (logs at v.11 / v.12 showed identical failure
+        // shapes regardless of wait duration). The cause isn't time-
+        // since-boot; it's allocator state. Fix moved to the Frame Lua
+        // side (boot-time allocator primer in run_app).
+
         lastPartialTranslationAt = .distantPast
 
         resetAudioConditioning()
@@ -415,6 +436,12 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     }
 
     func stopListening() {
+        // If the user toggles off during the boot-settle window, cancel
+        // the deferred start so it doesn't fire after they've stopped.
+        pendingListenTask?.cancel()
+        pendingListenTask = nil
+        isWaitingForFrameBoot = false
+        frameBootSettleRemainingSeconds = 0
         stopDebugAudioCapture()
         stopRecognition()
         setStreamingState(false)
@@ -986,6 +1013,15 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         stopDebugAudioCapture()
         stopRecognition()
         isStreaming = false
+        // Reset boot-settle gate so the next connection re-arms the
+        // 10 s window. Cancel any deferred listen request that's still
+        // waiting for the gate to expire — would be wrong to fire it
+        // against a different/fresh BLE link.
+        frameReadyAt = nil
+        pendingListenTask?.cancel()
+        pendingListenTask = nil
+        isWaitingForFrameBoot = false
+        frameBootSettleRemainingSeconds = 0
     }
 
     private func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
@@ -1069,7 +1105,7 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
                 marker: "HUDINI_VERIFY:",
                 timeout: 4
             )
-            guard verifyResponse.contains("HUDINI_VERIFY:local APP_DIR = \"/hudini\"|local APP_VERSION = \"\(Self.embeddedAppVersion)\"") else {
+            guard verifyResponse.contains("HUDINI_VERIFY:local APP_VERSION = \"\(Self.embeddedAppVersion)\"") else {
                 throw InstallFailure.verification(verifyResponse)
             }
 
@@ -1244,6 +1280,13 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
         switch event {
         case "BOOT", "READY":
             hasReceivedFrameAppHeartbeat = true
+            // First BOOT/READY of this connection starts the boot-settle
+            // window. Subsequent READYs (from periodic keepalive PINGs)
+            // don't reset it.
+            if frameReadyAt == nil {
+                frameReadyAt = Date()
+                appendDevLog(direction: "APP", message: "Frame boot-settle window started (\(Int(Self.frameBootSettleSeconds))s)")
+            }
             if parts.count >= 4 {
                 frameFirmwareVersion = parts[2]
                 framePayloadLimit = Int(parts[3]) ?? framePayloadLimit
