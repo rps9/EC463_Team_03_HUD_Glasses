@@ -2,7 +2,7 @@ import Foundation
 
 enum FrameEmbeddedApp {
     static let mainLua = #"""
-local APP_VERSION = "2026.04.30.22"
+local APP_VERSION = "2026.04.30.26"
 
 local CAPTION_LINE_LIMIT = 30
 local CAPTION_LINE_HISTORY = 50
@@ -29,6 +29,7 @@ local FLAG_SHOW_CAPTION    = 0x43
 local FLAG_SHOW_SUGGESTION = 0x44
 local FLAG_CLEAR_CAPTION   = 0x45
 local FLAG_RESET           = 0x46
+local FLAG_ADMIN_PROBE     = 0x47   -- v.24: on-demand SYS_PROBE for diagnostics
 
 -- Forward declaration so handle_command can reference start_mic on SYNC_STATE / RESET
 local start_mic
@@ -169,8 +170,43 @@ local function probe_largest_alloc(label)
   end
   collectgarbage("collect")
   -- Format: EVT HEAP_PROBE <label> <largest_kb*10> (so 256 = 25.6 KB).
+  -- NOTE: This probes the LUA HEAP, not the firmware system C heap.
+  -- The "not enough memory" error from frame.microphone.read comes from
+  -- malloc() failing in the firmware C heap (see frame-codebase
+  -- source/application/lua_libraries/microphone.c). probe_system_heap
+  -- below is what tests the actual failing allocator.
   send_event({ "EVT", "HEAP_PROBE", label, tostring(math.floor(last_ok / 102.4 + 0.5)) })
   return last_ok
+end
+
+-- Firmware C heap probe via mic.read itself. mic.read(N) calls malloc(N)
+-- in the firmware (microphone.c lua_microphone_read), which is the same
+-- allocator that fails with "not enough memory". By calling mic.read
+-- with progressively smaller N when the main read fails, we can
+-- deterministically classify the failure:
+--   all sizes ERR  → C heap exhausted (likely a leak)
+--   small OK / data, large ERR → C heap fragmented
+--   all sizes return NIL or EMPTY → PDM not delivering samples (stuck)
+-- Outcomes: "OK:<bytes>" / "EMPTY" / "NIL" / "ERR:<msg>".
+-- Also emits BLE_STATE so we can correlate failures with disconnects.
+local SYS_PROBE_SIZES = { 4, 16, 64, 128, 240, 1024, 4096 }
+local function probe_system_heap(label)
+  local conn_ok, conn = pcall(frame.bluetooth.is_connected)
+  send_event({ "EVT", "BLE_STATE", label, (conn_ok and conn) and "1" or "0" })
+  for _, sz in ipairs(SYS_PROBE_SIZES) do
+    local ok, result = pcall(frame.microphone.read, sz)
+    local outcome
+    if not ok then
+      outcome = "ERR:" .. crash_text(result)
+    elseif result == nil then
+      outcome = "NIL"
+    elseif result == "" then
+      outcome = "EMPTY"
+    else
+      outcome = "OK:" .. tostring(string.len(result))
+    end
+    send_event({ "EVT", "SYS_PROBE", label, tostring(sz), outcome })
+  end
 end
 
 local function now_seconds()
@@ -636,6 +672,20 @@ local function handle_command(flag, payload)
     send_event({ "EVT", "RESET_OK" })
     return
   end
+
+  if flag == FLAG_ADMIN_PROBE then
+    -- Diagnostic: emit a full SYS_PROBE / HEAP_PROBE / HEAP snapshot of
+    -- the firmware C heap and Lua heap state on demand. The payload is
+    -- a free-form label (e.g. "after_30s_listen") that gets attached to
+    -- the emitted events so multiple probes from one test are
+    -- distinguishable in the log.
+    local label = (payload ~= nil and payload ~= "") and payload or "admin"
+    send_heap("admin_" .. label)
+    probe_largest_alloc("admin_" .. label)
+    probe_system_heap("admin_" .. label)
+    send_event({ "EVT", "ADMIN_PROBE_OK", label })
+    return
+  end
 end
 
 local function on_tap()
@@ -675,6 +725,9 @@ start_mic = function()
     pcall(frame.microphone.read, 32)
     send_heap("post_warmup_read")
     probe_largest_alloc("post_warmup_read")
+    -- Baseline SYS_PROBE at known-good state so we can compare its
+    -- pattern to the failure-time SYS_PROBE. v.24.
+    probe_system_heap("post_warmup_read")
     return true
   end
   if string.find(message, "already started", 1, true) ~= nil then
@@ -691,7 +744,28 @@ local function run_app()
   send_event({ "EVT", "BOOT", frame.FIRMWARE_VERSION, tostring(frame.bluetooth.max_length()), APP_VERSION })
   send_heap("boot")
 
-  local audio_data_size = math.floor((frame.bluetooth.max_length() - 1) / 2) * 2
+  -- v.26: audio_data_size is recomputed per iteration in the audio loop
+  -- with a clamp. Static-at-boot computation is dangerous because if
+  -- frame.bluetooth.max_length() returns -1 at boot (observed when the
+  -- Lua VM starts before BLE has finished binding to the connection),
+  -- audio_data_size becomes -2, and every mic.read(-2) hits malloc
+  -- with size_t(-2) = 0xFFFFFFFE → fails with "not enough memory"
+  -- forever. v.25 log SYS_PROBE confirmed: malloc(1024) succeeded at
+  -- the same instant mic.read(audio_data_size) failed.
+  local AUDIO_DATA_SIZE_MIN = 64
+  local AUDIO_DATA_SIZE_MAX = 1024
+  local AUDIO_DATA_SIZE_FALLBACK = 240
+  local function compute_audio_data_size()
+    local mtu_ok, mtu = pcall(frame.bluetooth.max_length)
+    if not mtu_ok or type(mtu) ~= "number" then
+      return AUDIO_DATA_SIZE_FALLBACK
+    end
+    local sz = math.floor((mtu - 1) / 2) * 2
+    if sz < AUDIO_DATA_SIZE_MIN or sz > AUDIO_DATA_SIZE_MAX then
+      return AUDIO_DATA_SIZE_FALLBACK
+    end
+    return sz
+  end
 
   state.last_message_at = now_seconds()
   maybe_emit_battery(true)
@@ -708,6 +782,16 @@ local function run_app()
   local mic_nil_streak = 0
   local last_full_gc_at = now_seconds()
   local last_heap_emit_at = 0
+  -- v.23: recovery state for the case where boot-time start_mic returns
+  -- OK but the firmware audio path never actually came up (observed when
+  -- Frame is powered on after a cold rest). On AUDIO_ERROR (20 failed
+  -- reads in a row) we cycle mic.stop+mic.start once, then back off for
+  -- a few seconds so we don't hammer a stuck mic at 1000 Hz. Capped so
+  -- we don't burn the firmware C heap with infinite recovery cycles.
+  local mic_recovery_until = 0
+  local mic_recovery_attempts = 0
+  local MIC_RECOVERY_BACKOFF = 3      -- seconds between recovery attempts
+  local MIC_RECOVERY_MAX_ATTEMPTS = 8
 
   while true do
     -- Drain all fully-assembled commands in arrival order. Per-flag slots
@@ -795,63 +879,108 @@ local function run_app()
       state.needs_render = true
     end
 
-    -- v.22: mic.read runs every iteration regardless of listening state.
-    -- Bytes are forwarded to iOS only when state.listening is true; when
-    -- idle we read and discard so the firmware audio ring stays drained
-    -- (otherwise it overflows and trips its own internal errors). This is
-    -- the structure noa uses and is what stopped the firmware-C-heap OOM.
+    -- v.22: mic.read runs every iteration regardless of listening state;
+    -- bytes are forwarded to iOS only when state.listening is true. The
+    -- mic stays running across listen toggles to avoid the
+    -- start/stop-cycling firmware-C-heap fragmentation that caused the
+    -- v.21 OOM.
+    -- v.23: if persistent failures (20-in-a-row = AUDIO_ERROR) happen
+    -- (e.g. cold-start race where mic.start returned OK but the audio
+    -- subsystem never came up), cycle mic.stop+start once with backoff.
+    -- During backoff we skip mic.read entirely so we don't hammer a
+    -- stuck mic at 1000 Hz and so the BLE TX queue can drain.
+    local in_recovery_cooldown = (mic_recovery_until > 0 and now > 0 and now < mic_recovery_until)
     if now > 0 and state.listening and (now - last_heap_emit_at) >= 5 then
       last_heap_emit_at = now
       send_heap("listening")
     end
-    if state.listening and not audio_first_logged then
+    if state.listening and not audio_first_logged and not in_recovery_cooldown then
       send_heap("pre_first_mic_read")
       probe_largest_alloc("pre_first_mic_read")
     end
     local read_error_streak = 0
     local last_read_err = nil
-    for _ = 1, 20 do
-      local read_ok, audio = pcall(frame.microphone.read, audio_data_size)
-      if not read_ok then
-        read_error_streak = read_error_streak + 1
-        last_read_err = audio
-        if read_error_streak == 1 then
-          send_heap("at_read_err")
-          probe_largest_alloc("at_read_err")
-          send_event({ "EVT", "MIC_READ_ERR", tostring(read_error_streak), crash_text(audio) })
-        end
-        frame.sleep(0.01)
-      elseif audio == nil then
-        mic_nil_streak = mic_nil_streak + 1
-        if mic_nil_streak == 1 or (mic_nil_streak % 50) == 0 then
-          send_event({ "EVT", "MIC_READ_NIL", tostring(mic_nil_streak) })
-          send_heap("at_mic_nil")
-        end
-        frame.sleep(0.1)
-        break
-      elseif audio ~= "" then
-        if read_error_streak > 0 then
-          send_event({ "EVT", "MIC_READ_RECOVERED", tostring(read_error_streak) })
-          read_error_streak = 0
-        end
-        mic_nil_streak = 0
-        if state.listening then
-          if not audio_first_logged then
-            send_event({ "EVT", "MIC_READ_BYTES", tostring(string.len(audio)) })
-            audio_first_logged = true
-            send_heap("post_first_packet")
+    -- v.26: recompute the read size each tick so a transiently bogus
+    -- max_length() (e.g. -1 right after a BLE rebind) can't poison the
+    -- value for the rest of the session. Clamped to a known-safe range.
+    local audio_data_size = compute_audio_data_size()
+    if not in_recovery_cooldown then
+      for _ = 1, 20 do
+        local read_ok, audio = pcall(frame.microphone.read, audio_data_size)
+        if not read_ok then
+          read_error_streak = read_error_streak + 1
+          last_read_err = audio
+          if read_error_streak == 1 then
+            send_heap("at_read_err")
+            probe_largest_alloc("at_read_err")
+            probe_system_heap("at_read_err")
+            -- Emit the read size + raw max_length so the next failure log
+            -- proves whether audio_data_size is the culprit. v.26.
+            local mtu_ok, mtu = pcall(frame.bluetooth.max_length)
+            send_event({ "EVT", "MIC_READ_PARAMS",
+                         tostring(audio_data_size),
+                         mtu_ok and tostring(mtu) or "ERR" })
+            send_event({ "EVT", "MIC_READ_ERR", tostring(read_error_streak), crash_text(audio) })
           end
-          pcall(send_data, string.char(0x05) .. audio)
+          frame.sleep(0.01)
+        elseif audio == nil then
+          mic_nil_streak = mic_nil_streak + 1
+          if mic_nil_streak == 1 or (mic_nil_streak % 50) == 0 then
+            send_event({ "EVT", "MIC_READ_NIL", tostring(mic_nil_streak) })
+            send_heap("at_mic_nil")
+          end
+          frame.sleep(0.1)
+          break
+        elseif audio ~= "" then
+          if read_error_streak > 0 then
+            send_event({ "EVT", "MIC_READ_RECOVERED", tostring(read_error_streak) })
+            read_error_streak = 0
+          end
+          mic_nil_streak = 0
+          mic_recovery_attempts = 0
+          if state.listening then
+            if not audio_first_logged then
+              send_event({ "EVT", "MIC_READ_BYTES", tostring(string.len(audio)) })
+              audio_first_logged = true
+              send_heap("post_first_packet")
+            end
+            pcall(send_data, string.char(0x05) .. audio)
+          end
+          audio = nil
+        else
+          break
         end
-        audio = nil
-      else
-        break
       end
     end
     if read_error_streak >= 20 then
       send_heap("at_audio_error")
       probe_largest_alloc("at_audio_error")
+      probe_system_heap("at_audio_error")
       send_event({ "EVT", "AUDIO_ERROR", crash_text(last_read_err) })
+      -- Gate recovery on whether the firmware C heap can satisfy a
+      -- 4-byte malloc. Per microphone.c, mic.read() = malloc(N); if
+      -- even N=4 errors, the heap is exhausted and mic.stop+start
+      -- can't help (per firmware analysis, nrfx_pdm_uninit is never
+      -- called, so PDM state isn't actually reset). Surface a
+      -- permanent-failure event so iOS can prompt for a power cycle.
+      local probe_ok, _ = pcall(frame.microphone.read, 4)
+      if probe_ok and mic_recovery_attempts < MIC_RECOVERY_MAX_ATTEMPTS then
+        mic_recovery_attempts = mic_recovery_attempts + 1
+        send_event({ "EVT", "MIC_RECOVERY_TRY", tostring(mic_recovery_attempts) })
+        pcall(frame.microphone.stop)
+        frame.sleep(0.2)
+        local rs_ok, rs_err = pcall(frame.microphone.start, { sample_rate = 16000, bit_depth = 8 })
+        send_event({ "EVT", "MIC_RECOVERY_RESULT", rs_ok and "1" or "0", tostring(rs_err or "") })
+        if now > 0 then
+          mic_recovery_until = now + MIC_RECOVERY_BACKOFF
+        end
+      else
+        send_event({ "EVT", "MIC_PERMANENT_FAILURE", probe_ok and "max_attempts" or "heap_exhausted",
+                     tostring(mic_recovery_attempts) })
+        if now > 0 then
+          mic_recovery_until = now + 60
+        end
+      end
     end
     if not state.listening then
       audio_first_logged = false

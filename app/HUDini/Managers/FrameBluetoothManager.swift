@@ -59,12 +59,13 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     static let flagShowSuggestion: UInt8 = 0x44
     static let flagClearCaption: UInt8 = 0x45
     static let flagReset: UInt8 = 0x46
+    static let flagAdminProbe: UInt8 = 0x47
     // Frame mic is configured for 16 kHz / 8-bit signed mono (see start_mic
     // in FrameEmbeddedApp.swift). `appendPCM8` sign-extends each 8-bit
     // sample into Int16 and feeds the recognizer at 16 kHz.
     private static let streamSampleRate: Double = 16_000
     private static let streamBitDepth: Int = 8
-    private static let embeddedAppVersion = "2026.04.30.22"
+    private static let embeddedAppVersion = "2026.04.30.26"
     private static let savedPeripheralIDKey = "FrameBluetoothManager.lastPeripheralID"
     private static let centralRestoreIdentifier = "com.hudini.frame.central"
     private static let supportedFrameAppVersions: Set<String> = [embeddedAppVersion]
@@ -667,6 +668,17 @@ final class FrameBluetoothManager: NSObject, ObservableObject {
     /// timestamps with the rest of the dev log.
     func adminLog(_ message: String) {
         appendDevLog(direction: "TEST", message: message)
+    }
+
+    /// Force a transient BLE disconnect WITHOUT setting
+    /// explicitDisconnectRequested, so the auto-reconnect path kicks in
+    /// and re-establishes the link. Used by the admin "disconnect-during-
+    /// listen" test (I) to reproduce the mid-stream disconnect that
+    /// triggers the OOM in normal use.
+    func adminForceDisconnect() {
+        guard let peripheral = connectedPeripheral else { return }
+        appendDevLog(direction: "TEST", message: "force disconnect (auto-reconnect armed)")
+        central.cancelPeripheralConnection(peripheral)
     }
 
     /// True when we have a live connection AND the embedded Lua app has

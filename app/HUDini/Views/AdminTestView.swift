@@ -126,6 +126,33 @@ struct AdminTestView: View {
                     action: testPingStorm
                 )
 
+                testButton(
+                    label: "H — Render flood (no listening, 3 min)",
+                    description: "Sends a fresh SHOW_CAPTION partial every 100 ms for 3 min. Probes every 30 s. Reproduces display.text() malloc fragmentation in isolation.",
+                    action: testRenderFlood,
+                    tint: HUDTheme.amber
+                )
+
+                testButton(
+                    label: "J — Real-session simulator (3 min)",
+                    description: "Listens for 3 min; iOS sends SHOW_CAPTION every 200 ms and SHOW_SUGGESTION every 30 s. Probes every 30 s. Mimics real translation use.",
+                    action: testRealSession,
+                    tint: HUDTheme.rose
+                )
+
+                testButton(
+                    label: "L — Multi-line SHOW_SUGGESTION stress",
+                    description: "Sends 60 large 7-line SHOW_SUGGESTIONs over 2 min (~7 mallocs/render × 60 renders). Probes every 20 s.",
+                    action: testSuggestionStress,
+                    tint: HUDTheme.amber
+                )
+
+                testButton(
+                    label: "K — On-demand SYS_PROBE",
+                    description: "Sends FLAG_ADMIN_PROBE so Frame emits a full heap snapshot right now. No mic activity required.",
+                    action: testAdminProbe
+                )
+
                 Divider()
 
                 Button {
@@ -320,6 +347,205 @@ struct AdminTestView: View {
             frameManager.adminLog("G storm: \(readyCount)/20 EVT READY received")
             return readyCount >= 18 // allow tiny BLE loss tolerance
         }
+    }
+
+    /// Test H — Pure render flood (no listening). Targets the
+    /// `frame.display.text()` malloc pattern in isolation. Per firmware
+    /// (lua_libraries/display.c), each call to display.text mallocs a
+    /// variable-size buffer (text length + meta). Our `draw_multiline`
+    /// calls it once per line, so each render is ~7 variable-size
+    /// mallocs. 100 ms cadence × 3 min = ~1800 renders. If the C heap
+    /// is going to fragment from rendering alone, this finds it.
+    private func testRenderFlood() async {
+        await runTest(name: "H_RenderFlood") {
+            await sendAdminProbe(label: "H_baseline")
+            let captionStart = frameManager.devLogEntries.count
+            let phrases = [
+                "The quick brown fox jumps over the lazy dog one two three four",
+                "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do",
+                "She sells seashells by the seashore on a sunny summer afternoon",
+                "Pack my box with five dozen liquor jugs every monday morning",
+                "How vexingly quick daft zebras jump in the misty forest dawn"
+            ]
+            // 3 min × 10/sec = ~1800 partials. Vary text so each
+            // render's pixel-data length differs (different malloc sizes).
+            let totalIterations = 1800
+            for i in 0..<totalIterations {
+                let phrase = phrases[i % phrases.count]
+                let truncated = String(phrase.prefix(15 + (i % 30)))
+                frameManager.adminSendCommand(
+                    flag: FrameBluetoothManager.flagShowCaption,
+                    fields: ["partial", truncated]
+                )
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                if i > 0 && i % 300 == 0 { // every ~30 s
+                    await sendAdminProbe(label: "H_after_\(i)")
+                }
+            }
+            await sendAdminProbe(label: "H_final")
+            let summary = summarizeMicEvents(since: captionStart)
+            frameManager.adminLog("H: \(summary.summaryLine)")
+            return summary.audioErrors == 0 && summary.readErrors == 0
+        }
+    }
+
+    /// Test J — Real-session simulator. The closest reproduction of the
+    /// conditions where users see the OOM: continuous listening + steady
+    /// caption stream + periodic suggestion delivery. If the failure is
+    /// fragmentation that builds up over minutes, this surfaces it.
+    private func testRealSession() async {
+        await runTest(name: "J_RealSession") {
+            await sendAdminProbe(label: "J_baseline")
+            let sessionStart = frameManager.devLogEntries.count
+            // Start listening — mic.read runs continuously.
+            frameManager.adminSendCommand(
+                flag: FrameBluetoothManager.flagSyncState,
+                fields: ["1", "listening"]
+            )
+            // Run for 3 min. Caption stream at 5/sec; suggestion at 30 s
+            // intervals. Probe at 30, 60, 90, 120, 150 s.
+            let captionPhrases = [
+                "Hello there how are you doing this fine afternoon today",
+                "I would like to order a coffee with milk and two sugars",
+                "Where is the nearest train station I need directions please",
+                "Thank you very much for your help I really appreciate it"
+            ]
+            let suggestionPhonetic = "OH-lah BWAY-nahs DEE-ahs KOH-moh es-TAH oos-TED MWAY byen GRAH-syas POR pre-goon-TAR meh YA-moh"
+            let suggestionEnglish = "Hello good morning, how are you? Very well thank you for asking, my name is. Pleased to meet you, where are you from?"
+
+            let totalSteps = 900   // 3 min × 5/sec = 900 caption steps
+            for step in 0..<totalSteps {
+                let phrase = captionPhrases[step % captionPhrases.count]
+                let chars = phrase.prefix(8 + (step % 40))
+                frameManager.adminSendCommand(
+                    flag: FrameBluetoothManager.flagShowCaption,
+                    fields: ["partial", String(chars)]
+                )
+                if step > 0 && step % 150 == 0 { // every 30 s
+                    frameManager.adminSendCommand(
+                        flag: FrameBluetoothManager.flagShowSuggestion,
+                        fields: [suggestionPhonetic, suggestionEnglish]
+                    )
+                    await sendAdminProbe(label: "J_t\(step / 5)s")
+                }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            frameManager.adminSendCommand(
+                flag: FrameBluetoothManager.flagSyncState,
+                fields: ["0", "idle"]
+            )
+            await sendAdminProbe(label: "J_final")
+            let summary = summarizeMicEvents(since: sessionStart)
+            frameManager.adminLog("J: \(summary.summaryLine)")
+            return summary.audioErrors == 0 && summary.readErrors == 0 && summary.permanentFailures == 0
+        }
+    }
+
+    /// Test L — Multi-line SHOW_SUGGESTION stress. SHOW_SUGGESTION fills
+    /// all 7 display lines (2 transcription + 2 english + 3 phonetic);
+    /// each render is the worst case for display.text() mallocs. Sending
+    /// 60 of these over 2 min = ~420 mallocs of the largest variable
+    /// sizes — accelerates fragmentation if the hypothesis is correct.
+    private func testSuggestionStress() async {
+        await runTest(name: "L_SuggestionStress") {
+            await sendAdminProbe(label: "L_baseline")
+            let stressStart = frameManager.devLogEntries.count
+            // Build a long phonetic + english pair that will fill the
+            // 3-line phonetic and 2-line english regions completely.
+            let basePhonetic = "OH-lah BWAY-nahs DEE-ahs KOH-moh es-TAH oos-TED MWAY byen GRAH-syas POR pre-goon-TAR meh YA-moh kah-RLOS"
+            let baseEnglish = "Hello good morning how are you doing today, I am very well thank you for asking, my name is Carlos"
+
+            for i in 0..<60 {
+                let phonetic = basePhonetic + " v\(i)"
+                let english = baseEnglish + " v\(i)"
+                frameManager.adminSendCommand(
+                    flag: FrameBluetoothManager.flagShowSuggestion,
+                    fields: [phonetic, english]
+                )
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 s
+                if i > 0 && i % 10 == 0 { // every ~20 s
+                    await sendAdminProbe(label: "L_after_\(i)")
+                }
+            }
+            await sendAdminProbe(label: "L_final")
+            let summary = summarizeMicEvents(since: stressStart)
+            frameManager.adminLog("L: \(summary.summaryLine)")
+            return summary.audioErrors == 0 && summary.readErrors == 0
+        }
+    }
+
+    private func testAdminProbe() async {
+        await runTest(name: "K_AdminProbe") {
+            return await sendAdminProbe(label: "K_manual")
+        }
+    }
+
+    /// Send FLAG_ADMIN_PROBE with the given label and wait for the
+    /// matching ADMIN_PROBE_OK response. Returns whether all probes
+    /// arrived. Logs a one-line summary of the SYS_PROBE results.
+    @discardableResult
+    private func sendAdminProbe(label: String) async -> Bool {
+        let startIndex = frameManager.devLogEntries.count
+        frameManager.adminSendCommand(flag: FrameBluetoothManager.flagAdminProbe, fields: [label])
+        guard let _ = await waitForEvent(matching: "EVT\tADMIN_PROBE_OK\t\(label)",
+                                         since: startIndex,
+                                         timeout: 4.0) else {
+            frameManager.adminLog("[\(label)] probe timeout")
+            return false
+        }
+        var sysLine = "[\(label)] sys:"
+        let entries = frameManager.devLogEntries
+        for i in startIndex..<entries.count {
+            let m = entries[i].message
+            if m.contains("EVT\tSYS_PROBE\tadmin_\(label)") {
+                // EVT\tSYS_PROBE\tadmin_<label>\t<size>\t<outcome>
+                let parts = m.components(separatedBy: "\t")
+                if parts.count >= 5 {
+                    sysLine += " \(parts[3])=\(parts[4])"
+                }
+            } else if m.contains("EVT\tHEAP_PROBE\tadmin_\(label)") {
+                let parts = m.components(separatedBy: "\t")
+                if parts.count >= 4 {
+                    sysLine += " lua=\(parts[3])"
+                }
+            } else if m.contains("EVT\tBLE_STATE\tadmin_\(label)") {
+                let parts = m.components(separatedBy: "\t")
+                if parts.count >= 4 {
+                    sysLine += " ble=\(parts[3])"
+                }
+            }
+        }
+        appendTestLog(sysLine, tint: HUDTheme.accent)
+        frameManager.adminLog(sysLine)
+        return true
+    }
+
+    /// Walk the dev log from `startIndex` and tally MIC_READ_ERR / AUDIO_ERROR
+    /// counts so each stress test gets a one-line pass/fail summary.
+    private struct MicEventSummary {
+        var readErrors: Int
+        var audioErrors: Int
+        var permanentFailures: Int
+        var recoveryAttempts: Int
+        var sysProbes: Int
+        var summaryLine: String {
+            "read_err=\(readErrors) audio_err=\(audioErrors) perm=\(permanentFailures) recov=\(recoveryAttempts) sys_probes=\(sysProbes)"
+        }
+    }
+
+    private func summarizeMicEvents(since startIndex: Int) -> MicEventSummary {
+        var s = MicEventSummary(readErrors: 0, audioErrors: 0, permanentFailures: 0, recoveryAttempts: 0, sysProbes: 0)
+        let entries = frameManager.devLogEntries
+        guard startIndex <= entries.count else { return s }
+        for i in startIndex..<entries.count {
+            let m = entries[i].message
+            if m.contains("EVT\tMIC_READ_ERR") { s.readErrors += 1 }
+            else if m.contains("EVT\tAUDIO_ERROR") { s.audioErrors += 1 }
+            else if m.contains("EVT\tMIC_PERMANENT_FAILURE") { s.permanentFailures += 1 }
+            else if m.contains("EVT\tMIC_RECOVERY_TRY") { s.recoveryAttempts += 1 }
+            else if m.contains("EVT\tSYS_PROBE") { s.sysProbes += 1 }
+        }
+        return s
     }
 
     // MARK: Reset
