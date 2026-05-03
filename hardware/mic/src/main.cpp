@@ -10,7 +10,7 @@ static const int TOTAL_SAMPLES = SAMPLE_RATE * CAPTURE_SECONDS;
 // Your wiring
 static const int PIN_I2S_BCLK = 26;
 static const int PIN_I2S_LRCLK = 25;
-static const int PIN_I2S_DIN = 33;
+static const int PIN_I2S_DIN = 34;
 
 void setupI2S() {
   i2s_config_t i2s_config = {
