@@ -140,6 +140,18 @@ struct RootView: View {
                 })
 
                 NavigationLink {
+                    AdminESP32LogView()
+                        .environmentObject(esp32Manager)
+                } label: {
+                    menuRow(title: "ESP32 Admin", icon: "antenna.radiowaves.left.and.right")
+                }
+                .simultaneousGesture(TapGesture().onEnded {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                        showAppMenu = false
+                    }
+                })
+
+                NavigationLink {
                     AdminTestView()
                         .environmentObject(frameManager)
                 } label: {

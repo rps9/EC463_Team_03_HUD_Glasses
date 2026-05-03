@@ -2,35 +2,51 @@
 #include <SPI.h>
 #include <U8g2lib.h>
 #include "driver/i2s.h"
+#include "soc/i2s_reg.h"
 #include "esp_log.h"
 #include <BLE2902.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
+#include "esp_gap_ble_api.h"
 
 #include <vector>
 
 namespace {
 
 static const i2s_port_t I2S_PORT = I2S_NUM_0;
-static const int SAMPLE_RATE = 8000;
+// Mic runs at 16 kHz so BCLK stays at 1.024 MHz (SPH0645 datasheet floor).
+// We then 2x-decimate in firmware to send 8 kHz on the wire — that halves
+// notification bandwidth from ~260 kbit/s to ~130 kbit/s, which the ESP32
+// BT controller TX queue can actually sustain. (At full 16 kHz the queue
+// fills cyclically, dropping ~half of all packets — see iOS audio_seq logs
+// before this change.)
+static const int MIC_SAMPLE_RATE = 16000;
+static const int STREAM_SAMPLE_RATE = 8000;
+static const int DECIMATION = MIC_SAMPLE_RATE / STREAM_SAMPLE_RATE;
 
 static const int PIN_I2S_BCLK = 26;
 static const int PIN_I2S_LRCLK = 25;
-static const int PIN_I2S_DIN = 33;
+static const int PIN_I2S_DIN = 34;
 
 // Matches the actual wiring on this rig (also matches hardware/display/src/main.cpp,
 // which is the known-working reference for this OLED).
 static const int PIN_DISPLAY_MOSI = 23;  // DIN
 static const int PIN_DISPLAY_CLK = 18;
-static const int PIN_DISPLAY_CS = 5;
+static const int PIN_DISPLAY_CS = 22;
 static const int PIN_DISPLAY_DC = 21;
-static const int PIN_DISPLAY_RST = 22;
+static const int PIN_DISPLAY_RST = 17;
 
 static const int PIN_RECORD_BUTTON = 27;
 // GPIO 34-39 are input-only on ESP32. Use a real output pin (19 is free).
 static const int PIN_RECORD_LED = 19;
 static const unsigned long BUTTON_DEBOUNCE_MS = 45;
+
+// SPH0645 only fills the top ~12 of its 24 bits at speech levels, so after
+// `>>16` peaks land at ~2–3k int16 even on loud speech. Apply a fixed
+// pre-gain so SFSpeechRecognizer sees a healthy 10–20k peak. Saturation
+// (not AGC) handles loud sources — chosen empirically from log peaks.
+static const float PCM_GAIN = 6.0f;
 
 static const size_t MAX_FIELD_LEN = 2048;
 static const uint8_t LINE_HEIGHT = 10;
@@ -52,8 +68,20 @@ BLECharacteristic *statusCharacteristic = nullptr;
 volatile bool deviceConnected = false;
 volatile bool streamEnabled = false;
 uint16_t packetSeq = 0;
+uint16_t buttonEventSeq = 0;
+volatile bool buttonEventPending = false;
+volatile uint16_t pendingButtonSeq = 0;
 float dcEstimate = 0.0f;
-float smoothedGain = 1.0f;
+bool dcSettled = false;
+
+// Rolling stats for the periodic [AUDIO] line. Reset on every emit so the
+// numbers are window-local, not cumulative since boot.
+uint32_t audioPeakAccum = 0;
+uint64_t audioSumAbsAccum = 0;
+uint32_t audioSamplesAccum = 0;
+uint32_t audioRawClipAccum = 0;
+uint32_t audioSilentWindows = 0;
+uint32_t audioPacketsAccum = 0;
 
 // Display state. The mux is held only across set/copy operations — never
 // across U8g2 calls, heap allocations, or paints.
@@ -380,7 +408,7 @@ void showBootScreen() {
   display.setFont(u8g2_font_5x7_tf);
   display.drawStr(0, 8, "HUDini ESP32");
   display.drawStr(0, 18, "BLE mic + display");
-  display.drawStr(0, 28, "Mic: B26 W25 D33");
+  display.drawStr(0, 28, "Mic: B26 W25 D34 16k");
   display.drawStr(0, 38, "OLED: S18 M23 CS5");
   display.drawStr(0, 48, "DC21 RST22");
   display.sendBuffer();
@@ -404,12 +432,45 @@ void notifyStatus(const char *status) {
   }
 }
 
+// The audio characteristic notifies every ~7 ms and the ESP32 BT controller
+// has a fixed-depth TX queue. With audio always first in line, calling
+// notify() on the status characteristic from inside an interrupt-y press
+// path landed on a full queue and got silently dropped (NO_MEM). Instead
+// the press sets a pending flag here and the main loop drains the button
+// event before it kicks off the next i2s_read — at which point the queue
+// is at its emptiest and the notify is guaranteed to land.
+void flushButtonEventIfPending() {
+  if (!buttonEventPending) return;
+  if (statusCharacteristic == nullptr) {
+    buttonEventPending = false;
+    return;
+  }
+  uint16_t seq = pendingButtonSeq;
+  buttonEventPending = false;
+
+  char payload[24];
+  snprintf(payload, sizeof(payload), "MIC_REQUEST:%u", (unsigned)seq);
+  statusCharacteristic->setValue((uint8_t *)payload, strlen(payload));
+  if (notificationsEnabled(statusCharacteristic)) {
+    statusCharacteristic->notify();
+  }
+}
+
 void setStreamEnabled(bool enabled, const char *bannerText, const char *statusText) {
   streamEnabled = enabled;
   if (enabled) {
     packetSeq = 0;
     dcEstimate = 0.0f;
-    smoothedGain = 1.0f;
+    dcSettled = false;
+    audioPeakAccum = 0;
+    audioSumAbsAccum = 0;
+    audioSamplesAccum = 0;
+    audioRawClipAccum = 0;
+    audioSilentWindows = 0;
+    audioPacketsAccum = 0;
+    Serial.println("[AUDIO] stream START — Frame-style 8-bit pipeline");
+  } else {
+    Serial.printf("[AUDIO] stream STOP — final packetSeq=%u\n", (unsigned)packetSeq);
   }
   digitalWrite(PIN_RECORD_LED, enabled ? HIGH : LOW);
   setStatusBanner(bannerText);
@@ -417,9 +478,25 @@ void setStreamEnabled(bool enabled, const char *bannerText, const char *statusTe
 }
 
 class MicServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer *server) override {
+  void onConnect(BLEServer *server, esp_ble_gatts_cb_param_t *param) override {
     (void)server;
     deviceConnected = true;
+
+    // Without this we sit at iOS's default 30 ms conn interval, which can't
+    // sustain ~260 kbit/s of audio notifications on 1M PHY. The ESP32 BT
+    // controller TX queue fills up and silently drops notifies — visible in
+    // iOS logs as regular ~25-packet gaps every ~330 ms, eventually tripping
+    // supervision timeout and killing the link. 15-20 ms doubles event rate.
+    // (2M PHY would help further but isn't enabled in arduino-esp32 v2.x.)
+    esp_ble_conn_update_params_t conn_params = {};
+    memcpy(conn_params.bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
+    conn_params.min_int = 0x0c;  // 15 ms (1.25 ms units)
+    conn_params.max_int = 0x10;  // 20 ms
+    conn_params.latency = 0;
+    conn_params.timeout = 400;   // 4 s (10 ms units)
+    esp_err_t cpRes = esp_ble_gap_update_conn_params(&conn_params);
+    Serial.printf("[BLE] update_conn_params(15-20 ms) -> %d\n", (int)cpRes);
+
     setStatusBanner("BLE connected");
     notifyStatus("Connected");
   }
@@ -532,14 +609,15 @@ class ControlCallbacks : public BLECharacteristicCallbacks {
 void setupI2S() {
   i2s_config_t i2s_config = {
       .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
-      .sample_rate = SAMPLE_RATE,
+      .sample_rate = MIC_SAMPLE_RATE,
       .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
       .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
       .communication_format = I2S_COMM_FORMAT_STAND_I2S,
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
       .dma_buf_count = 8,
       .dma_buf_len = 256,
-      .use_apll = false,
+      // APLL gives a clean BCLK at 16 kHz; the default PLL divider is jittery.
+      .use_apll = true,
       .tx_desc_auto_clear = false,
       .fixed_mclk = 0};
 
@@ -551,6 +629,10 @@ void setupI2S() {
 
   i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
   i2s_set_pin(I2S_PORT, &pin_config);
+  // Espressif workaround for the SPH0645 BCLK dropout between DMA refills:
+  // forces the I2S peripheral to keep BCLK driven and corrects MSB shift.
+  REG_SET_BIT(I2S_TIMING_REG(I2S_PORT), BIT(9));
+  REG_SET_BIT(I2S_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);
   i2s_zero_dma_buffer(I2S_PORT);
 }
 
@@ -578,14 +660,16 @@ void pollRecordButton() {
 
   stableButtonState = reading;
   if (stableButtonState == LOW) {
-    Serial.println("[BUTTON] BTN_REC pressed");
-    notifyStatus("MIC_REQUEST");
+    buttonEventSeq++;
+    pendingButtonSeq = buttonEventSeq;
+    buttonEventPending = true;
+    Serial.printf("[BUTTON] BTN_REC pressed (seq %u)\n", (unsigned)buttonEventSeq);
   }
 }
 
 void setupBLE() {
   BLEDevice::init("HUDini-Mic");
-  BLEDevice::setMTU(185);
+  BLEDevice::setMTU(247);
 
   BLEServer *server = BLEDevice::createServer();
   server->setCallbacks(new MicServerCallbacks());
@@ -641,6 +725,9 @@ void setupFirmware() {
 void loopFirmware() {
   flushDisplayIfNeeded();
   pollRecordButton();
+  // Run before any audio TX so the BLE controller queue is at its
+  // emptiest when the status notification is enqueued.
+  flushButtonEventIfPending();
 
   if (!deviceConnected || !streamEnabled || audioDataCharacteristic == nullptr) {
     delay(10);
@@ -652,50 +739,102 @@ void loopFirmware() {
     return;
   }
 
-  const int N = 80;
-  int32_t i2sSamples[N];
-  int16_t pcm16[N];
-  uint8_t packet[6 + (N * sizeof(int16_t))];
+  // Frame-style philosophy (NO AGC, NO HP filter), int16 wire format.
+  // Mic runs at 16 kHz; we average each adjacent pair of samples (2-tap
+  // boxcar AA filter) and decimate by 2 to produce 8 kHz on the wire.
+  // SFSpeechRecognizer is fine with 8 kHz — telephone-band speech.
+  //
+  // Wire format: [ver=1][bitDepth=16][seq_lo][seq_hi][count_lo][count_hi][int16 PCM × count]
+  // OUT_N=116 samples × 2 B + 6 B header = 238 B (≤244 B ATT payload at MTU 247).
+  // 116 @ 8 kHz = 14.5 ms per packet → ~69 pkts/s, ~131 kbit/s on the wire.
+  const int OUT_N = 116;
+  const int IN_N = OUT_N * DECIMATION;
+  int32_t i2sSamples[IN_N];
+  int16_t pcm16[OUT_N];
+  uint8_t packet[6 + (OUT_N * sizeof(int16_t))];
 
   size_t bytesRead = 0;
-  i2s_read(I2S_PORT, (void *)i2sSamples, sizeof(i2sSamples), &bytesRead, portMAX_DELAY);
+  esp_err_t readErr = i2s_read(I2S_PORT, (void *)i2sSamples, sizeof(i2sSamples), &bytesRead, portMAX_DELAY);
+  if (readErr != ESP_OK) {
+    Serial.printf("[AUDIO] i2s_read err=%d (0x%x)\n", (int)readErr, (unsigned)readErr);
+    return;
+  }
 
-  int count = bytesRead / sizeof(int32_t);
+  int inCount = bytesRead / sizeof(int32_t);
+  if (inCount <= 0) return;
+  if (inCount > IN_N) inCount = IN_N;
+  int count = inCount / DECIMATION;  // output sample count
   if (count <= 0) return;
-  if (count > N) count = N;
+  if (count != OUT_N) {
+    Serial.printf("[AUDIO] short read: in=%d out=%d (expected %d/%d)\n",
+                  inCount, count, IN_N, OUT_N);
+  }
 
+  // dcEstimate tracks at the int16 scale (post-`>>16`). Seed from the first
+  // DMA buffer after START so the SPH0645's large DC bias doesn't bleed
+  // into the first ~100 ms.
+  if (!dcSettled) {
+    int64_t sum = 0;
+    for (int i = 0; i < inCount; i++) sum += (i2sSamples[i] >> 16);
+    dcEstimate = (float)((double)sum / (double)inCount);
+    dcSettled = true;
+    Serial.printf("[AUDIO] DC seeded from %d samples: dcEstimate=%.0f (int16 scale)\n",
+                  inCount, dcEstimate);
+  }
+
+  // Per-output-sample: average the adjacent 16 kHz pair (anti-alias),
+  // subtract slow-tracking DC, apply fixed pre-gain, saturate to int16.
   int32_t sumAbs = 0;
+  int32_t peakAbs = 0;
+  int clipCount = 0;
   for (int i = 0; i < count; i++) {
-    int32_t s24 = i2sSamples[i] >> 8;
-    int32_t s16 = s24 >> 8;
-
-    if (s16 > 32767) s16 = 32767;
-    else if (s16 < -32768) s16 = -32768;
-
-    dcEstimate += 0.01f * ((float)s16 - dcEstimate);
-    int32_t hp = (int32_t)((float)s16 - dcEstimate);
-    if (hp > 32767) hp = 32767;
-    if (hp < -32768) hp = -32768;
-    pcm16[i] = (int16_t)hp;
-    sumAbs += abs(hp);
+    int32_t a16 = i2sSamples[i * 2]     >> 16;
+    int32_t b16 = i2sSamples[i * 2 + 1] >> 16;
+    int32_t avg = (a16 + b16) >> 1;
+    dcEstimate += 0.001f * ((float)avg - dcEstimate);
+    float centered = ((float)avg - dcEstimate) * PCM_GAIN;
+    int32_t s = (int32_t)centered;
+    if (s > 32767)  { s = 32767;  clipCount++; }
+    if (s < -32768) { s = -32768; clipCount++; }
+    pcm16[i] = (int16_t)s;
+    int32_t mag = (s < 0) ? -s : s;
+    sumAbs += mag;
+    if (mag > peakAbs) peakAbs = mag;
   }
 
-  const float avgAbs = (count > 0) ? ((float)sumAbs / (float)count) : 0.0f;
-  const float targetAbs = 2500.0f;
-  float desiredGain = targetAbs / max(avgAbs, 250.0f);
-  if (desiredGain < 1.0f) desiredGain = 1.0f;
-  if (desiredGain > 6.0f) desiredGain = 6.0f;
-  smoothedGain = (0.85f * smoothedGain) + (0.15f * desiredGain);
+  // Periodic [AUDIO] diagnostic line. Fields at int16 scale (-32768..32767):
+  //   peak: max |sample| in window (≥1500 audible, ≥10000 loud, ≥30000 clipping)
+  //   avg:  mean |sample| in window (typical speech: 500–3000)
+  //   dc:   slow-tracking DC estimate at int16 scale; should drift slowly
+  //   clip: % of samples saturated (≥1% = signal too hot)
+  //   sil:  % of packets whose avg was < 50 (true silence)
+  audioPeakAccum = max(audioPeakAccum, (uint32_t)peakAbs);
+  audioSumAbsAccum += (uint64_t)sumAbs;
+  audioSamplesAccum += (uint32_t)count;
+  audioRawClipAccum += (uint32_t)clipCount;
+  if (count > 0 && (sumAbs / count) < 50) audioSilentWindows++;
+  audioPacketsAccum++;
 
-  for (int i = 0; i < count; i++) {
-    int32_t amplified = (int32_t)((float)pcm16[i] * smoothedGain);
-    if (amplified > 32767) amplified = 32767;
-    if (amplified < -32768) amplified = -32768;
-    pcm16[i] = (int16_t)amplified;
+  if (audioPacketsAccum >= 128) {  // ~1.9 s at ~69 pkts/sec (8 kHz wire)
+    uint32_t windowAvg = audioSamplesAccum > 0
+        ? (uint32_t)(audioSumAbsAccum / audioSamplesAccum) : 0;
+    float clipPct = audioSamplesAccum > 0
+        ? (100.0f * (float)audioRawClipAccum / (float)audioSamplesAccum) : 0.0f;
+    float silPct = (100.0f * (float)audioSilentWindows / (float)audioPacketsAccum);
+    Serial.printf(
+        "[AUDIO] pkts=%u peak=%u avg=%u dc=%d clip=%.1f%% sil=%.0f%%\n",
+        (unsigned)packetSeq, (unsigned)audioPeakAccum, (unsigned)windowAvg,
+        (int)dcEstimate, clipPct, silPct);
+    audioPeakAccum = 0;
+    audioSumAbsAccum = 0;
+    audioSamplesAccum = 0;
+    audioRawClipAccum = 0;
+    audioSilentWindows = 0;
+    audioPacketsAccum = 0;
   }
 
-  packet[0] = 1;
-  packet[1] = 0;
+  packet[0] = 1;        // protocol version
+  packet[1] = 16;       // bit depth (16 = int16 signed PCM)
   packet[2] = (uint8_t)(packetSeq & 0xFF);
   packet[3] = (uint8_t)((packetSeq >> 8) & 0xFF);
   packet[4] = (uint8_t)(count & 0xFF);
@@ -707,7 +846,19 @@ void loopFirmware() {
   audioDataCharacteristic->notify();
 
   packetSeq++;
-  delay(2);
+
+  // Bluedroid runs inbound writes and outbound notifies through a single
+  // BTC task. Hammering notify() at 69 Hz starves the BTC task of cycles to
+  // service inbound — STOP and SUGGEST_PH/EN writes get queued and dropped,
+  // the link goes unidirectional, and ~10 s later iOS supervision-timeouts
+  // and disconnects. Stepping aside for ~3 ms every 8 packets gives BTC a
+  // guaranteed window to process inbound. Audio cost: ~3 ms / (8 × 14.5 ms)
+  // ≈ 2.6 % wire-rate slowdown — well within budget.
+  if ((packetSeq & 0x07) == 0) {
+    vTaskDelay(pdMS_TO_TICKS(3));
+  } else {
+    taskYIELD();
+  }
 }
 
 }  // namespace
