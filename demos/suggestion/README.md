@@ -5,7 +5,7 @@ Node.js script that keeps a small multilingual phrase bank (Spanish, Chinese, He
 ## Setup
 
 1. **Install dependencies**: none beyond Node 18+ (native `fetch`).
-2. **Configure auth**. Either replace the `FALLBACK_API_KEY` placeholder in `generate-response.js` or export environment variables:
+2. **Configure auth** by exporting an API key through an environment variable:
 
    ```bash
    export SUGGEST_API_KEY="<your-api-key>"
@@ -13,7 +13,7 @@ Node.js script that keeps a small multilingual phrase bank (Spanish, Chinese, He
    export SUGGEST_MODEL="gpt-4o-mini"                                # optional override
    ```
 
-   For offline testing, you can skip the key and instead set `MOCK_RESPONSE="phonetic reply\nEnglish meaning"`. TLS checks are skipped by default; set `SUGGEST_INSECURE_SKIP_VERIFY=false` if you prefer strict verification.
+   TLS checks are skipped by default; set `SUGGEST_INSECURE_SKIP_VERIFY=false` if you prefer strict verification.
 
 ## Run
 
