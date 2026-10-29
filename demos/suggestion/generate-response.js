@@ -6,8 +6,7 @@ const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_URL = 'https://api.openai.com/v1/chat/completions';
 
 const apiUrl = process.env.SUGGEST_API_URL || DEFAULT_URL;
-const FALLBACK_API_KEY = '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';
-const apiKey = process.env.SUGGEST_API_KEY || FALLBACK_API_KEY;
+const apiKey = process.env.SUGGEST_API_KEY;
 const model = process.env.SUGGEST_MODEL || DEFAULT_MODEL;
 const allowInsecureTls = (process.env.SUGGEST_INSECURE_SKIP_VERIFY || 'true').toLowerCase() !== 'false';
 
@@ -63,6 +62,9 @@ function postJson(urlString, body, extraHeaders = {}) {
 }
 
 async function askForResponse(selectedPhrase) {
+  if (!apiKey) {
+    throw new Error('Set SUGGEST_API_KEY in your environment before running this demo.');
+  }
 
   const prompt = `Phrase: ${selectedPhrase.script}\nLanguage: ${selectedPhrase.language}\nRomanized pronunciation: ${selectedPhrase.romanized}\nMeaning: ${selectedPhrase.meaning}`;
 
